@@ -323,6 +323,7 @@ h2{font-size:15px}
       <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
       <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
       <label class="chk"><input type="checkbox" id="crossingSpacing" checked><span>Keep crossings apart<small>Prevents crossings from moving within 20 screen pixels of one another while dragging. Already crowded crossings can move apart. Turn off for R2 or R3 moves that bring crossings together.</small></span></label>
+      <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Loosen small R1 loops while dragging<small>Straightens small empty loops near the strand you drag. Other crossings keep their over/under order. Turn off to keep these curls.</small></span></label>
       <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Show crossing signs</span></label>
@@ -388,7 +389,7 @@ h2{font-size:15px}
     </section>
     <section class="help">
       <h2>How to use</h2>
-      <p><b>Move</b> Drag a strand to move it and the surrounding curve. Drag an empty area to pan; use the wheel to zoom.</p>
+      <p><b>Move</b> Drag a strand to move it and the surrounding curve. Small empty R1 loops nearby straighten as you drag. Turn off “Loosen small R1 loops while dragging” to keep them. Drag an empty area to pan; use the wheel to zoom.</p>
       <p><b>Draw</b> Draw a stroke to create a closed curve. With auto-close off, strokes remain open; continue from an endpoint to complete a loop. Self-crossings alternate, and new curves pass over existing strands.</p>
       <p><b>Smooth corners</b> Continuing from an endpoint joins smoothly in the existing direction. Closing a curve trims any overshoot, and small hooks at the start or end of a stroke are removed. Use “Smooth sharp corners” on an existing diagram.</p>
       <p><b>Eraser</b> Erase stroke removes an entire curve; Erase segment removes only the part you touch. Rejoining a cut curve preserves the over/under assignments of surviving crossings. Open curves are excluded from calculations.</p>
@@ -768,6 +769,83 @@ const KC = (function () {
     return best;
   }
 
+  // A local R1 shortcut is safe only for an empty monogon. In particular, a
+  // crossing-free component inside the loop must not be swallowed by it.
+  function loosenR1(S, opt) {
+    if (S.moveCheckpoint) return null;
+    const cm = S.comps[opt.component];
+    if (!cm) return null;
+    const anchor = cm.pts[indexOfU(cm, opt.u)], anchorS = arcPosOfU(cm, opt.u);
+    for (const X of S.crossings) {
+      const la = loopArc(X, S.comps);
+      if (!la || la.c !== opt.component || la.len <= 1e-6 || la.len > opt.maxLoopLength) continue;
+      if (!isSmallLoop(X, S.crossings, S.comps, opt.maxLoopLength)) continue;
+      if (Math.hypot(X.x-anchor.x, X.y-anchor.y) > opt.radius) continue;
+      const along = mod(anchorS-la.start, cm.len);
+      if (along > la.len && Math.min(along-la.len, cm.len-along) > opt.radius) continue;
+      const vertices = cm.pts.map((p,i)=>({p,s:mod(cm.cum[i]-la.start,cm.len)}));
+      const insideArc = vertices.filter(v=>v.s>1e-7 && v.s<la.len-1e-7).sort((a,b)=>a.s-b.s);
+      const polygon = [X, ...insideArc.map(v=>v.p)];
+      if (polygon.length < 3) continue;
+      const inside = (p, boundary=polygon) => {
+        let hit=false;
+        for(let i=0,j=boundary.length-1;i<boundary.length;j=i++) {
+          const a=boundary[i],b=boundary[j];
+          if((a.y>p.y)!==(b.y>p.y) && p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)hit=!hit;
+        }
+        return hit;
+      };
+      const loopPoints = new Set(insideArc.map(v=>v.p));
+      if (S.comps.some(c=>c.pts.some(p=>!loopPoints.has(p)&&inside(p)))) continue;
+      if ((S.open||[]).some(st=>st.pts.some(p=>inside(p)))) continue;
+      const margin = Math.min(SEG, la.len*0.12, (cm.len-la.len)/8);
+      if (margin < 1e-6) continue;
+      const start=mod(la.start-margin,cm.len), span=la.len+2*margin;
+      const at = s => {
+        const p=pointAtS(cm,s),i=p.seg,a=cm.pts[i],b=cm.pts[(i+1)%cm.pts.length];
+        const f=mod(s,cm.len)-cm.cum[i],len=cm.cum[i+1]-cm.cum[i];
+        return {x:p.x,y:p.y,u:mod(a.u+(len?f/len:0)*circSigned(a.u,b.u),1)};
+      };
+      const a=at(start),b=at(start+span),du=mod(b.u-a.u,1),bridge=[a];
+      const cap=[a,X,b];
+      if(S.comps.some(c=>c.pts.some(p=>!loopPoints.has(p)&&inside(p,cap))))continue;
+      const intersects=(a,b,c,d)=>{
+        const cross=(p,q,r)=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
+        if(Math.max(a.x,b.x)<Math.min(c.x,d.x)-1e-8 || Math.max(c.x,d.x)<Math.min(a.x,b.x)-1e-8 ||
+           Math.max(a.y,b.y)<Math.min(c.y,d.y)-1e-8 || Math.max(c.y,d.y)<Math.min(a.y,b.y)-1e-8)return false;
+        return cross(a,b,c)*cross(a,b,d)<=1e-12 && cross(c,d,a)*cross(c,d,b)<=1e-12;
+      };
+      // Open strokes do not participate in computeRaw, so check their full
+      // segments explicitly, including strokes with both endpoints outside.
+      if((S.open||[]).some(st=>st.pts.some(p=>inside(p,cap)) || st.pts.some((p,i)=>i>0 &&
+        [polygon,cap].some(poly=>poly.some((q,j)=>intersects(st.pts[i-1],p,q,poly[(j+1)%poly.length]))))))continue;
+      // Retain material coordinates on the shortcut, including large u spans,
+      // so the grabbed point and the crossing matcher continue to track it.
+      const n=Math.max(1,Math.ceil(du/0.2));
+      for(let k=1;k<=n;k++) {const t=k/n;bridge.push({x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y),u:mod(a.u+t*du,1)});}
+      const rest=cm.pts.map((p,i)=>({p,s:mod(cm.cum[i]-start,cm.len)})).filter(v=>v.s>span+1e-7).sort((a,b)=>a.s-b.s);
+      const candidate=cloneComps(S.comps);
+      candidate[la.c].pts=[...bridge,...rest.map(v=>({...v.p}))];
+      if(candidate[la.c].pts.length<3)continue;
+      resampleComp(candidate[la.c]);
+      let next=S.nextId;
+      const r=reconcile(S.crossings,S.comps,candidate,computeRaw(candidate),{nextId:()=>next++});
+      if(!r.ok || r.ev.r1!==1 || r.ev.r2 || r.ev.r3 || r.crossings.length!==S.crossings.length-1)continue;
+      const surviving=new Map(S.crossings.filter(c=>c.id!==X.id).map(c=>[c.id,c]));
+      if(r.crossings.some(c=>{
+        const old=surviving.get(c.id);
+        if(!old || Math.hypot(c.x-old.x,c.y-old.y)>1e-6)return true;
+        // Rotating the polyline start can swap occurrence indices. Compare
+        // the actual over/under strands, not the numeric over index.
+        return [0,1].some(k=>{const a=c.occ[(c.over+k)%2],b=old.occ[(old.over+k)%2];
+          return a.c!==b.c || circD(a.u,b.u)>1e-6 || a.dx*b.dx+a.dy*b.dy<0.999999;});
+      }))continue;
+      S.comps=candidate;S.crossings=r.crossings;S.nextId=next;S.moveCheckpoint=null;
+      return r;
+    }
+    return null;
+  }
+
 
   // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing
   function relaxMutator(comps, R, strength) {
@@ -982,7 +1060,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, circD, mod
   };
 })();
@@ -997,7 +1075,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, crossingSpacing: true, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, crossingSpacing: true, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1435,6 +1513,7 @@ const KC = (function () {
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
   $('crossingSpacing').onchange = e => { opts.crossingSpacing = e.target.checked; };
+  $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
 
@@ -1748,6 +1827,10 @@ const KC = (function () {
       });
       if (!r.ok) { blocked = r.reason; break; }
       drag.changed = true; addEvents(r.ev); steps++;
+    }
+    if (opts.loosenR1 && (steps || blocked)) {
+      const simplified=KC.loosenR1(S,{component:drag.c,u:drag.u,radius:60/view.s,maxLoopLength:120/view.s});
+      if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
     }
     if (steps) changed();
     if (blocked && blocked !== drag.lastBlocked) toast({ spacing: 'Crossings are too close. Turn off “Keep crossings apart” in settings to allow closer moves.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);

@@ -76,3 +76,7 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 - Keep crossings apart is on by default for strand dragging, with a 20-screen-pixel minimum. Existing dense diagrams can spread out. The check also guards the swept crossing path and rolls back rejected geometry and crossing IDs. Turn it off for R2/R3 moves requiring close crossings.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
+
+## R1 drag assistance
+
+Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Loosen small R1 loops while dragging” to retain curls.

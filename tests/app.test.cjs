@@ -124,3 +124,23 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  api.activateTab(original);assert.equal(api.analysis.c,3);
  console.log('File picker batch opens, failed-file isolation, visible selected tabs and New tab: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+// A real drag loosens one local curl; click-only, the off switch, undo and
+// redo preserve the expected geometry and R1 count in the active document.
+for(const enabled of [true,false]) {
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();d.comps=[[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[200+5*x,200+5*y])];
+ api.openTab(api.deserialize(d),'curl');assert.equal(api.analysis.c,1);
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('loosenR1').onchange({target:{checked:enabled}});
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointerup',ev(205,215,'pointerup'));p.flush();
+ assert.equal(api.analysis.c,1,'Merely clicking must preserve the curl');
+ p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointermove',ev(206,215,'pointermove'));p.step();
+ p.fire(canvas,'pointerup',ev(206,215,'pointerup'));p.flush();
+ assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
+ p.ids.get('undo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,0);
+ p.ids.get('redo').click();assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
+}
+console.log('R1 drag assistance, click-only preservation, off switch and single-gesture undo/redo: PASS');

@@ -43,3 +43,39 @@ const birthState=state([kink(.5),bar()]),birthBefore=JSON.stringify(birthState);
 const closeBirth=KC.attemptStep(birthState,cm=>{cm[0].pts[2].y=-1},{minCrossingDistance:20});
 assert.equal(closeBirth.reason,'spacing');assert.equal(JSON.stringify(birthState),birthBefore,'Rejected new crossings must not consume IDs');
 console.log('Crossing spacing, swept collision, rollback, dense-diagram recovery and unrestricted R3: PASS');
+
+// Assisted R1 removes only a nearby empty monogon, never a threaded/enclosing loop.
+const curlPoints=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]];
+const curlState=extra=>state([poly(curlPoints),...extra]);
+const loosen={component:0,u:2/8,radius:60,maxLoopLength:120};
+for(const over of [0,1]) {
+ const s=curlState([]);s.crossings[0].over=over;
+ const r=KC.loosenR1(s,loosen);assert(r,'Empty curl should loosen');
+ assert.equal(s.crossings.length,0);assert.deepEqual(r.ev,{r1:1,r2:0,r3:0});assert.equal(s.comps.length,1);
+ assert.equal(KC.loosenR1(s,loosen),null,'Must not count the same R1 twice');
+}
+const tinyBox=(x,y)=>poly([[x-.08,y-.08],[x+.08,y-.08],[x+.08,y+.08],[x-.08,y+.08]]);
+for(const extra of [[tinyBox(0,2.65)],[tinyBox(0,1.8)]]) {
+ const s=curlState(extra),before=JSON.stringify(s);assert.equal(s.crossings.length,1);
+ assert.equal(KC.loosenR1(s,loosen),null,'A component inside the loop or neck must be protected');assert.equal(JSON.stringify(s),before);
+}
+const openThread=curlState([]);openThread.open=[{pts:[{x:-5,y:2.6},{x:5,y:2.6}]}];
+const threadBefore=JSON.stringify(openThread);assert.equal(KC.loosenR1(openThread,loosen),null);assert.equal(JSON.stringify(openThread),threadBefore);
+const remote=curlState([]),remoteBefore=JSON.stringify(remote);
+assert.equal(KC.loosenR1(remote,{...loosen,u:6/8,radius:2}),null);assert.equal(JSON.stringify(remote),remoteBefore);
+const busy=curlState([poly(curlPoints.map(([x,y])=>[x+60,y]))]);
+assert.equal(busy.crossings.length,2);busy.crossings[1].over=1;
+const survivors=JSON.stringify(busy.crossings.filter(x=>x.occ[0].c===1));
+assert(KC.loosenR1(busy,loosen));assert.equal(JSON.stringify(busy.crossings.filter(x=>x.occ[0].c===1)),survivors,'Unrelated crossings must remain untouched');
+console.log('Assisted R1: both signs, one count, enclosed components, neck obstruction, open strands and distant curls: PASS');
+const twoCurls=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[40,0],[58,0],[61,3],[59,3],[62,0],[80,0],[80,20],[-20,20]];
+for(let rotation=0;rotation<twoCurls.length;rotation++) {
+ const points=twoCurls.slice(rotation).concat(twoCurls.slice(0,rotation)),s=state([poly(points)]);
+ assert.equal(s.crossings.length,2);const other=s.crossings.find(x=>x.x>40);other.over=1;
+ const originalOver=other.occ[other.over].u;
+ const u=points.findIndex(p=>p[0]===1&&p[1]===3)/points.length;
+ assert(KC.loosenR1(s,{component:0,u,radius:10,maxLoopLength:120}));
+ assert.equal(s.crossings.length,1);assert.equal(s.crossings[0].id,other.id);
+ assert(KC.circD(s.crossings[0].occ[s.crossings[0].over].u,originalOver)<1e-6);
+}
+console.log('Local R1 preserves other crossings on the same component across cyclic seams: PASS');
