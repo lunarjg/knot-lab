@@ -286,5 +286,26 @@ console.log('Bigon drag constraint, separate area controls, off switch and undo 
  api.activateTab(api.tabs[0].id);button.click();const canceled=workers.at(-1);p.ids.get('cancelInvariants').click();assert(canceled.terminated);canceled.complete();assert(p.ids.get('invariantResults').hidden);
  button.click();workers.at(-1).complete();assert.equal(p.ids.get('jonesPolynomial').textContent,'−t⁴ + t³ + t');
  button.click();const errored=workers.at(-1);errored.onerror();assert(!button.disabled);assert(p.ids.get('invariantStatus').textContent.includes('Could not calculate'));
+ // Converting changes only crossing heights, with one undo step and stale
+ // invariant work canceled. Open arcs and Reidemeister counts are untouched.
+ const alt=p.ids.get('makeAlternating');assert(alt.disabled,'An alternating diagram needs no conversion');
+ api.state.open=openArcs([[[600,600],[650,650]]]);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip').click();
+ const crossing=api.state.crossings[0],ev={pointerType:'mouse',pointerId:70,clientX:crossing.x*api.view.s+api.view.ox,clientY:crossing.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);
+ assert(!api.analysis.alternating);assert(!alt.disabled);
+ const before=api.serialize(),originalId=api.activeTabId,nextId=api.state.nextId;
+ button.click();const calculating=workers.at(-1);alt.click();
+ assert(calculating.terminated);calculating.complete();assert(p.ids.get('invariantResults').hidden);
+ assert(api.analysis.alternating);assert(alt.disabled);assert.equal(api.state.nextId,nextId);
+ const after=api.serialize();assert.equal(after.stats.flips,before.stats.flips+1);
+ for(const key of ['comps','open','crossingMemory'])assert.equal(JSON.stringify(after[key]),JSON.stringify(before[key]));
+ for(const key of ['r1','r2','r3'])assert.equal(after.stats[key],before.stats[key]);
+ p.ids.get('undo').click();assert(!api.analysis.alternating);assert.equal(JSON.stringify(api.serialize().crossings),JSON.stringify(before.crossings));
+ assert.equal(api.serialize().stats.flips,before.stats.flips);p.ids.get('redo').click();assert(api.analysis.alternating);
+ alt.click();p.ids.get('undo').click();assert(!api.analysis.alternating,'Already-alternating conversion must not add an undo entry');p.ids.get('redo').click();
+ api.activateTab(api.tabs.find(t=>t.id!==originalId).id);assert(alt.disabled);api.activateTab(originalId);assert(api.analysis.alternating);
+ for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert(restored.ctx.knotLab.analysis.alternating);assert.equal(restored.ctx.knotLab.serialize().stats.flips,after.stats.flips);
+ console.log('Make alternating: button state, minimal flips, fixed geometry, open arcs, undo/redo, tabs, autosave and canceled stale invariants: PASS');
  console.log('Invariant UI: exact results, mirror, tab switch, stale messages, cancel and retry after worker error: PASS');
 }

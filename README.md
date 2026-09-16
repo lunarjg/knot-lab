@@ -117,6 +117,12 @@ Regression cases cover fixed crossing positions with a collapsing bigon, a singl
 
 Additional cases compare identical geometry with the two possible over/under patterns, R2 shrink/disappear/reappear and move counts, one-component bigons, mirrored height order, reversed occurrences, and pointer dragging with protection enabled.
 
+## Make an alternating diagram
+
+Use **Make alternating** in the Reidemeister move counts panel. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
+
+The actual changes are added to **Crossing changes**, not R1/R2/R3 counts, and the entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
+
 ## Knot and link invariants
 
 Click **Calculate invariants** in the side panel. Only closed components are included. The panel separates invariants from diagram-dependent crossing count, writhe, and genus. Results are invalidated when the combinatorial diagram changes or a different document is selected.
@@ -145,6 +151,7 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 | v8 | See annotated tag `v8` | Allow new R1 self-crossings with protection enabled |
 | v9 | See annotated tag `v9` | Connecting arcs pass under existing arcs |
 | v10 | See annotated tag `v10` | Tap the active tab title to rename it |
+| v11 | See annotated tag `v11` | Make the closed diagram alternating |
 
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
@@ -160,12 +167,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v11 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v12 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v11 -m "Describe the tested application release"
+git tag -a v12 -m "Describe the tested application release"
 git push github main
-git push github v11
+git push github v12
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

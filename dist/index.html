@@ -354,6 +354,8 @@ h2{font-size:15px}
         <div class="move" id="mR3"><div class="n">0</div><div class="l">R3</div></div>
       </div>
       <p class="small">Crossing changes: <span id="nflip">0</span> (may change the knot type)</p>
+      <div class="btns"><button id="makeAlternating">Make alternating</button></div>
+      <p class="small">Alternates over/under along each closed component, using the fewest crossing changes for this projection. Geometry stays fixed; the knot or link type may change. Open arcs are excluded.</p>
     </section>
 
     <section>
@@ -1163,10 +1165,37 @@ const KC = (function () {
     };
   }
 
+  // Adjacent occurrences on every closed component must have opposite heights.
+  // Crossing bits satisfy over[a] XOR over[b] = 1 XOR occurrence[a] XOR occurrence[b].
+  function alternatingAssignment(comps,crossings) {
+    const lists=comps.map(()=>[]),graph=crossings.map(()=>[]);
+    crossings.forEach((X,i)=>X.occ.forEach((o,k)=>lists[o.c].push({i,k,s:o.s})));
+    for(const list of lists) {
+      list.sort((a,b)=>a.s-b.s);
+      list.forEach((a,j)=>{
+        const b=list[(j+1)%list.length],parity=1^a.k^b.k;
+        graph[a.i].push({i:b.i,parity});graph[b.i].push({i:a.i,parity});
+      });
+    }
+    const over=crossings.map(()=>-1);
+    for(let root=0;root<crossings.length;root++) {
+      if(over[root]!==-1)continue;
+      const group=[root];over[root]=0;
+      for(let j=0;j<group.length;j++)for(const edge of graph[group[j]]) {
+        const value=over[group[j]]^edge.parity;
+        if(over[edge.i]===-1){over[edge.i]=value;group.push(edge.i);}
+        else if(over[edge.i]!==value)return {ok:false,reason:'Inconsistent crossing order'};
+      }
+      const flips=group.filter(i=>over[i]!==crossings[i].over).length,opposite=group.length-flips;
+      if(opposite<flips || (opposite===flips&&over[root]!==crossings[root].over))group.forEach(i=>over[i]^=1);
+    }
+    return {ok:true,over,flips:over.filter((v,i)=>v!==crossings[i].over).length};
+  }
+
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
     attemptStep, smallFaces, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
-    braidCurves, analyze, circD, mod
+    braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
 
@@ -1572,6 +1601,14 @@ const KC = (function () {
   });
 
   // ---------- global operations ----------
+  $('makeAlternating').onclick=()=>{
+    const result=KC.alternatingAssignment(S.comps,S.crossings);
+    if(!result.ok){toast('Could not make this crossing order alternating. Check for overlapping or degenerate crossings.',true);return;}
+    if(!result.flips){toast(S.crossings.length?'The closed diagram is already alternating':'No closed crossings to change');return;}
+    relaxing=0;pushUndo();S.moveCheckpoint=null;
+    S.crossings.forEach((X,i)=>X.over=result.over[i]);stats.flips+=result.flips;
+    changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
+  };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
   $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); stats.r1 = stats.r2 = stats.r3 = stats.flips = 0; changed(); setTool('draw'); };
   let relaxing = 0;
@@ -2537,6 +2574,7 @@ const KC = (function () {
     setText('vw', (a.writhe > 0 ? '+' : '') + a.writhe); setText('vmu', a.mu); setText('vs', a.sS.count); setText('vg', fmt(a.gSeif));
     ['r1', 'r2', 'r3'].forEach(k => $('m' + k.toUpperCase()).querySelector('.n').textContent = stats[k]);
     setText('nflip', stats.flips);
+    $('makeAlternating').disabled=!a.c || a.alternating;
     const flags = [];
     if (a.c) {
       flags.push([a.alternating ? 'Alternating diagram' : 'Non-alternating diagram', a.alternating]);

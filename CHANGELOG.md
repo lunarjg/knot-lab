@@ -1,5 +1,12 @@
 # Release history
 
+## v11 — Make alternating
+
+- Add an English Make alternating action for closed knot/link diagrams without moving the curves.
+- Solve cyclic over/under constraints jointly across components and choose the minimum number of crossing changes for the current projection.
+- Record crossing changes separately from Reidemeister moves; support one-step undo/redo and invalidate in-flight invariant results.
+- Test knots, links, disconnected diagrams, minimum-change assignments, no-op/error handling, persistence and tab isolation; refresh the offline cache.
+
 ## v10 — Rename document tabs in place
 
 - Tap the active tab title or press F2 to edit its name; inactive tabs retain one-tap selection.
