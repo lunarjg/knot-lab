@@ -1,5 +1,12 @@
 # Release history
 
+## v9 — Join arcs underneath existing strands
+
+- Make newly drawn endpoint connectors pass under existing open arcs, closed components, and older parts of their own arc.
+- Show over/under gaps for open-arc crossings while excluding open arcs from invariant calculations.
+- Preserve crossing choices through later joins, closure, undo/redo, tabs, JSON and autosave, with backward-compatible optional crossing memory.
+- Add pointer-path regression coverage for mouse/pen/touch, both joining directions, both closure orders, smoothing, and persistence; refresh offline assets.
+
 ## v8 — Allow new R1 self-crossings
 
 - Exempt newly born R1 loops from the initial size floor so a strand can cross over/under itself to form a valid curl.

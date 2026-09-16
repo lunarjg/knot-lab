@@ -1255,6 +1255,7 @@ const KC = (function () {
       comps:state.comps.map(cm=>cm.pts.map(q=>[q.x,q.y])),
       crossings:state.crossings.map(X=>{const o=X.occ[X.over];return [X.x,X.y,o.dx,o.dy];}),
       open:state.open.map(st=>st.pts.map(q=>[q.x,q.y])),
+      crossingMemory:(state.memory||[]).map(m=>[m.x,m.y,m.ox,m.oy]),
       pd:KC.analyze(state.comps,state.crossings).pd,
       stats:cleanStats(counts)
     };
@@ -1279,7 +1280,8 @@ const KC = (function () {
       }
     });
     const open = (Array.isArray(data.open) ? data.open : []).map(toPts).filter(p => p.length >= 2).map(pts => ({ pts }));
-    return { comps, crossings: raw, nextId: id, open, memory:[], stats:cleanStats(data.stats) };
+    const memory=(Array.isArray(data.crossingMemory)?data.crossingMemory:[]).filter(m=>Array.isArray(m)&&m.length===4&&m.every(Number.isFinite)&&Math.hypot(m[2],m[3])>1e-8).slice(-800).map(([x,y,ox,oy])=>({x,y,ox,oy}));
+    return { comps, crossings: raw, nextId: id, open, memory, stats:cleanStats(data.stats) };
   }
   function defaultName() {
     const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -2037,6 +2039,27 @@ const KC = (function () {
     return b.slice(1, -1);
   }
 
+  // Open arcs use temporary geometry for drawing only, never for invariants.
+  // Filter out the artificial closing segment used by the closed-curve engine.
+  function draftGeometry(open=S.open, closedLast=false) {
+    const offset=S.comps.length;
+    const curves=S.comps.concat(open.map(st=>{const c={pts:st.pts.map((p,i)=>({...p,u:i/st.pts.length}))};KC.updateGeom(c);return c;}));
+    const crossings=open.length?KC.computeRaw(curves).filter(X=>X.occ.some(o=>o.c>=offset)&&X.occ.every(o=>o.c<offset||(closedLast&&o.c===curves.length-1)||o.seg<curves[o.c].pts.length-1)):[];
+    for(const X of crossings) {
+      // Preserve the previous visual default for crossings not made by joining.
+      X.over=X.occ[0].c>X.occ[1].c?0:1;
+      let best=null,bd=3;
+      for(const m of S.memory){const d=Math.hypot(m.x-X.x,m.y-X.y);if(d<bd){best=m;bd=d;}}
+      if(best){const costs=X.occ.map(o=>Math.abs(o.dx*best.oy-o.dy*best.ox));if(Math.min(...costs)<.35)X.over=costs[0]<=costs[1]?0:1;}
+    }
+    return {curves,crossings};
+  }
+  function rememberCrossing(X,over=X.over) {
+    const o=X.occ[over],m={x:X.x,y:X.y,ox:o.dx,oy:o.dy};
+    const i=S.memory.findIndex(p=>Math.hypot(p.x-X.x,p.y-X.y)<1e-6);
+    if(i<0)S.memory.push(m);else S.memory[i]=m;
+    if(S.memory.length>800)S.memory.splice(0,S.memory.length-800);
+  }
   function finishStroke(st) {
     const pts = st.pts, len = polyLen(pts) * view.s;
     const last = pts[pts.length - 1];
@@ -2048,6 +2071,8 @@ const KC = (function () {
       if (len < 12) { render(); updatePanel(); return; }
     }
     pushUndo();
+    // Keep prior open-arc crossings when chains are reversed, merged or closed.
+    draftGeometry().crossings.forEach(X=>rememberCrossing(X));
     const fix = opts.cornerFix;
     let raw = pts.slice();
     if (fix) { if (!st.attach) raw = trimHook(raw, 'start'); if (!target) raw = trimHook(raw, 'end'); }
@@ -2091,6 +2116,15 @@ const KC = (function () {
       KC.smoothCorners(chain, closed, { angle: 0.45, iters: 40, strength: 0.5, mask: i => near[i] });
     }
     S.open = S.open.filter((_, i) => !used.has(i));
+    if(st.attach || target) {
+      const draft=draftGeometry(S.open.concat({pts:chain}),closed),ci=draft.curves.length-1;
+      const fresh=o=>o.c===ci && (isNew[o.seg+1] || (closed&&o.seg===chain.length-1&&isNew[o.seg]));
+      for(const X of draft.crossings) {
+        const a=!!fresh(X.occ[0]),b=!!fresh(X.occ[1]);
+        // Only the new connecting segment goes under; old crossings keep their heights.
+        if(a!==b)rememberCrossing(X,a?1:0);
+      }
+    }
     if (closed) integrateClosed(chain); else S.open.push({ pts: chain });
     changed();
   }
@@ -2401,7 +2435,7 @@ const KC = (function () {
   function updateHint() {
     const penNote = input.penOnly ? ' Pan with one finger; zoom with two.' : '';
     $('hint').textContent = tool === 'move' ? (opts.under ? 'Drag a strand to move it. It passes under at new crossings (hold Shift to pass over).' : 'Drag a strand to move it. It passes over at new crossings (hold Shift to pass under).')
-      : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join that curve.' : 'Strokes remain open. Join endpoints to complete a loop and create a link component.')
+      : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join it; connecting segments pass under existing arcs.' : 'Strokes remain open. Join endpoints to complete a loop; connecting segments pass under existing arcs.')
         : tool === 'lasso' ? (opts.lassoMode === 'curve' ? 'Enclose curves to select them. Drag to move, or use the menu to copy, cut, or delete. Tap an empty area to paste.' : 'Select only the enclosed region. Curves are cut at the boundary; you can rejoin their endpoints to close them.')
         : tool === 'erase' ? (opts.eraseMode === 'stroke' ? 'Tap or drag across a curve to erase the entire curve.' : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
           : 'Tap a crossing to swap its over/under strands.';
@@ -2547,8 +2581,9 @@ const KC = (function () {
       sel.items.forEach(it => { const p = it.ref.pts; ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y); p.forEach(q => ctx.lineTo(q.x, q.y)); if (it.kind === 'closed') ctx.closePath(); ctx.stroke(); });
       ctx.restore();
     }
-    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(); else drawState(viewMode); }
-    drawOpen();
+    const draft=draftGeometry();
+    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(draft.crossings); else drawState(viewMode); }
+    drawOpen(draft);
     if (sel) {
       const b = selBox(), pad = 10 / view.s;
       ctx.save();
@@ -2622,11 +2657,18 @@ const KC = (function () {
     positionMenu();
   }
 
-  function drawOpen() {
+  function drawOpen(draft) {
     if (!S.open.length) return;
     ctx.save();
     ctx.strokeStyle = cssv('--ink'); ctx.globalAlpha = viewMode === 'diagram' ? 0.75 : 0.35; ctx.lineWidth = 3 / view.s;
-    S.open.forEach(st => { ctx.beginPath(); ctx.moveTo(st.pts[0].x, st.pts[0].y); st.pts.forEach(q => ctx.lineTo(q.x, q.y)); ctx.stroke(); });
+    S.open.forEach((st,i) => {
+      const c=S.comps.length+i,cm=draft.curves[c],end=cm.cum[cm.pts.length-1],gap=Math.min(12,8/view.s);
+      if(end<=1e-8)return;
+      const gaps=viewMode==='diagram'?draft.crossings.flatMap(X=>X.occ.filter((o,k)=>o.c===c&&k!==X.over).map(o=>o.s)).sort((a,b)=>a-b):[];
+      ctx.beginPath();let start=0;
+      for(const s of gaps){if(s-gap>start)tracePiece(cm,start,Math.min(end,s-gap));start=Math.max(start,s+gap);}
+      if(start<end)tracePiece(cm,start,end);ctx.stroke();
+    });
     ctx.globalAlpha = 1;
     const showEnds = tool === 'draw' || tool === 'erase';
     S.open.forEach(st => [st.pts[0], st.pts[st.pts.length - 1]].forEach(q => {
@@ -2638,12 +2680,12 @@ const KC = (function () {
 
   function compColor(c, pal) { return S.comps.length === 1 ? cssv('--ink') : pal[c % pal.length]; }
 
-  function drawDiagram() {
+  function drawDiagram(openCrossings=[]) {
     const pal = palette(), lw = 3 / view.s, gap = Math.min(12, 8 / view.s);
     ctx.lineWidth = lw;
     S.comps.forEach((cm, c) => {
       const gaps = [];
-      S.crossings.forEach(X => X.occ.forEach((o, k) => { if (o.c === c && k !== X.over) gaps.push(o.s); }));
+      S.crossings.concat(openCrossings).forEach(X => X.occ.forEach((o, k) => { if (o.c === c && k !== X.over) gaps.push(o.s); }));
       gaps.sort((a, b) => a - b);
       ctx.strokeStyle = compColor(c, pal); ctx.beginPath();
       if (!gaps.length) { const p = cm.pts; ctx.moveTo(p[0].x, p[0].y); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i].x, p[i].y); ctx.closePath(); }

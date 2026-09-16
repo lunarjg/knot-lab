@@ -94,6 +94,12 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
+## Drawing and joining open arcs
+
+When a drawn stroke starts or ends at an existing open endpoint, its new connecting segments pass **under** existing arcs at new crossings, including older parts of the same arc and closed components. Previously assigned crossings retain their heights. Open arcs display undercrossing gaps, but remain excluded from knot/link invariant calculations until closed.
+
+The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. The draw hint explains the joining rule in English. Free strokes and the separate drag-under setting keep their existing defaults.
+
 ## R1 drag assistance
 
 Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Loosen small R1 loops while dragging” to retain curls.
@@ -136,6 +142,7 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 | v6 | `f98759e3bd78758956a9af142ef6cb4b5a179528` | Invariant calculator |
 | v7 | See annotated tag `v7` | Protect only alternating, non-R2 bigons |
 | v8 | See annotated tag `v8` | Allow new R1 self-crossings with protection enabled |
+| v9 | See annotated tag `v9` | Connecting arcs pass under existing arcs |
 
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
@@ -151,12 +158,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v9 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v10 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v9 -m "Describe the tested application release"
+git tag -a v10 -m "Describe the tested application release"
 git push github main
-git push github v9
+git push github v10
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

@@ -1,14 +1,14 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
 function boot(saved,narrow=true,Worker){
- const arcs=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ const arcs=[],paths=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
   setAttribute(k,v){this.attrs[k]=String(v)} removeAttribute(k){delete this.attrs[k]} getAttribute(k){return this.attrs[k]}
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
-  getContext(){return new Proxy({arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
+  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
   focus(){doc.activeElement=this} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
@@ -17,7 +17,7 @@ function boot(saved,narrow=true,Worker){
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
 assert.equal(lab.analysis.c,0);assert(t.ids.get('inspector').inert);
@@ -163,6 +163,64 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
 }
 console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+
+function arcSession(pointerType='mouse',fix=true,saved) {
+ const p=boot(saved),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.ids.get('autoClose').onchange({target:{checked:false}});p.ids.get('cornerFix').onchange({target:{checked:fix}});
+ p.ids.get('palm').onchange({target:{checked:false}});p.ids.get('penDoubleTap').onchange({target:{checked:false}});
+ p.draw=ps=>{
+  const ev=([x,y],type)=>({pointerType,pointerId:80,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(ps[0],'pointerdown'));for(const q of ps.slice(1))p.fire(canvas,'pointermove',ev(q,'pointermove'));
+  p.paths.length=0;p.fire(canvas,'pointerup',ev(ps.at(-1),'pointerup'));p.flush();
+ };
+ return p;
+}
+const openArcs=paths=>paths.map(ps=>({pts:ps.map(([x,y])=>({x,y}))}));
+// Join two open arcs across a third: the connector is below it in either
+// direction, with mouse/pen/touch, and is visibly broken at the crossing.
+for(const pointer of ['mouse','pen','touch'])for(const reverse of [false,true]) {
+ const p=arcSession(pointer),api=p.ctx.knotLab;
+ api.state.open=openArcs([[[200,50],[200,100]],[[200,300],[200,350]],[[100,200],[300,200]]]);
+ const points=[[200,100],[200,150],[200,200],[200,250],[200,300]];p.draw(reverse?points.reverse():points);
+ assert.equal(api.state.open.length,2);assert.equal(api.analysis.c,0,'Open arcs stay excluded from invariants');
+ const m=api.state.memory.find(m=>Math.hypot(m.x-200,m.y-200)<1);assert(m&&Math.abs(m.ox)>.99&&Math.abs(m.oy)<.01,'Existing horizontal arc must be over');
+ assert(p.paths.some(path=>path.some(q=>q.move&&Math.abs(q.x-200)<.01&&Math.abs(Math.abs(q.y-200)-8)<.1)),'The connector must resume after its undercrossing gap');
+ const saved=JSON.stringify(api.serialize()),loaded=api.deserialize(JSON.parse(saved));assert.equal(loaded.memory.length,api.state.memory.length);
+ p.ids.get('undo').click();assert.equal(api.state.open.length,3);assert.equal(api.state.memory.length,0);
+ p.ids.get('redo').click();assert.equal(api.state.open.length,2);assert.equal(api.state.memory.length,1);
+ api.openTab();api.activateTab(api.tabs[0].id);assert.equal(api.state.memory.length,1);
+ for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert.equal(restored.ctx.knotLab.state.memory.length,1);
+}
+// Closing either component first must give the same final heights, including
+// persistence between drawing steps and both smoothing settings.
+for(const attachAtStart of [false,true]) {
+ const p=arcSession(),api=p.ctx.knotLab;
+ api.state.open=openArcs([[[200,50],[200,100]],[[100,200],[300,200]]]);
+ const path=[[200,100],[200,150],[200,200],[200,250],[200,300]];p.draw(attachAtStart?path:path.reverse());
+ const m=api.state.memory.find(m=>Math.hypot(m.x-200,m.y-200)<1);assert(m&&Math.abs(m.ox)>.99,'One-ended connections also go underneath');
+}
+for(const fix of [false,true])for(const horizontalFirst of [false,true]) {
+ let p=arcSession('mouse',fix),api=p.ctx.knotLab;
+ api.state.open=openArcs([[[100,100],[100,50],[300,50],[300,100]],[[50,200],[350,200]]]);
+ const closeHorizontal=[[350,200],[400,200],[400,450],[0,450],[0,200],[50,200]];
+ const closeVertical=[[300,100],[300,200],[300,300],[200,300],[100,300],[100,200],[100,100]];
+ if(horizontalFirst)p.draw(closeHorizontal);
+ p.draw(closeVertical);
+ if(!horizontalFirst){p=arcSession('mouse',fix,JSON.stringify(api.serialize()));api=p.ctx.knotLab;p.draw(closeHorizontal);}
+ assert.equal(api.state.comps.length,2);assert.equal(api.state.open.length,0);assert.equal(api.state.crossings.length,2);
+ for(const X of api.state.crossings){const o=X.occ[X.over];assert(Math.abs(o.dx)>.99&&Math.abs(o.dy)<.01,'Existing horizontal arc stays over after closure');}
+ const prior=JSON.stringify(api.serialize().crossings);p.ids.get('undo').click();p.ids.get('redo').click();assert.equal(JSON.stringify(api.serialize().crossings),prior);
+}
+// The new connecting part also passes under an older part of the same arc.
+{
+ const p=arcSession('mouse',false),api=p.ctx.knotLab;
+ api.state.open=openArcs([[[100,100],[300,100],[300,300]]]);
+ p.draw([[300,300],[100,300],[100,50],[200,50],[200,200],[100,200],[100,100]]);
+ const X=api.state.crossings.find(X=>Math.hypot(X.x-200,X.y-100)<3);assert(X);assert(Math.abs(X.occ[X.over].dx)>.99);
+}
+console.log('Arc connectors pass under existing open/closed/self arcs, visual gaps, both closure orders, JSON/autosave, tabs and undo/redo: PASS');
 
 // Exercise the two independent controls through the actual drag event path.
 for(const alternating of [true,false])for(const protect of [true,false]) {
