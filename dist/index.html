@@ -122,6 +122,11 @@ input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
 .braid{display:flex;gap:6px;margin-top:8px}
 .braid input{flex:1;min-width:0;border:1px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 10px}
 .braid button{border:0;background:var(--ink);color:var(--paper);border-radius:9px;padding:6px 12px;cursor:pointer;font-weight:500}
+.invariant-value{font-family:var(--mono);font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap;margin:6px 0}
+h3{font-size:14px;margin:14px 0 6px}
+#invariantResults dd{overflow-wrap:anywhere;max-width:150px}
+#invariantResults a,details a{color:var(--accent)}
+button:disabled{opacity:.5;cursor:default}
 .small{font-size:12px;color:var(--muted);margin:6px 0 0}
 .moves{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .move{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:8px;text-align:center}
@@ -300,16 +305,44 @@ h2{font-size:15px}
         <div class="calc" id="gTcalc"></div>
         <div class="note">g<sub>T</sub>(D) is the value for this diagram and an upper bound for g<sub>T</sub>(K).</div>
       </div>
+      <h2>Diagram quantities</h2>
+      <p class="small">These values describe the current diagram; crossing count, writhe, state counts, and surface genera can change under Reidemeister moves.</p>
       <dl class="inv">
         <dt>Crossings c(D)</dt><dd id="vc">0</dd>
         <dt>All-A state circles s<sub>A</sub>(D)</dt><dd id="vsA">0</dd>
         <dt>All-B state circles s<sub>B</sub>(D)</dt><dd id="vsB">0</dd>
         <dt>writhe w(D)</dt><dd id="vw">0</dd>
-        <dt>Components</dt><dd id="vmu">0</dd>
         <dt>Seifert circles s(D)</dt><dd id="vs">0</dd>
         <dt>Canonical Seifert surface genus</dt><dd id="vg">0</dd>
       </dl>
       <div class="flags" id="flags"></div>
+    </section>
+
+    <section aria-labelledby="invariantHeading">
+      <h2 id="invariantHeading">Knot &amp; link invariants</h2>
+      <dl class="inv"><dt>Closed components</dt><dd id="vmu">0</dd></dl>
+      <div class="btns"><button id="calculateInvariants">Calculate invariants</button><button id="cancelInvariants" hidden>Cancel</button></div>
+      <p class="small" id="invariantStatus" role="status">Draw or import a closed diagram to calculate.</p>
+      <div id="invariantResults" hidden>
+        <dl class="inv">
+          <dt>Knot determinant |Δ(−1)|</dt><dd id="knotDeterminant">—</dd>
+          <dt>Nonconstant 3-coloring</dt><dd id="tricolorable">—</dd>
+          <dt>Fox 3-colorings (total)</dt><dd id="coloringCount">—</dd>
+        </dl>
+        <p class="small" id="coloringNote"></p>
+        <h3>Pairwise linking numbers</h3>
+        <p class="invariant-value" id="linkingNumbers">—</p>
+        <p class="small">Component numbers follow drawing/import order. Signs use the displayed orientations. A zero linking number does not prove that a link is split.</p>
+        <h3>Jones polynomial V(t)</h3>
+        <p class="invariant-value" id="jonesPolynomial">—</p>
+        <p class="small" id="jonesNote"></p>
+      </div>
+      <p class="small">Closed components only; open strokes are excluded. Press Calculate again after changes. Matching invariants alone do not prove two knots equivalent.</p>
+      <details class="small"><summary>Definitions &amp; limits</summary>
+        <p>The determinant is shown for a single-component knot. Fox colorings include the three constant colorings; “nonconstant” means at least two colors are used. Coloring and determinant calculations support up to 200 crossings.</p>
+        <p>Jones uses V(unknot) = 1 and V(t) = (−A³)<sup>−w(D)</sup>⟨D⟩ with A = t<sup>−1/4</sup>. Exact state expansion supports up to 18 crossings. Link polynomials may have half-integer powers.</p>
+        <p>Methods: <a href="https://arxiv.org/html/2204.12104v2" target="_blank" rel="noopener noreferrer">Kauffman: Jones polynomial</a>; <a href="https://arxiv.org/abs/1910.08044" target="_blank" rel="noopener noreferrer">Kolay: coloring matrices</a>; <a href="https://homepages.math.uic.edu/~kauffman/KFI.pdf" target="_blank" rel="noopener noreferrer">linking numbers</a>.</p>
+      </details>
     </section>
 
     <section>
@@ -1144,6 +1177,7 @@ const KC = (function () {
   const SNAP = 16;
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
+  let invariantKey=null,invariantWorker=null,invariantJob=0;
   const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],stats:{r1:0,r2:0,r3:0,flips:0},moveCheckpoint:null});
   const cleanStats = value => Object.fromEntries(['r1','r2','r3','flips'].map(k=>[k,Number.isSafeInteger(value?.[k])&&value[k]>=0?value[k]:0]));
 
@@ -2364,8 +2398,67 @@ const KC = (function () {
     if (penNote) $('hint').textContent += penNote;
   }
   function setText(id, v) { $(id).textContent = v; }
+  function invariantSnapshot() {
+    const a=analysis;
+    return {mu:a.mu,free:a.free,arcCount:a.arcCount,writhe:a.writhe,info:a.info};
+  }
+  function stopInvariantWorker() {
+    invariantJob++;
+    if(invariantWorker)invariantWorker.terminate();
+    invariantWorker=null;$('cancelInvariants').hidden=true;
+    $('calculateInvariants').disabled=!analysis.mu;
+  }
+  function refreshInvariantState() {
+    const key=activeTabId+':'+JSON.stringify(invariantSnapshot());
+    if(key===invariantKey)return;
+    invariantKey=key;stopInvariantWorker();$('invariantResults').hidden=true;
+    $('invariantStatus').textContent=analysis.mu?'Ready — calculate for the current closed diagram.':'Draw or import a closed diagram to calculate.';
+  }
+  function polynomialText(terms) {
+    const superscript=n=>String(n).replace(/[0-9-]/g,c=>({'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻'}[c]));
+    return terms.map((term,i)=>{
+      const value=BigInt(term.coefficient),negative=value<0n,abs=negative?-value:value,e=term.power2;
+      const sign=i?(negative?' − ':' + '):(negative?'−':'');
+      const coefficient=e!==0&&abs===1n?'':String(abs);
+      const power=e===0?'':e===2?'t':e%2===0?'t'+superscript(e/2):'t^('+e+'/2)';
+      return sign+coefficient+power;
+    }).join('')||'0';
+  }
+  function showInvariantResult(result) {
+    const c=result.coloring,j=result.jones;
+    $('invariantResults').hidden=false;
+    setText('knotDeterminant',c.status==='ready'?(c.determinant??'Knots only'):'Limit reached');
+    setText('tricolorable',c.status==='ready'?(c.tricolorable?'Yes':'No'):'Limit reached');
+    setText('coloringCount',c.status==='ready'?c.colorings:'—');
+    setText('coloringNote',c.status==='ready'?c.nonconstant+' nonconstant colorings.':'Coloring and determinant calculations are limited to '+c.limit+' crossings.');
+    setText('linkingNumbers',result.linking.length?result.linking.map(p=>'lk(C'+p.a+', C'+p.b+') = '+p.value).join('\n'):'Not applicable to a single-component knot.');
+    setText('jonesPolynomial',j.status==='ready'?polynomialText(j.terms):'Not calculated — more than '+j.limit+' crossings.');
+    setText('jonesNote',j.status==='ready'?'Exact polynomial; V(unknot) = 1.':'Simplify the diagram to '+j.limit+' or fewer crossings for exact Jones calculation.');
+    setText('invariantStatus',(j.status==='ready'&&c.status==='ready'?'Calculated':'Calculated within limits')+' for this diagram.');
+  }
+  $('calculateInvariants').onclick=()=>{
+    if(!analysis.mu)return;
+    stopInvariantWorker();$('invariantResults').hidden=true;
+    const id=invariantJob,key=invariantKey,snapshot=invariantSnapshot();
+    try {
+      invariantWorker=new Worker('./invariants-worker.js');
+      $('calculateInvariants').disabled=true;$('cancelInvariants').hidden=false;
+      setText('invariantStatus','Calculating… You can keep editing.');
+      invariantWorker.onmessage=({data})=>{
+        if(data.id!==invariantJob||key!==invariantKey)return;
+        stopInvariantWorker();
+        if(data.error){setText('invariantStatus',data.error);return;}
+        if(data.result.status==='ready')showInvariantResult(data.result);
+      };
+      invariantWorker.onerror=()=>{if(id!==invariantJob)return;stopInvariantWorker();setText('invariantStatus','Could not calculate. Please reload the site and try again.');};
+      invariantWorker.postMessage({id,analysis:snapshot});
+    } catch(error) {stopInvariantWorker();setText('invariantStatus','Calculation requires worker support. Open the hosted site in a current browser.');}
+  };
+  $('cancelInvariants').onclick=()=>{stopInvariantWorker();setText('invariantStatus','Calculation canceled.');};
+
   function updatePanel() {
     const a = analysis;
+    refreshInvariantState();
     $('empty').style.display = (S.comps.length || S.open.length || stroke || (sel && sel.floating && sel.floating.length)) ? 'none' : 'grid';
     setText('gT', fmt(a.gT));
     $('gTcalc').textContent = S.comps.length ? `(${a.k > 1 ? '2·' + a.k : '2'} + ${a.c} − ${a.sA.count} − ${a.sB.count}) / 2 = ${fmt(a.gT)}` : '';

@@ -1,0 +1,37 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+vm.runInThisContext(fs.readFileSync('dist/index.html','utf8').match(/<script>\s*(\/\/ ===== Knot core[\s\S]*?)<\/script>/)[1]+'\nglobalThis.K=KC;');
+require('../dist/pd-import.js');const Inv=require('../dist/invariants.js');
+const analyze=s=>K.analyze(s.comps,s.crossings),calc=s=>Inv.calculate(analyze(s));
+const pd=p=>PDImport.fromPD(JSON.stringify(p),K),curves=c=>K.fromCurves3D(c,440),braid=w=>curves(K.braidCurves(w));
+const terms=r=>r.jones.terms.map(t=>[t.power2,t.coefficient]);
+const unknot=curves([K.circleCurve()]),u=calc(unknot);assert.equal(u.coloring.determinant,'1');assert.equal(u.coloring.colorings,'3');assert.deepEqual(terms(u),[[0,'1']]);
+const trefoil=pd([[1,4,2,5],[3,6,4,1],[5,2,6,3]]),t=calc(trefoil);
+assert.equal(t.coloring.determinant,'3');assert.equal(t.coloring.colorings,'9');assert.equal(t.coloring.nonconstant,'6');assert(t.coloring.tricolorable);
+assert.deepEqual(terms(t),[[-2,'1'],[-6,'1'],[-8,'-1']]);
+const mirror={...trefoil,crossings:trefoil.crossings.map(x=>({...x,over:1-x.over}))},m=calc(mirror);
+assert.deepEqual(m.coloring,t.coloring);assert.deepEqual(terms(m),terms(t).map(([p,c])=>[-p,c]).sort((a,b)=>b[0]-a[0]));
+const fig8=calc(curves([K.figureEightCurve()]));assert.equal(fig8.coloring.determinant,'5');assert.equal(fig8.coloring.colorings,'3');assert(!fig8.coloring.tricolorable);
+assert.deepEqual(terms(fig8),[[4,'1'],[2,'-1'],[0,'1'],[-2,'-1'],[-4,'1']]);
+const hopf=braid([1,1]),h=calc(hopf);assert.equal(h.linking[0].value,1);assert.equal(h.coloring.determinant,null);assert.deepEqual(terms(h),[[5,'-1'],[1,'-1']]);
+assert.equal(calc({...hopf,crossings:hopf.crossings.map(x=>({...x,over:1-x.over}))}).linking[0].value,-1);
+const circle2=K.circleCurve().map(p=>({...p,x:p.x+5})),unlink=calc(curves([K.circleCurve(),circle2]));
+assert.equal(unlink.coloring.colorings,'9');assert.equal(unlink.coloring.nonconstant,'6');assert.equal(unlink.linking[0].value,0);
+assert.deepEqual(terms(unlink),[[1,'-1'],[-1,'-1']]);
+for(const over of [0,1]){const s=pd([[1,2,2,1]]);s.crossings[0].over=over;assert.deepEqual(calc(s),u,'R1 normalization must give the unknot for either curl sign');}
+assert.deepEqual(calc(braid([1,-1])),unlink,'R2 pair must evaluate to the two-component unlink');
+assert.deepEqual(calc(braid([1,2,1])),calc(braid([2,1,2])),'R3 braid relation must preserve every invariant');
+assert.deepEqual(calc(braid([1,1,1,2])),calc(braid([1,1,1])),'Braid stabilization/R1 must preserve invariants');
+const c3=K.circleCurve().map(p=>({...p,x:p.x+10})),unlink3=calc(curves([K.circleCurve(),circle2,c3]));
+assert.equal(unlink3.coloring.colorings,'27');assert.deepEqual(terms(unlink3),[[2,'1'],[0,'2'],[-2,'1']]);
+assert.deepEqual(Inv.calculate({mu:0}),{status:'empty'});
+const limited=calc(braid(Array(19).fill(1)));assert.equal(limited.jones.status,'limited');assert.equal(limited.coloring.determinant,'19');
+assert.equal(Inv.determinant([[0,2],[3,4]]),-6n);assert.equal(Inv.determinant([[2,4],[1,2]]),0n);
+assert.equal(Inv.determinant([[1000000001,0,0],[0,1000000001,0],[0,0,1000000001]]),1000000001n**3n);
+const start=performance.now(),boundary=calc(braid([...Array(17).fill(1),2]));
+assert.equal(boundary.jones.status,'ready');assert.equal(boundary.coloring.determinant,'17');
+console.log('Exact invariants: unknot, trefoil/mirror, figure-eight, Hopf, unlinks, R1/R2/R3, integers and limits: PASS ('+Math.round(performance.now()-start)+' ms at 18 crossings)');
+// Run the real worker script in an isolated worker-like context.
+const messages=[],context={self:{postMessage:r=>messages.push(r)}};context.importScripts=()=>vm.runInContext(fs.readFileSync('dist/invariants.js','utf8'),context);vm.createContext(context);vm.runInContext(fs.readFileSync('dist/invariants-worker.js','utf8'),context);
+context.KnotInvariants=context.self.KnotInvariants;
+context.self.onmessage({data:{id:7,analysis:analyze(trefoil)}});assert.equal(messages[0].id,7);assert.equal(messages[0].result.coloring.determinant,'3');
+context.self.onmessage({data:{id:8,analysis:null}});assert(messages[1].error);console.log('Worker calculation and error response: PASS');

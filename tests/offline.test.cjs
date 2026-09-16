@@ -11,9 +11,10 @@ async function check(unauthorized=false){
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('dist/sw.js','utf8'),ctx);
  let promise;hooks.install({waitUntil:p=>promise=p});
  if(unauthorized){await assert.rejects(promise,/Expected application page/);return;}
- await promise;assert.equal(saved.size,6);hooks.activate({waitUntil:p=>promise=p});await promise;assert(claimed);
+ await promise;assert.equal(saved.size,8);hooks.activate({waitUntil:p=>promise=p});await promise;assert(claimed);
  offline=true;hooks.fetch({request:{method:'GET',url:scope,mode:'navigate'},respondWith:p=>promise=p});assert((await(await promise).text()).includes('knot-lab-app'));
  hooks.fetch({request:new Request(scope+'pd-import.js'),respondWith:p=>promise=p});assert.equal(await(await promise).text(),'asset');
+ for(const asset of ['invariants.js','invariants-worker.js']){hooks.fetch({request:new Request(scope+asset),respondWith:p=>promise=p});assert.equal(await(await promise).text(),'asset');}
  let intercepted=false;hooks.fetch({request:new Request(scope+'private-api'),respondWith:()=>intercepted=true});assert(!intercepted);
 }
 (async()=>{await check();await check(true);console.log('Offline install, activation, navigation/assets fallback, route isolation and login-page rejection: PASS');})().catch(e=>{console.error(e);process.exitCode=1});

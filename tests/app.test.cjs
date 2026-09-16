@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
-function boot(saved,narrow=true){
+function boot(saved,narrow=true,Worker){
  const arcs=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
@@ -13,7 +13,7 @@ function boot(saved,narrow=true){
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
- const context={console,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':'#16263a'}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
+ const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':'#16263a'}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
@@ -167,3 +167,24 @@ for(const protect of [true,false]) {
  p.ids.get('undo').click();assert.equal(api.analysis.c,2);
 }
 console.log('Bigon drag constraint, separate area controls, off switch and undo through pointer events: PASS');
+
+// Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
+{
+ const workers=[];class FakeWorker{
+  constructor(url){assert.equal(url,'./invariants-worker.js');this.terminated=false;workers.push(this);}
+  postMessage(data){this.data=data;}terminate(){this.terminated=true;}
+  complete(){const result=require('../dist/invariants.js').calculate(this.data.analysis);this.onmessage({data:{id:this.data.id,result}});}
+ }
+ const p=boot(undefined,true,FakeWorker),api=p.ctx.knotLab,button=p.ids.get('calculateInvariants');
+ assert(button.disabled);api.importPD(pd);assert(!button.disabled);button.click();
+ assert(button.disabled);assert(!p.ids.get('cancelInvariants').hidden);workers.at(-1).complete();
+ assert.equal(p.ids.get('knotDeterminant').textContent,'3');assert.equal(p.ids.get('coloringCount').textContent,'9');
+ assert.equal(p.ids.get('tricolorable').textContent,'Yes');assert.equal(p.ids.get('jonesPolynomial').textContent,'t⁻¹ + t⁻³ − t⁻⁴');
+ assert(!p.ids.get('invariantResults').hidden);
+ p.ids.get('mirrorBtn').click();assert(p.ids.get('invariantResults').hidden);button.click();const stale=workers.at(-1);
+ api.openTab();assert(stale.terminated);stale.complete();assert(p.ids.get('invariantResults').hidden);assert(button.disabled);
+ api.activateTab(api.tabs[0].id);button.click();const canceled=workers.at(-1);p.ids.get('cancelInvariants').click();assert(canceled.terminated);canceled.complete();assert(p.ids.get('invariantResults').hidden);
+ button.click();workers.at(-1).complete();assert.equal(p.ids.get('jonesPolynomial').textContent,'−t⁴ + t³ + t');
+ button.click();const errored=workers.at(-1);errored.onerror();assert(!button.disabled);assert(p.ids.get('invariantStatus').textContent.includes('Could not calculate'));
+ console.log('Invariant UI: exact results, mirror, tab switch, stale messages, cancel and retry after worker error: PASS');
+}

@@ -57,6 +57,7 @@ Node.js 22 이상에서 프로젝트 폴더를 기준으로 실행합니다.
 node tests/moves.test.cjs
 node tests/pd.test.cjs
 node tests/app.test.cjs
+node tests/invariants.test.cjs
 node tests/offline.test.cjs
 ```
 
@@ -86,3 +87,21 @@ Small empty monogons near the dragged strand can now straighten during a drag (e
 The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. Default minimum areas are 400 screen px² for bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for bigons, 6 px for kinks) and a 16 px crossing separation for bigons. Limits scale with the current zoom. Existing undersized faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
 
 Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.
+
+## Knot and link invariants
+
+Click **Calculate invariants** in the side panel. Only closed components are included. The panel separates invariants from diagram-dependent crossing count, writhe, and genus. Results are invalidated when the combinatorial diagram changes or a different document is selected.
+
+- Component count and pairwise oriented linking numbers.
+- Knot determinant and Fox 3-coloring counts, using exact integer elimination and modular linear algebra. Determinant is shown for single-component knots only. The coloring count includes the three constant colorings; nonconstant colorings are reported separately. These matrix calculations support up to 200 crossings.
+- Jones polynomial, normalized to 1 for the unknot, via the writhe-normalized Kauffman bracket. Exact state expansion supports up to 18 crossings and half-integer exponents for links.
+
+Calculations run in a cancellable Web Worker, keeping drawing responsive. Unsupported sizes are reported explicitly rather than approximated. The worker and its dependencies are cached for offline use.
+
+Tests include the unknot, trefoil and mirror, figure-eight, Hopf link and mirror, unlinks, R1/R2/R3 equivalence, braid stabilization, exact large integers, calculation limits, worker messages, cancellation, stale results, and tab changes. These are automated Node tests, not physical device tests.
+
+## Version history and rollback
+
+See `CHANGELOG.md`. Source commits and saved Sites versions preserve previous releases. To restore the live site, select an existing saved version and redeploy it to this same project. Editing local source alone does not change the live site. A source rollback can instead use `git revert`, followed by the normal test, push, save, and deployment steps; avoid rewriting shared history.
+
+GitHub can provide a separate backup: use one private repository, commit each tested change, and tag releases. No GitHub remote is configured by this update. Source history does not back up users' diagrams: those remain browser-local and can be exported as JSON.
