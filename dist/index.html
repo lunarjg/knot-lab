@@ -361,7 +361,7 @@ h2{font-size:15px}
       <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
       <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect non-R2 bigons<small>Protects area, thickness, and crossing spacing only when each boundary strand switches from over to under. Bigons with the same strand on top at both crossings can shrink freely for R2 removal.</small></span></label>
       <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect R1 kinks<small>Keeps one-crossing loops from being squeezed flat. Empty small loops can still untwist when R1 assistance is on.</small></span></label>
+      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect R1 kinks<small>Keeps existing one-crossing loops from being squeezed flat. New R1 loops may start small and grow. R1 assistance only loosens loops present when the drag started.</small></span></label>
       <div class="row"><label for="kinkArea">Minimum kink area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
       <p class="small">Sizes use screen pixels at the current zoom. Already small regions can expand. Other crossing pairs are not held apart. Turn a protection off to deliberately collapse that type of region.</p>
       <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Loosen small R1 loops while dragging<small>Straightens small empty loops near the strand you drag. Other crossings keep their over/under order. Turn off to keep these curls.</small></span></label>
@@ -802,7 +802,7 @@ const KC = (function () {
       // Compare the actual boundary occurrences, including self-crossings:
       // component IDs or raw crossing.over indices cannot identify an R2 pair.
       const alternating=type==='bigon' && cycle.every(e=>e.alternating);
-      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,alternating,area,thickness:2*area/perimeter,separation});
+      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,crossingId:type==='kink'?cycle[0].from:null,alternating,area,thickness:2*area/perimeter,separation});
     }
     return faces;
   }
@@ -815,6 +815,9 @@ const KC = (function () {
       if(face.type==='bigon' && !face.alternating)continue;
       const rule=limits[face.type];if(!rule)continue;
       const old=previous.get(face.key);
+      // A valid R1 birth starts at zero area. Let it form before protecting
+      // its size on later steps; reconcile already checked the topology.
+      if(face.type==='kink' && !old && !beforeX.some(x=>x.id===face.crossingId))continue;
       for(const metric of ['area','thickness','separation']) {
         const minimum=rule[metric]||0;
         // Existing small imported faces can expand without being locked in
@@ -877,6 +880,7 @@ const KC = (function () {
     if (!cm) return null;
     const anchor = cm.pts[indexOfU(cm, opt.u)], anchorS = arcPosOfU(cm, opt.u);
     for (const X of S.crossings) {
+      if(opt.eligibleIds && !opt.eligibleIds.has(X.id))continue;
       const la = loopArc(X, S.comps);
       if (!la || la.c !== opt.component || la.len <= 1e-6 || la.len > opt.maxLoopLength) continue;
       if (!isSmallLoop(X, S.crossings, S.comps, opt.maxLoopLength)) continue;
@@ -1729,7 +1733,7 @@ const KC = (function () {
     const hit = nearestPoint(w, tol);
     if (hit) {
       pushUndo();
-      drag = { c: hit.c, u: hit.u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under };
+      drag = { c: hit.c, u: hit.u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under, initialCrossingIds: new Set(S.crossings.map(x=>x.id)) };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
       if (!looping) { looping = true; requestAnimationFrame(tick); }
@@ -1934,7 +1938,7 @@ const KC = (function () {
       drag.changed = true; addEvents(r.ev); steps++;
     }
     if (opts.loosenR1 && (steps || blocked)) {
-      const simplified=KC.loosenR1(S,{component:drag.c,u:drag.u,radius:60/view.s,maxLoopLength:120/view.s});
+      const simplified=KC.loosenR1(S,{component:drag.c,u:drag.u,radius:60/view.s,maxLoopLength:120/view.s,eligibleIds:drag.initialCrossingIds});
       if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
     }
     if (steps) changed();

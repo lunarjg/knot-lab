@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v9-non-r2-bigons';
+const CACHE='knot-lab-v10-r1-self-crossings';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

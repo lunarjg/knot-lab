@@ -1,5 +1,12 @@
 # Release history
 
+## v8 — Allow new R1 self-crossings
+
+- Exempt newly born R1 loops from the initial size floor so a strand can cross over/under itself to form a valid curl.
+- Keep subsequent kink size protection and existing non-R2 bigon and topology checks.
+- Restrict automatic R1 assistance to crossings present when the drag started, preserving newly created curls for that gesture.
+- Test self-crossing birth, growth, later size protection, pointer dragging, move counting, and undo/redo; refresh the offline cache.
+
 ## v7 — Protect only non-R2 bigons
 
 - Apply bigon area, thickness, and crossing-spacing floors only to alternating over/under boundary strands, which cannot cancel by R2.

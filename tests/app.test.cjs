@@ -145,6 +145,25 @@ for(const enabled of [true,false]) {
 }
 console.log('R1 drag assistance, click-only preservation, off switch and single-gesture undo/redo: PASS');
 
+// A user can create a self-crossing while kink protection and R1 assistance
+// are both enabled. Assistance must not erase a loop born during this drag.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+ d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
+ api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('sigma').oninput({target:{value:'10'}});
+ assert(p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
+ for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+ p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+ assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
+ p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
+ p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
+}
+console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+
 // Exercise the two independent controls through the actual drag event path.
 for(const alternating of [true,false])for(const protect of [true,false]) {
  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');

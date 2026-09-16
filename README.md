@@ -98,6 +98,8 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 
 Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Loosen small R1 loops while dragging” to retain curls.
 
+Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
+
 ## Bigon and kink size protection
 
 The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. **Bigon size protection applies only when each boundary strand is over at one crossing and under at the other**, which prevents R2 removal. When the same boundary strand is over at both crossings, the bigon is exempt from all size floors (area, thickness, and crossing separation), allowing it to shrink for R2 removal. Classification follows the actual boundary occurrences, including two strands belonging to the same component; it does not compare component IDs or raw crossing indices.
@@ -133,6 +135,7 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 | v5 | `71a74d0` | Bigon/kink protection |
 | v6 | `f98759e3bd78758956a9af142ef6cb4b5a179528` | Invariant calculator |
 | v7 | See annotated tag `v7` | Protect only alternating, non-R2 bigons |
+| v8 | See annotated tag `v8` | Allow new R1 self-crossings with protection enabled |
 
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
@@ -148,12 +151,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v8 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v9 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v8 -m "Describe the tested application release"
+git tag -a v9 -m "Describe the tested application release"
 git push github main
-git push github v8
+git push github v9
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

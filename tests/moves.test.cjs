@@ -109,8 +109,16 @@ assert(KC.smallFaces(kinkState.comps,kinkState.crossings).some(f=>f.type==='kink
 const flattenKink=cm=>cm[0].pts.forEach(p=>p.y*=.1);
 assert.equal(KC.attemptStep(kinkState,flattenKink,{faceLimits}).reason,'kink');assert.equal(JSON.stringify(kinkState),kinkBefore);
 const kinkDisabled=scaledCurl();assert(KC.attemptStep(kinkDisabled,flattenKink,{faceLimits:{bigon:faceLimits.bigon}}).ok);
-const born=state([flat]),bornBefore=JSON.stringify(born);
-assert.equal(KC.attemptStep(born,cm=>{cm[0].pts=curled.pts.map(p=>({...p}));},{faceLimits}).reason,'kink');assert.equal(JSON.stringify(born),bornBefore,'Rejected kink birth must preserve IDs');
+for(const under of [false,true]) {
+ const born=state(KC.cloneComps([flat]));
+ const r=KC.attemptStep(born,cm=>{cm[0].pts=curled.pts.map(p=>({...p}));},{faceLimits,under,weight:o=>o.u<.3?1:0});
+ assert(r.ok,'A valid R1 self-crossing must be allowed to start below the size floor');assert.equal(r.ev.r1,1);assert.equal(born.crossings.length,1);assert.equal(born.nextId,2);
+ assert(KC.smallFaces(born.comps,born.crossings).some(f=>f.type==='kink'&&f.area<180));
+ assert.equal(KC.loosenR1(born,{component:0,u:2/8,radius:60,maxLoopLength:120,eligibleIds:new Set()}),null,'Do not immediately erase a newly created self-crossing');
+ const grow=KC.attemptStep(born,cm=>cm[0].pts.forEach(p=>{p.y*=2;}),{faceLimits});assert(grow.ok);assert.equal(grow.ev.r1,0);
+ const protectedBefore=JSON.stringify(born);
+ assert.equal(KC.attemptStep(born,cm=>cm[0].pts.forEach(p=>{p.y*=.5;}),{faceLimits}).reason,'kink');assert.equal(JSON.stringify(born),protectedBefore);
+}
 // Face detection must not depend on orientation or the cyclic polyline seam.
 for(const reverse of [false,true])for(let shift=0;shift<8;shift++) {
  let pts=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]];
