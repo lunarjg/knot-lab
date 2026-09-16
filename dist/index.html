@@ -359,7 +359,7 @@ h2{font-size:15px}
       <h2>Drag &amp; view settings</h2>
       <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
       <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
-      <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect bigons<small>Keeps two-sided regions from collapsing while dragging. Checks the curved area, thinness, and spacing of the two crossings.</small></span></label>
+      <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect non-R2 bigons<small>Protects area, thickness, and crossing spacing only when each boundary strand switches from over to under. Bigons with the same strand on top at both crossings can shrink freely for R2 removal.</small></span></label>
       <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
       <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect R1 kinks<small>Keeps one-crossing loops from being squeezed flat. Empty small loops can still untwist when R1 assistance is on.</small></span></label>
       <div class="row"><label for="kinkArea">Minimum kink area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
@@ -752,7 +752,7 @@ const KC = (function () {
     const lists=comps.map(()=>[]), outgoing=new Map(), edges=[];
     crossings.forEach(X=>{
       outgoing.set(X.id,[]);
-      X.occ.forEach((o,k)=>lists[o.c].push({X,o,key:X.id+':'+(k===X.over?'o':'u')}));
+      X.occ.forEach((o,k)=>lists[o.c].push({X,o,over:k===X.over,key:X.id+':'+(k===X.over?'o':'u')}));
     });
     lists.forEach((list,c)=>{
       list.sort((a,b)=>a.o.s-b.o.s);
@@ -764,8 +764,9 @@ const KC = (function () {
           .filter(v=>v.s>1e-7 && v.s<span-1e-7).sort((a,b)=>a.s-b.s);
         const points=[{x:a.X.x,y:a.X.y},...middle.map(v=>v.p),{x:b.X.x,y:b.X.y}];
         const id=c+':'+a.key+'>'+b.key;
-        const f={from:a.X.id,to:b.X.id,points,key:id+'+'};
-        const r={from:b.X.id,to:a.X.id,points:[...points].reverse(),key:id+'-'};
+        const alternating=a.over!==b.over;
+        const f={from:a.X.id,to:b.X.id,points,alternating,key:id+'+'};
+        const r={from:b.X.id,to:a.X.id,points:[...points].reverse(),alternating,key:id+'-'};
         f.twin=r;r.twin=f;
         for(const [e,occ,sign] of [[f,a.o,1],[r,b.o,-1]]) {
           const q=e.points.find(p=>Math.hypot(p.x-e.points[0].x,p.y-e.points[0].y)>1e-8);
@@ -798,7 +799,10 @@ const KC = (function () {
       if(twiceArea<=0 || perimeter<=0)continue;
       const type=cycle.length===1?'kink':'bigon',area=twiceArea/2;
       const separation=type==='bigon'?Math.hypot(cycle[0].points[0].x-cycle[1].points[0].x,cycle[0].points[0].y-cycle[1].points[0].y):Infinity;
-      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,area,thickness:2*area/perimeter,separation});
+      // Compare the actual boundary occurrences, including self-crossings:
+      // component IDs or raw crossing.over indices cannot identify an R2 pair.
+      const alternating=type==='bigon' && cycle.every(e=>e.alternating);
+      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,alternating,area,thickness:2*area/perimeter,separation});
     }
     return faces;
   }
@@ -807,6 +811,8 @@ const KC = (function () {
     if(!limits || (!limits.bigon && !limits.kink))return null;
     const previous=new Map(smallFaces(beforeComps,beforeX).map(f=>[f.key,f]));
     for(const face of smallFaces(afterComps,afterX)) {
+      // Same strand over at both ends: no size floor may obstruct R2 removal.
+      if(face.type==='bigon' && !face.alternating)continue;
       const rule=limits[face.type];if(!rule)continue;
       const old=previous.get(face.key);
       for(const metric of ['area','thickness','separation']) {
@@ -1932,7 +1938,7 @@ const KC = (function () {
       if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
     }
     if (steps) changed();
-    if (blocked && blocked !== drag.lastBlocked) toast({ bigon: 'This bigon is too small or thin. Adjust Protect bigons in settings to allow it to shrink.', kink: 'This R1 kink is too small or thin. Adjust Protect R1 kinks in settings to allow it to shrink.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ bigon: 'This non-R2 bigon is too small or thin. Adjust Protect non-R2 bigons in settings to allow it to shrink.', kink: 'This R1 kink is too small or thin. Adjust Protect R1 kinks in settings to allow it to shrink.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }

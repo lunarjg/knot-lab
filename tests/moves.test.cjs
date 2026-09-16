@@ -41,7 +41,7 @@ const lensCoords=h=>[
  [[-80,-40],[-40,0],[0,h],[40,0],[80,-40],[80,-100],[-80,-100]],
  [[-80,40],[-40,0],[0,-h],[40,0],[80,40],[80,100],[-80,100]]
 ];
-const lens=h=>state(lensCoords(h).map(poly));
+const lens=(h,alternating=true)=>{const s=state(lensCoords(h).map(poly));if(alternating)s.crossings[0].over=1-s.crossings[0].over;return s;};
 const flattenLens=h=>cm=>{cm[0].pts[2].y=h;cm[1].pts[2].y=-h;};
 const lensState=lens(20);assert.equal(lensState.crossings.length,2);
 assert(KC.smallFaces(lensState.comps,lensState.crossings).some(f=>f.type==='bigon'&&Math.abs(f.area-1600)<1e-7));
@@ -60,8 +60,48 @@ assert.equal(thinResult.reason,'bigon','Area 480 passes the area floor but must 
 // Applying scale-aware world limits yields the same decision at every zoom.
 for(const zoom of [.25,1,4]) {
  const coords=lensCoords(20).map(p=>p.map(([x,y])=>[x/zoom,y/zoom]));const s=state(coords.map(poly));
+ s.crossings[0].over=1-s.crossings[0].over;
  const r=KC.attemptStep(s,cm=>{cm[0].pts[2].y=2/zoom;cm[1].pts[2].y=-2/zoom;},{faceLimits:{bigon:{area:400/zoom**2,thickness:8/zoom,separation:16/zoom}}});
  assert.equal(r.reason,'bigon');
+}
+// The identical geometry must shrink without any size floor for either R2 height order.
+for(const mirror of [false,true])for(const h of [2,6,1e-10]) {
+ const s=lens(20,false);if(mirror)s.crossings.forEach(x=>x.over=1-x.over);
+ assert(KC.smallFaces(s.comps,s.crossings).every(f=>!f.alternating));
+ const r=KC.attemptStep(s,flattenLens(h),{faceLimits});assert(r.ok);assert.equal(r.ev.r2,0);
+ assert(KC.smallFaces(s.comps,s.crossings).some(f=>f.type==='bigon'&&f.area<500));
+}
+// A tiny R2 bigon can shrink, disappear, and reappear with protection enabled.
+const closeR2=lens(20,false);
+assert(KC.attemptStep(closeR2,cm=>cm.forEach(c=>c.pts.forEach(p=>{p.x*=.1;p.y*=.1;})),{faceLimits}).ok);
+assert(KC.smallFaces(closeR2.comps,closeR2.crossings).some(f=>f.type==='bigon'&&f.separation<16));
+for(const mirror of [false,true]) {
+ const s=state([kink(-1),bar()]);if(mirror)s.crossings.forEach(x=>x.over=1-x.over);
+ const shrink=KC.attemptStep(s,cm=>{cm[0].pts=kink(-.2).pts;},{faceLimits});assert(shrink.ok);
+ const gone=KC.attemptStep(s,cm=>{cm[0].pts=kink(.5).pts;},{faceLimits});assert(gone.ok);assert.equal(gone.ev.r2,1);assert.equal(s.crossings.length,0);
+ const back=KC.attemptStep(s,cm=>{cm[0].pts=kink(-.2).pts;},{faceLimits});assert(back.ok);assert.equal(back.ev.r2,1);assert.equal(s.crossings.length,2);
+}
+const invalidR2=state([kink(-1),bar()]);invalidR2.crossings[0].over=1-invalidR2.crossings[0].over;
+const invalidBefore=JSON.stringify(invalidR2);
+assert.equal(KC.attemptStep(invalidR2,cm=>{cm[0].pts=kink(.5).pts;},{faceLimits}).reason,'R2');
+assert.equal(JSON.stringify(invalidR2),invalidBefore);
+// Both boundary strands may belong to one component; component identity is not height.
+for(const alternating of [false,true]) {
+ const s=state([poly([[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[120,-40],[120,40],[80,40],[40,0],[0,-20],[-40,0],[-80,40],[-120,40],[-120,-40]])]);
+ assert.equal(s.crossings.length,2);
+ for(const x of s.crossings)x.over=x.occ.findIndex(o=>o.u<5/14);
+ if(alternating)s.crossings[0].over=1-s.crossings[0].over;
+ const faces=KC.smallFaces(s.comps,s.crossings).filter(f=>f.type==='bigon');assert.equal(faces.length,1);assert.equal(faces[0].alternating,alternating);
+ const r=KC.attemptStep(s,cm=>cm[0].pts.forEach(p=>{if(p.x===0)p.y*=.1;}),{faceLimits});assert.equal(r.ok,!alternating);
+}
+// Over/under classification is independent of occurrence order and polyline seams.
+for(const reverse of [false,true])for(const shift of [0,2,5])for(const alternating of [false,true]) {
+ const coords=lensCoords(20).map(ps=>{ps=reverse?[...ps].reverse():ps;return ps.slice(shift).concat(ps.slice(0,shift));});
+ const s=state(coords.map(poly));if(alternating)s.crossings[0].over=1-s.crossings[0].over;
+ for(const x of s.crossings){x.occ.reverse();x.over=1-x.over;}
+ const faces=KC.smallFaces(s.comps,s.crossings).filter(f=>f.type==='bigon');assert(faces.length);assert(faces.every(f=>f.alternating===alternating));
+ const r=KC.attemptStep(s,cm=>cm.forEach(c=>c.pts.forEach(p=>{if(p.x===0)p.y*=.1;})),{faceLimits});
+ assert.equal(r.ok,!alternating);if(alternating)assert.equal(r.reason,'bigon');
 }
 const scaledCurl=()=>state([poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[x*20,y*20]))]);
 const kinkState=scaledCurl(),kinkBefore=JSON.stringify(kinkState);

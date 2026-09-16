@@ -90,7 +90,7 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 ## Interaction update
 
 - Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
-- Protect bigons and Protect R1 kinks independently constrain the size of those regions during dragging. Other crossing pairs are unrestricted. Minimum areas are adjustable; existing undersized regions may expand. Rejected moves restore geometry and crossing IDs.
+- Protect non-R2 bigons and Protect R1 kinks independently constrain the size of those regions during dragging. R2-compatible bigons and other crossing pairs have no size floor. Minimum areas are adjustable; existing undersized protected regions may expand. Rejected moves restore geometry and crossing IDs.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
@@ -100,9 +100,13 @@ Small empty monogons near the dragged strand can now straighten during a drag (e
 
 ## Bigon and kink size protection
 
-The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. Default minimum areas are 400 screen px² for bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for bigons, 6 px for kinks) and a 16 px crossing separation for bigons. Limits scale with the current zoom. Existing undersized faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
+The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. **Bigon size protection applies only when each boundary strand is over at one crossing and under at the other**, which prevents R2 removal. When the same boundary strand is over at both crossings, the bigon is exempt from all size floors (area, thickness, and crossing separation), allowing it to shrink for R2 removal. Classification follows the actual boundary occurrences, including two strands belonging to the same component; it does not compare component IDs or raw crossing indices.
+
+Default minimum areas remain 400 screen px² for protected bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for protected bigons, 6 px for kinks) and a 16 px crossing separation for protected bigons. Limits scale with the current zoom. Existing undersized protected faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
 
 Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.
+
+Additional cases compare identical geometry with the two possible over/under patterns, R2 shrink/disappear/reappear and move counts, one-component bigons, mirrored height order, reversed occurrences, and pointer dragging with protection enabled.
 
 ## Knot and link invariants
 
@@ -128,6 +132,7 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 | v4 | `8b55e5b` | R1 drag assistance |
 | v5 | `71a74d0` | Bigon/kink protection |
 | v6 | `f98759e3bd78758956a9af142ef6cb4b5a179528` | Invariant calculator |
+| v7 | See annotated tag `v7` | Protect only alternating, non-R2 bigons |
 
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
@@ -143,12 +148,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v7 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v8 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v7 -m "Describe the tested application release"
+git tag -a v8 -m "Describe the tested application release"
 git push github main
-git push github v7
+git push github v8
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

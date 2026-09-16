@@ -1,5 +1,13 @@
 # Release history
 
+## v7 — Protect only non-R2 bigons
+
+- Apply bigon area, thickness, and crossing-spacing floors only to alternating over/under boundary strands, which cannot cancel by R2.
+- Allow same-overstrand R2 bigons to shrink below all size floors while retaining the existing topology checks and move counting.
+- Preserve R1 kink protection, adjustable defaults, zoom scaling, undo, and all existing features.
+- Clarify the English setting and refresh the offline cache.
+- Add geometry and pointer-path regressions for both height patterns, self-crossings, mirrors, cyclic seams, and R2 birth/death.
+
 ## GitHub backup and CI (source maintenance; no Sites deployment)
 
 - Preserve the complete six-commit Sites history and annotate its releases with tags v1–v6.
