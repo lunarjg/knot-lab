@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "매듭 도식 실험실",
-  "short_name": "매듭 실험실",
-  "lang": "ko",
+  "name": "Knot Diagram Lab",
+  "short_name": "Knot Lab",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

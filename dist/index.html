@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>매듭 도식 실험실</title>
-<meta name="description" content="매듭을 그리고 PD 코드로 불러와 교차와 Turaev genus를 계산합니다.">
+<title>Knot Diagram Lab</title>
+<meta name="description" content="Draw knots or import PD codes to calculate crossings and Turaev genus.">
 <meta name="theme-color" content="#16263a">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="매듭 실험실">
+<meta name="apple-mobile-web-app-title" content="Knot Lab">
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2316263a'/%3E%3Cpath d='M15 15L49 49M15 49L26 38M38 26L49 15' stroke='%2362c7a8' stroke-width='7' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
@@ -218,187 +218,187 @@ h2{font-size:15px}
 <body>
 <div class="app" id="knot-lab-app">
   <div class="stage">
-    <header class="apphead"><strong>매듭 도식 실험실</strong><span class="save-status" id="saveStatus" role="status">이 기기에 자동 저장</span></header>
+    <header class="apphead"><strong>Knot Diagram Lab</strong><span class="save-status" id="saveStatus" role="status">Autosaved on this device</span></header>
     <div class="document-tabs">
-      <div id="documentTabs" class="tab-list" role="tablist" aria-label="열린 매듭 파일"></div>
-      <button id="newTab" class="iconbtn new-tab" aria-label="새 도식 탭" title="새 도식 탭">＋</button>
+      <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
+      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
     </div>
     <div class="bar">
-      <div class="seg views" role="group" aria-label="보기">
-        <button data-view="diagram" aria-pressed="true">다이어그램</button>
+      <div class="seg views" role="group" aria-label="Views">
+        <button data-view="diagram" aria-pressed="true">Diagram</button>
         <button data-view="A" aria-pressed="false">all-A state</button>
         <button data-view="B" aria-pressed="false">all-B state</button>
         <button data-view="S" aria-pressed="false">Seifert</button>
       </div>
-      <span class="spacer"></span><button class="iconbtn" id="pdOpen">PD 불러오기</button>
-      <button class="iconbtn" id="openBtn" title="파일 열기 (Ctrl+O)">열기</button>
-      <button class="iconbtn" id="saveBtn" title="파일로 저장 (Ctrl+S)">저장</button>
-      <button class="iconbtn" id="fit" title="화면에 맞추기">맞춤</button>
+      <span class="spacer"></span><button class="iconbtn" id="pdOpen">Import PD</button>
+      <button class="iconbtn" id="openBtn" title="Open file (Ctrl+O)">Open</button>
+      <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
+      <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
       <input type="file" id="fileInput" accept=".json,application/json" multiple hidden>
     </div>
-    <div class="canvaswrap" id="wrap" role="tabpanel" aria-label="현재 매듭 도식">
+    <div class="canvaswrap" id="wrap" role="tabpanel" aria-label="Current knot diagram">
       <canvas id="cv"></canvas>
       <div class="dock">
-        <div class="toolbar" role="toolbar" aria-label="도구">
-          <button data-tool="draw" aria-pressed="true" title="펜 (D)" aria-label="펜"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z"/><path d="M13.8 7l3.2 3.2"/></svg></button>
-          <button data-tool="erase" aria-pressed="false" title="지우개 (E)" aria-label="지우개"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 19.5h11"/><path d="M4.6 14.6l8.8-8.8a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8l-7.6 7.6a2 2 0 0 1-1.4.6H9.3a2 2 0 0 1-1.4-.6l-3.3-3.3a1 1 0 0 1 0-1.2z"/><path d="M9 10.2l5.1 5.1"/></svg></button>
-          <button data-tool="lasso" aria-pressed="false" title="올가미 (L)" aria-label="올가미"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.2 15.4C5.2 14.6 3 12.6 3 10.2 3 6.8 7 4 12 4s9 2.8 9 6.2-4 6.2-9 6.2" stroke-dasharray="2.6 2.4"/><path d="M8.5 15.2c-1.3.6-1.6 2-.8 3 .9 1.1 2.6.9 3.1-.4.4-1.1-.3-2.3-1.6-2.6"/><path d="M8.2 18.5L6.5 21"/></svg></button>
+        <div class="toolbar" role="toolbar" aria-label="Tools">
+          <button data-tool="draw" aria-pressed="true" title="Pen (D)" aria-label="Pen"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.2-4.4L15.6 5.2a2 2 0 0 1 2.8 0l.4.4a2 2 0 0 1 0 2.8L8.4 18.8z"/><path d="M13.8 7l3.2 3.2"/></svg></button>
+          <button data-tool="erase" aria-pressed="false" title="Eraser (E)" aria-label="Eraser"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 19.5h11"/><path d="M4.6 14.6l8.8-8.8a2 2 0 0 1 2.8 0l2.9 2.9a2 2 0 0 1 0 2.8l-7.6 7.6a2 2 0 0 1-1.4.6H9.3a2 2 0 0 1-1.4-.6l-3.3-3.3a1 1 0 0 1 0-1.2z"/><path d="M9 10.2l5.1 5.1"/></svg></button>
+          <button data-tool="lasso" aria-pressed="false" title="Lasso (L)" aria-label="Lasso"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.2 15.4C5.2 14.6 3 12.6 3 10.2 3 6.8 7 4 12 4s9 2.8 9 6.2-4 6.2-9 6.2" stroke-dasharray="2.6 2.4"/><path d="M8.5 15.2c-1.3.6-1.6 2-.8 3 .9 1.1 2.6.9 3.1-.4.4-1.1-.3-2.3-1.6-2.6"/><path d="M8.2 18.5L6.5 21"/></svg></button>
           <span class="sep" aria-hidden="true"></span>
-          <button data-tool="move" aria-pressed="false" title="현 끌기 (V)" aria-label="현 끌기"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12.5V6.5a1.5 1.5 0 0 1 3 0v5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v6.5"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L4 15.2a1.6 1.6 0 0 1 2.3-2.2L8 14.5"/></svg></button>
-          <button data-tool="flip" aria-pressed="false" title="교차 전환 (X)" aria-label="교차 전환"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4"/><path d="M4 4l6 6"/><path d="M14 14l6 6"/></svg></button>
+          <button data-tool="move" aria-pressed="false" title="Drag strand (V)" aria-label="Drag strand"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12.5V6.5a1.5 1.5 0 0 1 3 0v5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v6.5"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L4 15.2a1.6 1.6 0 0 1 2.3-2.2L8 14.5"/></svg></button>
+          <button data-tool="flip" aria-pressed="false" title="Switch crossing (X)" aria-label="Switch crossing"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4"/><path d="M4 4l6 6"/><path d="M14 14l6 6"/></svg></button>
           <span class="sep" aria-hidden="true"></span>
-          <button id="undo" title="실행 취소 (Ctrl+Z)" aria-label="실행 취소"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-          <button id="redo" title="다시 실행 (Ctrl+Shift+Z)" aria-label="다시 실행"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+          <button id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+          <button id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
         </div>
         <div class="toolopts" id="toolopts">
           <div class="toolopt" id="optDraw" hidden>
-            <label class="inline"><input type="checkbox" id="autoClose" checked> 손을 떼면 자동으로 닫기</label>
-            <label class="inline"><input type="checkbox" id="cornerFix" checked> 모서리 보정</label>
+            <label class="inline"><input type="checkbox" id="autoClose" checked> Auto-close on release</label>
+            <label class="inline"><input type="checkbox" id="cornerFix" checked> Smooth corners</label>
           </div>
           <div class="toolopt" id="optErase" hidden>
-            <div class="seg sub" id="eraseModes" role="group" aria-label="지우개 방식">
-              <button data-erase="stroke" aria-pressed="true">획 지우기</button>
-              <button data-erase="precise" aria-pressed="false">정밀 지우기</button>
+            <div class="seg sub" id="eraseModes" role="group" aria-label="Eraser mode">
+              <button data-erase="stroke" aria-pressed="true">Erase stroke</button>
+              <button data-erase="precise" aria-pressed="false">Erase segment</button>
             </div>
-            <label class="inline" id="eraseSizeWrap" hidden>크기 <input type="range" id="eraseSize" min="6" max="80" value="24"></label>
+            <label class="inline" id="eraseSizeWrap" hidden>Size <input type="range" id="eraseSize" min="6" max="80" value="24"></label>
           </div>
           <div class="toolopt" id="optLasso" hidden>
-            <div class="seg sub lassomodes" id="lassoModes" role="group" aria-label="올가미 방식">
-              <button data-lasso="curve" aria-pressed="true">곡선 단위</button>
-              <button data-lasso="region" aria-pressed="false">영역 단위</button>
+            <div class="seg sub lassomodes" id="lassoModes" role="group" aria-label="Lasso mode">
+              <button data-lasso="curve" aria-pressed="true">Whole curves</button>
+              <button data-lasso="region" aria-pressed="false">Region</button>
             </div>
           </div>
         </div>
       </div>
       <div class="selmenu" id="selmenu" hidden>
-        <button id="mCopy">복사</button><button id="mCut">자르기</button><button id="mDelete" class="danger">삭제</button><button id="mPaste">붙여넣기</button>
+        <button id="mCopy">Copy</button><button id="mCut">Cut</button><button id="mDelete" class="danger">Delete</button><button id="mPaste">Paste</button>
       </div>
       <div class="legend" id="legend"></div>
-      <div class="empty" id="empty"><div><strong>곡선을 그려 시작하세요</strong>또는 위의 PD 불러오기를 눌러 코드를 입력하세요</div></div>
+      <div class="empty" id="empty"><div><strong>Draw a curve to begin</strong>Or select Import PD above to enter a code</div></div>
       <div class="toast" id="toast"></div>
       <div class="hint" id="hint"></div>
     </div>
   </div>
 
-  <aside id="inspector" aria-label="계산과 설정">
-    <div id="panelResize" class="panel-resize" role="separator" tabindex="0" aria-label="계산과 설정 너비 조절" aria-orientation="vertical" aria-controls="inspector" aria-valuemin="280" aria-valuemax="640" aria-valuenow="360" aria-describedby="panelResizeHelp" title="좌우로 드래그해 너비 조절 · 오른쪽 끝으로 밀어 숨기기"></div>
+  <aside id="inspector" aria-label="Calculations &amp; settings">
+    <div id="panelResize" class="panel-resize" role="separator" tabindex="0" aria-label="Resize calculations and settings" aria-orientation="vertical" aria-controls="inspector" aria-valuemin="280" aria-valuemax="640" aria-valuenow="360" aria-describedby="panelResizeHelp" title="Drag to resize; drag to the right edge to hide"></div>
     <div class="inspector-scroll">
-    <div class="panelhead"><h1>계산과 설정</h1><button class="iconbtn" id="panelClose" aria-label="계산과 설정 닫기">닫기</button></div>
-    <p id="panelResizeHelp" class="panel-resize-note">왼쪽 손잡이를 좌우로 드래그해 너비를 조절하세요. 오른쪽 끝으로 밀고 놓으면 숨겨집니다.</p>
-    <p class="lede">현을 끌면 Reidemeister 이동만 허용됩니다. 교차를 바꾸지 않고는 불가능한 움직임은 막힙니다.</p>
+    <div class="panelhead"><h1>Calculations &amp; settings</h1><button class="iconbtn" id="panelClose" aria-label="Close calculations and settings">Close</button></div>
+    <p id="panelResizeHelp" class="panel-resize-note">Drag the left handle to resize. Drag it to the right edge and release to hide the panel.</p>
+    <p class="lede">Dragging allows only Reidemeister moves. Moves that require a crossing change are blocked.</p>
 
     <section>
       <div class="formula">
         <div class="lhs">Turaev genus of D</div>
         <div class="big" id="gT">0</div>
         <div class="calc" id="gTcalc"></div>
-        <div class="note">g<sub>T</sub>(D)는 이 도식에 대한 값이며 g<sub>T</sub>(K)의 상계입니다.</div>
+        <div class="note">g<sub>T</sub>(D) is the value for this diagram and an upper bound for g<sub>T</sub>(K).</div>
       </div>
       <dl class="inv">
-        <dt>교차 수 c(D)</dt><dd id="vc">0</dd>
-        <dt>all-A state 원 개수 s<sub>A</sub>(D)</dt><dd id="vsA">0</dd>
-        <dt>all-B state 원 개수 s<sub>B</sub>(D)</dt><dd id="vsB">0</dd>
+        <dt>Crossings c(D)</dt><dd id="vc">0</dd>
+        <dt>All-A state circles s<sub>A</sub>(D)</dt><dd id="vsA">0</dd>
+        <dt>All-B state circles s<sub>B</sub>(D)</dt><dd id="vsB">0</dd>
         <dt>writhe w(D)</dt><dd id="vw">0</dd>
-        <dt>성분 수</dt><dd id="vmu">0</dd>
-        <dt>Seifert 원 개수 s(D)</dt><dd id="vs">0</dd>
-        <dt>표준 Seifert 곡면의 genus</dt><dd id="vg">0</dd>
+        <dt>Components</dt><dd id="vmu">0</dd>
+        <dt>Seifert circles s(D)</dt><dd id="vs">0</dd>
+        <dt>Canonical Seifert surface genus</dt><dd id="vg">0</dd>
       </dl>
       <div class="flags" id="flags"></div>
     </section>
 
     <section>
-      <h2>Reidemeister 이동 기록</h2>
+      <h2>Reidemeister move counts</h2>
       <div class="moves">
         <div class="move" id="mR1"><div class="n">0</div><div class="l">R1</div></div>
         <div class="move" id="mR2"><div class="n">0</div><div class="l">R2</div></div>
         <div class="move" id="mR3"><div class="n">0</div><div class="l">R3</div></div>
       </div>
-      <p class="small">교차 전환 <span id="nflip">0</span>회 (전환은 매듭 종류를 바꿀 수 있습니다)</p>
+      <p class="small">Crossing changes: <span id="nflip">0</span> (may change the knot type)</p>
     </section>
 
     <section>
-      <h2>끌기와 보기 설정</h2>
-      <div class="row"><label for="sigma">잡는 폭</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
-      <label class="chk"><input type="checkbox" id="under"><span>끄는 현을 아래로 통과<small>새로 생기는 교차에서 끄는 현이 밑으로 갑니다. <kbd>Shift</kbd>를 누른 채 끌어도 됩니다.</small></span></label>
-      <label class="chk"><input type="checkbox" id="arrows" checked><span>방향 화살표</span></label>
-      <label class="chk"><input type="checkbox" id="grid"><span>배경 격자</span></label>
-      <label class="chk"><input type="checkbox" id="signs"><span>교차 부호 표시</span></label>
+      <h2>Drag &amp; view settings</h2>
+      <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
+      <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
+      <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
+      <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
+      <label class="chk"><input type="checkbox" id="signs"><span>Show crossing signs</span></label>
     </section>
 
     <section>
-      <h2>파일</h2>
+      <h2>Files</h2>
       <div class="braid">
-        <input id="fileName" placeholder="파일 이름 (비우면 날짜로)" aria-label="파일 이름">
-        <button id="saveBtn2">저장</button>
+        <input id="fileName" placeholder="Filename (defaults to date)" aria-label="Filename">
+        <button id="saveBtn2">Save</button>
       </div>
-      <div class="btns" style="margin-top:6px"><button id="openBtn2">파일 불러오기</button></div>
-      <label class="chk"><input type="checkbox" id="autosave" checked><span>이 브라우저에 자동 저장<small>이 기기의 열린 탭과 각 도식·이동 기록을 복원합니다. 다른 기기로 옮기거나 백업할 때는 저장 버튼으로 JSON 파일을 내보내세요.</small></span></label>
+      <div class="btns" style="margin-top:6px"><button id="openBtn2">Open file</button></div>
+      <label class="chk"><input type="checkbox" id="autosave" checked><span>Autosave in this browser<small>Restores open tabs, diagrams, and move counts on this device. Use Save to export a JSON file for backup or transfer to another device.</small></span></label>
     </section>
 
     <section>
-      <h2>펜과 터치</h2>
-      <label class="chk"><input type="checkbox" id="penOnly"><span>펜 전용 모드<small>그리기, 지우기, 올가미, 교차 전환은 Apple Pencil(과 마우스)로만 합니다. 손가락은 한 손가락으로 화면 이동, 두 손가락으로 확대와 축소를 합니다.</small></span></label>
-      <label class="chk"><input type="checkbox" id="fingerDrag" checked><span>펜 전용 모드에서 손가락으로 현 끌기<small>현 끌기 도구일 때 현 위를 손가락으로 잡으면 현을 끌고, 빈 곳을 잡으면 화면이 움직입니다.</small></span></label>
-      <label class="chk"><input type="checkbox" id="palm" checked><span>팜 리젝션<small>펜이 화면에 닿아 있거나 뗀 직후 0.3초 안의 터치와 넓은 접촉을 무시합니다. 손바닥이 먼저 닿아 시작된 동작은 펜이 닿는 순간 취소됩니다.</small></span></label>
-      <label class="chk"><input type="checkbox" id="autoPen" checked><span>펜이 감지되면 펜 전용 모드 자동으로 켜기</span></label>
-      <label class="chk"><input type="checkbox" id="penDoubleTap" checked><span>펜으로 화면을 두 번 톡톡 치면 지우개 전환<small>Apple Pencil 본체 더블탭은 웹 페이지에 전달되지 않아서, 펜 끝으로 캔버스를 빠르게 두 번 치는 동작으로 대신합니다. 다시 두 번 치면 이전 도구로 돌아옵니다.</small></span></label>
-      <p class="small" id="penStatus">아직 펜 입력이 없습니다</p>
+      <h2>Pen &amp; touch</h2>
+      <label class="chk"><input type="checkbox" id="penOnly"><span>Pen-only mode<small>Use Apple Pencil or a mouse to draw, erase, select with the lasso, and switch crossings. Pan with one finger and zoom with two.</small></span></label>
+      <label class="chk"><input type="checkbox" id="fingerDrag" checked><span>Allow finger dragging in pen-only mode<small>With the Drag strand tool, drag a strand with your finger to move it, or drag an empty area to pan.</small></span></label>
+      <label class="chk"><input type="checkbox" id="palm" checked><span>Palm rejection<small>Ignores broad touches and touch input while the pen is down or for 0.3 seconds after it lifts. A gesture started by your palm is canceled when the pen touches the screen.</small></span></label>
+      <label class="chk"><input type="checkbox" id="autoPen" checked><span>Enable pen-only mode when a pen is detected</span></label>
+      <label class="chk"><input type="checkbox" id="penDoubleTap" checked><span>Double-tap the canvas with the pen to toggle the eraser<small>Web pages do not receive the Apple Pencil barrel double-tap. Instead, tap the canvas twice quickly with the pen tip. Double-tap again to return to the previous tool.</small></span></label>
+      <p class="small" id="penStatus">No pen input detected yet</p>
     </section>
 
     <section>
-      <h2>매듭 불러오기</h2>
-      <label for="pdInput" class="inputlabel">PD 코드</label>
-      <textarea class="pd" id="pdInput" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="pdHelp pdError" placeholder="교차별 숫자 4개를 목록으로 붙여넣으세요"></textarea>
-      <p class="small" id="pdHelp">[[a,b,c,d], …] 또는 PD[X[a,b,c,d], …] 형식. 첫 번호는 들어오는 아래 현이며, 나머지는 반시계 방향입니다. 교차 80개까지 지원합니다.</p>
+      <h2>Import a knot</h2>
+      <label for="pdInput" class="inputlabel">PD code</label>
+      <textarea class="pd" id="pdInput" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="pdHelp pdError" placeholder="Paste a list of four numbers per crossing"></textarea>
+      <p class="small" id="pdHelp">Use [[a,b,c,d], …] or PD[X[a,b,c,d], …]. Start with the incoming understrand, then list the remaining arcs counterclockwise. Supports up to 80 crossings.</p>
       <p class="pd-error" id="pdError" role="alert" hidden></p>
-      <button class="primary" id="pdImport">PD 코드로 불러오기</button>
-      <p class="small">현재 도식을 바꿉니다. 실행 취소로 이전 작업을 복원할 수 있습니다. 현 번호는 불러온 뒤 다시 매겨질 수 있습니다.</p>
+      <button class="primary" id="pdImport">Import PD code</button>
+      <p class="small">Replaces the current diagram. Use Undo to restore your previous work. Arc labels may be renumbered after import.</p>
       <div class="braid">
-        <input id="braidIn" placeholder="브레이드 단어 입력" aria-label="브레이드 단어">
-        <button id="braidGo">닫기로 만들기</button>
+        <input id="braidIn" placeholder="Enter a braid word" aria-label="Braid word">
+        <button id="braidGo">Create braid closure</button>
       </div>
-      <p class="small">i는 σ<sub>i</sub>, −i는 σ<sub>i</sub><sup>−1</sup>. 닫힌 브레이드로 도식을 만듭니다.</p>
+      <p class="small">i means σ<sub>i</sub>; −i means σ<sub>i</sub><sup>−1</sup>. Creates a diagram of the braid closure.</p>
     </section>
 
     <section>
-      <h2>도식 전체 조작</h2>
+      <h2>Diagram actions</h2>
       <div class="btns">
-        <button id="mirrorBtn">거울상</button>
-        <button id="cornerBtn">뾰족한 곳 다듬기</button>
-        <button id="smoothBtn">자동 정리</button>
-        <button id="clearBtn">모두 지우기</button>
+        <button id="mirrorBtn">Mirror</button>
+        <button id="cornerBtn">Smooth sharp corners</button>
+        <button id="smoothBtn">Auto-relax</button>
+        <button id="clearBtn">Clear all</button>
       </div>
     </section>
 
     <section>
-      <h2>PD 코드</h2>
+      <h2>PD code</h2>
       <textarea class="pd" id="pd" readonly></textarea>
-      <div class="btns" style="margin-top:6px"><button id="copyPd">PD 코드 복사</button></div>
-      <p class="small">KnotTheory 규약: X[들어오는 아래 현, 반시계 방향 순서]. khoca 등에 바로 넣을 수 있습니다.</p>
+      <div class="btns" style="margin-top:6px"><button id="copyPd">Copy PD code</button></div>
+      <p class="small">KnotTheory convention: X[incoming understrand, then counterclockwise]. Compatible with khoca and similar tools.</p>
     </section>
 
     <section class="installhelp">
-      <h2>홈 화면에서 실행하기</h2>
-      <p class="small">Safari에서 이 페이지를 연 뒤 공유 → 홈 화면에 추가를 선택하세요. ‘웹 앱으로 열기’가 보이면 켜 주세요.</p>
-      <p class="small" id="offlineStatus" role="status">오프라인 사용 준비 중…</p>
+      <h2>Add to Home Screen</h2>
+      <p class="small">Open this page in Safari, then choose Share → Add to Home Screen. Enable “Open as Web App” if shown.</p>
+      <p class="small" id="offlineStatus" role="status">Preparing offline access…</p>
     </section>
     <section class="help">
-      <h2>사용법</h2>
-      <p><b>이동</b> 현을 잡고 끌면 주변이 같이 늘어납니다. 빈 곳을 끌면 화면이 움직이고, 휠로 확대합니다.</p>
-      <p><b>그리기</b> 한 획으로 그리면 자동으로 닫힙니다. 자동 닫기를 끄면 획이 열린 곡선으로 남고, 끝점에서 이어 그려 한 바퀴를 완성하면 닫힙니다. 자기 교차는 교대로, 기존 현과의 교차는 새 곡선이 위로 갑니다.</p>
-      <p><b>모서리 보정</b> 끝점에 이어 그리면 기존 곡선의 방향에 맞춰 부드럽게 붙고, 닫을 때 시작점을 지나친 꼬리는 잘라 매끈하게 닫습니다. 펜을 대고 뗄 때 생기는 갈고리도 없앱니다. 이미 그린 도식은 "뾰족한 곳 다듬기"로 고칠 수 있습니다.</p>
-      <p><b>지우개</b> 획 지우기는 닿은 곡선 전체를 지우고, 정밀 지우기는 문지른 부분만 잘라 냅니다. 잘린 곡선을 다시 이어 닫으면 남아 있던 교차의 위아래는 그대로 돌아옵니다. 열린 곡선은 계산에 들어가지 않습니다.</p>
-      <p><b>올가미</b> 곡선 단위는 절반 이상 둘러싼 곡선 전체를, 영역 단위는 둘러싼 부분만 잘라 선택합니다. 선택 영역을 끌어 옮기고, 위쪽 동그란 손잡이를 돌려 회전하며(15°마다 살짝 붙고 Shift를 누르면 15° 단위), 위에 뜨는 메뉴로 복사, 자르기, 삭제, 붙여넣기를 합니다. 옮기거나 붙여넣은 곡선끼리의 교차 높이는 유지되고, 다른 곡선과 새로 생긴 교차에서는 옮긴 쪽이 위로 갑니다.</p>
-      <p><b>교차 전환</b> 교차를 눌러 위아래를 바꿉니다.</p>
-      <p><b>자동 정리</b> 현끼리 서로 밀어내며 도식이 펴집니다. 이 과정도 Reidemeister 이동만 사용합니다.</p>
-      <p><b>막히는 경우</b> 위에 있는 현이 서로 다른 두 교차를 R2로 없애려 할 때, 세 현의 높이가 순환인 삼각형을 R3로 지나가려 할 때, 현이 다른 현을 뚫고 지나갈 때입니다.</p>
-      <p><kbd>D</kbd> <kbd>E</kbd> <kbd>L</kbd> <kbd>V</kbd> <kbd>X</kbd> 도구, <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> 복사, 자르기, 붙여넣기, <kbd>Delete</kbd> 선택 삭제, <kbd>Ctrl</kbd>+<kbd>S</kbd>/<kbd>O</kbd> 저장, 열기, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> 다시 실행, <kbd>1</kbd>–<kbd>4</kbd> 보기, <kbd>Ctrl</kbd>+<kbd>Z</kbd> 되돌리기</p>
+      <h2>How to use</h2>
+      <p><b>Move</b> Drag a strand to move it and the surrounding curve. Drag an empty area to pan; use the wheel to zoom.</p>
+      <p><b>Draw</b> Draw a stroke to create a closed curve. With auto-close off, strokes remain open; continue from an endpoint to complete a loop. Self-crossings alternate, and new curves pass over existing strands.</p>
+      <p><b>Smooth corners</b> Continuing from an endpoint joins smoothly in the existing direction. Closing a curve trims any overshoot, and small hooks at the start or end of a stroke are removed. Use “Smooth sharp corners” on an existing diagram.</p>
+      <p><b>Eraser</b> Erase stroke removes an entire curve; Erase segment removes only the part you touch. Rejoining a cut curve preserves the over/under assignments of surviving crossings. Open curves are excluded from calculations.</p>
+      <p><b>Lasso</b> Whole curves selects each curve with more than half its length enclosed. Region cuts out and selects only the enclosed portions. Drag to move the selection or use the round handle above it to rotate, with gentle snapping every 15°; hold Shift for 15° steps. Use the floating menu to copy, cut, delete, or paste. Crossings within the selection keep their over/under assignments; at new crossings with other curves, the moved selection passes over.</p>
+      <p><b>Switch crossing</b> Tap a crossing to swap its over/under strands.</p>
+      <p><b>Auto-relax</b> Strands repel one another to spread out the diagram, using only Reidemeister moves.</p>
+      <p><b>Blocked moves</b> Moves are blocked when an R2 removal has different overstrands at its two crossings, an R3 triangle has cyclic over/under ordering, or one strand would pass through another.</p>
+      <p><kbd>D</kbd> <kbd>E</kbd> <kbd>L</kbd> <kbd>V</kbd> <kbd>X</kbd> Tools, <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy, Cut, Paste, <kbd>Delete</kbd> Delete selection, <kbd>Ctrl</kbd>+<kbd>S</kbd>/<kbd>O</kbd> Save, Open, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>1</kbd>–<kbd>4</kbd> Views, <kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</p>
     </section>
     </div>
   </aside>
 </div>
 
-<button id="panelToggle" class="panel-reveal" aria-label="계산과 설정 펼치기" aria-controls="inspector" aria-expanded="false" title="계산과 설정 펼치기">
+<button id="panelToggle" class="panel-reveal" aria-label="Show calculations and settings" aria-controls="inspector" aria-expanded="false" title="Show calculations and settings">
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
 </button>
 <div id="panelScrim" hidden></div>
@@ -1013,12 +1013,12 @@ const KC = (function () {
   function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 60) undoStack.shift(); redoStack = []; }
   function undo() {
     if (active) return;
-    const s = undoStack.pop(); if (!s) { toast('되돌릴 작업이 없습니다', true); return; }
+    const s = undoStack.pop(); if (!s) { toast('Nothing to undo', true); return; }
     redoStack.push(snapshot()); restore(s); clearSel(); changed();
   }
   function redo() {
     if (active) return;
-    const s = redoStack.pop(); if (!s) { toast('다시 실행할 작업이 없습니다', true); return; }
+    const s = redoStack.pop(); if (!s) { toast('Nothing to redo', true); return; }
     undoStack.push(snapshot()); restore(s); clearSel(); changed();
   }
   function load(obj, keepView) {
@@ -1048,10 +1048,10 @@ const KC = (function () {
   }
   function serialize() { return serializeState(S,stats); }
   function deserialize(data) {
-    if (!data || data.format !== FORMAT || !Array.isArray(data.comps)) throw new Error('매듭 도식 실험실에서 저장한 파일이 아닙니다');
+    if (!data || data.format !== FORMAT || !Array.isArray(data.comps)) throw new Error('This is not a Knot Diagram Lab file');
     const toPts = a => {
-      if (!Array.isArray(a)) throw new Error('곡선 데이터가 올바르지 않습니다');
-      return a.map(p => { const x = +p[0], y = +p[1]; if (!isFinite(x) || !isFinite(y)) throw new Error('좌표 값이 올바르지 않습니다'); return { x, y }; });
+      if (!Array.isArray(a)) throw new Error('Invalid curve data');
+      return a.map(p => { const x = +p[0], y = +p[1]; if (!isFinite(x) || !isFinite(y)) throw new Error('Invalid coordinates'); return { x, y }; });
     };
     const comps = data.comps.map(toPts).filter(p => p.length >= 3).map(p => { const n = p.length, c = { pts: p.map((q, i) => ({ x: q.x, y: q.y, u: i / n })) }; KC.updateGeom(c); return c; });
     const raw = KC.computeRaw(comps), mem = (Array.isArray(data.crossings) ? data.crossings : []).map(m => ({ x: +m[0], y: +m[1], ox: +m[2], oy: +m[3] }));
@@ -1078,28 +1078,28 @@ const KC = (function () {
     return n + '.json';
   }
   async function saveFile() {
-    if (!S.comps.length && !S.open.length) { toast('저장할 도식이 없습니다', true); return; }
+    if (!S.comps.length && !S.open.length) { toast('No diagram to save', true); return; }
     const name = fileName(), text = JSON.stringify(serialize()), exportingTab=activeTabId, exportingRevision=currentTab()?.revision || 0;
     const file = new File([text], name, { type: 'application/json' });
     if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: '매듭 도식' }); markExported(exportingTab,name,exportingRevision); toast('내보내기를 마쳤습니다'); }
-      catch (e) { if (e.name !== 'AbortError') toast('파일을 내보내지 못했습니다. 다시 시도하세요', true); }
+      try { await navigator.share({ files: [file], title: 'Knot diagram' }); markExported(exportingTab,name,exportingRevision); toast('Export complete'); }
+      catch (e) { if (e.name !== 'AbortError') toast('Could not export the file. Please try again', true); }
       return;
     }
     const url = URL.createObjectURL(file), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    markExported(exportingTab,name,exportingRevision);toast('JSON 파일 다운로드를 시작했습니다');
+    markExported(exportingTab,name,exportingRevision);toast('JSON file download started');
   }
   async function openFile(file) {
     if (!file) return false;
     try {
       const text = await file.text(), obj = deserialize(JSON.parse(text));
       openTab(obj, file.name.replace(/\.json$/i,''), false);
-      toast(file.name + '을(를) 새 탭에 열었습니다');
+      toast(file.name + ' opened in a new tab');
       return true;
     } catch(err) {
-      toast('불러오지 못했습니다: '+(err instanceof SyntaxError?'JSON 형식이 아닙니다':err.message),true);
+      toast('Could not open file: '+(err instanceof SyntaxError?'Invalid JSON format':err.message),true);
       return false;
     }
   }
@@ -1115,19 +1115,19 @@ const KC = (function () {
       }))};
       localStorage.setItem(WORKSPACE_KEY,JSON.stringify(data));
       localStorage.removeItem(AUTOSAVE_KEY);
-      $('saveStatus').textContent='모든 탭 자동 저장됨';
-    } catch { $('saveStatus').textContent='자동 저장 실패 · 각 탭을 파일로 저장하세요'; }
+      $('saveStatus').textContent='All tabs autosaved';
+    } catch { $('saveStatus').textContent='Autosave failed · Save each tab to a file'; }
   }
   function scheduleAutosave() {
     if (!$('autosave') || !$('autosave').checked || !tabs.length) return;
-    $('saveStatus').textContent='저장 중…'; clearTimeout(autosaveTimer);
+    $('saveStatus').textContent='Saving…'; clearTimeout(autosaveTimer);
     autosaveTimer=setTimeout(saveWorkspace,700);
   }
   $('saveBtn').onclick = saveFile; $('saveBtn2').onclick = saveFile;
   const pick = () => { $('fileInput').value = ''; $('fileInput').click(); };
   $('openBtn').onclick = pick; $('openBtn2').onclick = pick;
   $('fileInput').onchange = e => openFiles(e.target.files);
-  $('autosave').onchange = e => { $('saveStatus').textContent = e.target.checked ? '자동 저장 켜짐' : '자동 저장 꺼짐'; try { if (!e.target.checked) { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(WORKSPACE_KEY); } else scheduleAutosave(); } catch (err) { } };
+  $('autosave').onchange = e => { $('saveStatus').textContent = e.target.checked ? 'Autosave on' : 'Autosave off'; try { if (!e.target.checked) { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(WORKSPACE_KEY); } else scheduleAutosave(); } catch (err) { } };
   wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('dropping'); });
   wrap.addEventListener('dragleave', () => wrap.classList.remove('dropping'));
   wrap.addEventListener('drop', e => { e.preventDefault(); wrap.classList.remove('dropping'); openFiles(e.dataTransfer.files); });
@@ -1136,7 +1136,7 @@ const KC = (function () {
   function updateTabLabel(tab) {
     const button=tabButtons.get(tab.id);if(!button)return;
     button.textContent=tab.title+(tab.dirty?' *':'');
-    button.title=tab.title+(tab.dirty?' — 파일로 내보내지 않은 변경 있음':'');
+    button.title=tab.title+(tab.dirty?' — Changes not yet exported':'');
   }
   function renderTabs() {
     $('documentTabs').replaceChildren();tabButtons.clear();
@@ -1152,7 +1152,7 @@ const KC = (function () {
         const n=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;
         activateTab(tabs[n].id,true);
       });
-      const close=document.createElement('button');close.className='tab-close';close.textContent='×';close.setAttribute('aria-label',tab.title+' 탭 닫기');
+      const close=document.createElement('button');close.className='tab-close';close.textContent='×';close.setAttribute('aria-label','Close tab '+tab.title);
       close.onclick=()=>closeTab(tab.id);
       item.appendChild(button);item.appendChild(close);$('documentTabs').appendChild(item);tabButtons.set(tab.id,button);updateTabLabel(tab);
     });
@@ -1187,14 +1187,14 @@ const KC = (function () {
   }
   function openTab(obj=blankState(), name='', dirty=false) {
     finishTabInteraction();stashTab();
-    const id=String(nextTabId++),title=name || '새 도식 '+id;
+    const id=String(nextTabId++),title=name || 'New diagram '+id;
     const tab={id,title,fileName:name,pdInput:'',dirty,state:{...obj,stats:cleanStats(obj.stats),memory:obj.memory || [],moveCheckpoint:null},undo:[],redo:[],view:null,viewMode:'diagram'};
     tabs.push(tab);activateTab(id,false,false);return id;
   }
   function closeTab(id) {
     finishTabInteraction();stashTab();
     const index=tabs.findIndex(t=>t.id===id),tab=tabs[index];if(!tab)return;
-    if(tab.dirty && !window.confirm('“'+tab.title+'” 탭을 닫을까요? 파일로 저장하지 않은 변경은 이 탭과 함께 닫힙니다.'))return;
+    if(tab.dirty && !window.confirm('Close “'+tab.title+'”? Changes not saved to a file will be lost when this tab closes.'))return;
     const wasActive=id===activeTabId;tabs.splice(index,1);
     if(!tabs.length){activeTabId=null;openTab();return;}
     if(wasActive)activateTab(tabs[Math.min(index,tabs.length-1)].id,true,false);
@@ -1207,17 +1207,17 @@ const KC = (function () {
     renderTabs();scheduleAutosave();
   }
   $('newTab').onclick=()=>openTab();
-  $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.title=$('fileName').value.trim()||'새 도식 '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
+  $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.title=$('fileName').value.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
   function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.attemptStep(obj, c => KC.relaxMutator(c, 40, 1.0), {}); if (!r.ok) break; } return obj; }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
-    if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('정수를 공백 또는 쉼표로 구분해 입력하세요', true); return; }
+    if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
     const toks = word.split(/[\s,]+/).map(Number);
-    if (toks.some(x => x === 0)) { toast('브레이드 생성자에 0은 사용할 수 없습니다', true); return; }
-    if (!toks.length) { toast('0이 아닌 정수로 브레이드 단어를 입력하세요.', true); return; }
-    if (Math.max(...toks.map(Math.abs)) > 12 || toks.length > 60) { toast('생성자는 σ₁–σ₁₂, 길이는 60 이하로 입력하세요', true); return; }
+    if (toks.some(x => x === 0)) { toast('Braid generators cannot be 0', true); return; }
+    if (!toks.length) { toast('Enter a braid word using nonzero integers.', true); return; }
+    if (Math.max(...toks.map(Math.abs)) > 12 || toks.length > 60) { toast('Use generators σ₁–σ₁₂ and no more than 60 entries', true); return; }
     load(relaxed(KC.fromCurves3D(KC.braidCurves(toks), 480), 60));
   };
   $('braidIn').addEventListener('keydown', e => { if (e.key === 'Enter') $('braidGo').click(); });
@@ -1240,7 +1240,7 @@ const KC = (function () {
     panelHandle.setAttribute('aria-valuemin', Math.round(min));
     panelHandle.setAttribute('aria-valuemax', Math.round(max));
     panelHandle.setAttribute('aria-valuenow', value);
-    panelHandle.setAttribute('aria-valuetext', value + '픽셀');
+    panelHandle.setAttribute('aria-valuetext', value + ' pixels');
     return value;
   }
   function rememberPanelWidth(width) {
@@ -1288,7 +1288,7 @@ const KC = (function () {
     inspector.style.transform = panelDrag.raw < min ? `translateX(${min - Math.max(0, panelDrag.raw)}px)` : '';
     const hiding = panelDrag.raw < min * 0.5;
     document.body.classList.toggle('panel-will-hide', hiding);
-    panelHandle.setAttribute('aria-valuetext', hiding ? '놓으면 패널 숨기기' : Math.round(Math.max(min,panelDrag.raw)) + '픽셀');
+    panelHandle.setAttribute('aria-valuetext', hiding ? 'Release to hide the panel' : Math.round(Math.max(min,panelDrag.raw)) + ' pixels');
   });
   panelHandle.addEventListener('pointerup', e => { if (panelDrag?.id === e.pointerId) stopPanelDrag(); });
   panelHandle.addEventListener('pointercancel', e => { if (panelDrag?.id === e.pointerId) stopPanelDrag(true); });
@@ -1315,7 +1315,7 @@ const KC = (function () {
     const obj = PDImport.fromPD(code, KC);
     load(obj); setView('diagram');
     $('pdError').hidden = true; $('pdInput').removeAttribute('aria-invalid');
-    toast(`${obj.crossings.length}개 교차의 도식을 불러왔습니다`);
+    toast(`Imported a diagram with ${obj.crossings.length} crossings`);
     return { crossings: analysis.c, components: analysis.mu, turaevGenus: analysis.gT, pd: analysis.pd };
   }
   $('pdImport').onclick = () => {
@@ -1330,7 +1330,7 @@ const KC = (function () {
   });
 
   // ---------- global operations ----------
-  $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('거울상으로 바꿨습니다'); };
+  $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
   $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); stats.r1 = stats.r2 = stats.r3 = stats.flips = 0; changed(); setTool('draw'); };
   let relaxing = 0;
   function relaxFrames(total) {
@@ -1343,7 +1343,7 @@ const KC = (function () {
         addEvents(r.ev);
       }
       changed();
-      if (relaxing > 0) requestAnimationFrame(frame); else if (blockedOnce) toast('정리하다가 허용되지 않는 변형에 닿아 멈췄습니다', true);
+      if (relaxing > 0) requestAnimationFrame(frame); else if (blockedOnce) toast('Auto-relax stopped at a blocked move', true);
     };
     requestAnimationFrame(frame);
   }
@@ -1359,7 +1359,7 @@ const KC = (function () {
       if (!m) break;
     }
     changed();
-    toast(blocked ? '다듬다가 허용되지 않는 변형에 닿아 일부만 다듬었습니다' : moved ? '뾰족한 곳을 다듬었습니다' : '다듬을 뾰족한 곳이 없습니다', blocked);
+    toast(blocked ? 'Some corners were smoothed; further smoothing would require a blocked move' : moved ? 'Sharp corners smoothed' : 'No sharp corners to smooth', blocked);
   };
   $('cornerFix').onchange = e => { opts.cornerFix = e.target.checked; };
   $('smoothBtn').onclick = () => { if (!S.comps.length || relaxing) return; pushUndo(); relaxFrames(150); };
@@ -1368,8 +1368,8 @@ const KC = (function () {
   $('fit').onclick = fitView;
   $('copyPd').onclick = async () => {
     const t = $('pd').value; if (!t || !analysis || !analysis.c) return;
-    try { await navigator.clipboard.writeText(t); toast('PD 코드를 복사했습니다'); }
-    catch (e) { $('pd').select(); try { document.execCommand('copy'); toast('PD 코드를 복사했습니다'); } catch (e2) { toast('복사하지 못했습니다. 텍스트를 직접 선택하세요', true); } }
+    try { await navigator.clipboard.writeText(t); toast('PD code copied'); }
+    catch (e) { $('pd').select(); try { document.execCommand('copy'); toast('PD code copied'); } catch (e2) { toast('Could not copy. Select the text manually', true); } }
   };
 
   // ---------- controls ----------
@@ -1384,7 +1384,7 @@ const KC = (function () {
   }
   function toggleEraser() {
     if (tool === 'erase') setTool(prevTool && prevTool !== 'erase' ? prevTool : 'draw'); else setTool('erase');
-    toast(tool === 'erase' ? '지우개로 바꿨습니다' : '이전 도구로 돌아왔습니다');
+    toast(tool === 'erase' ? 'Switched to eraser' : 'Returned to the previous tool');
   }
   function setLassoMode(m) {
     opts.lassoMode = m; document.querySelectorAll('#lassoModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lasso === m));
@@ -1470,7 +1470,7 @@ const KC = (function () {
 
   function setPenOnly(v, announce) {
     input.penOnly = v; $('penOnly').checked = v;
-    if (announce) toast(v ? '펜 전용 모드: 손가락은 화면 이동과 확대만 합니다' : '펜 전용 모드를 껐습니다');
+    if (announce) toast(v ? 'Pen-only mode: use fingers to pan and zoom' : 'Pen-only mode off');
     updateHint();
   }
   $('penOnly').onchange = e => setPenOnly(e.target.checked, true);
@@ -1587,7 +1587,7 @@ const KC = (function () {
   cv.addEventListener('pointerdown', e => {
     if (e.pointerType === 'pen') {
       if (!input.penSeen) {
-        input.penSeen = true; $('penStatus').textContent = '펜이 감지되었습니다';
+        input.penSeen = true; $('penStatus').textContent = 'Pen detected';
         if (input.autoPen && !input.penOnly) setPenOnly(true, true);
       }
       input.penDown = e.pointerId;
@@ -1707,7 +1707,7 @@ const KC = (function () {
       drag.changed = true; addEvents(r.ev); steps++;
     }
     if (steps) changed();
-    if (blocked) toast({ R2: '막힘: 두 교차에서 위에 있는 현이 서로 달라 R2로 없앨 수 없습니다', R3: '막힘: 세 현의 위아래가 순환이라 R3로 지나갈 수 없습니다', pass: '막힘: 현이 다른 현을 뚫고 지나가는 움직임입니다' }[blocked] || '막힘', true);
+    if (blocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
     requestAnimationFrame(tick);
   }
 
@@ -1808,7 +1808,7 @@ const KC = (function () {
     const closeSelf = !st.attach && len > 60 && Math.hypot(last.x - pts[0].x, last.y - pts[0].y) * view.s < SNAP;
     if (st.attach && !target && len < 10) { render(); updatePanel(); return; }
     if (!st.attach && !target) {
-      if ((closeSelf || opts.autoClose) && len < 60) { render(); updatePanel(); if (len >= 12) toast('닫힌 곡선이 되려면 더 길게 그려 주세요', true); return; }
+      if ((closeSelf || opts.autoClose) && len < 60) { render(); updatePanel(); if (len >= 12) toast('Draw a longer stroke to create a closed curve', true); return; }
       if (len < 12) { render(); updatePanel(); return; }
     }
     pushUndo();
@@ -1975,7 +1975,7 @@ const KC = (function () {
       S.open = newOpen;
       if (!structural) undoStack.pop();
     }
-    if (!items.length) { render(); toast('선택된 곡선이 없습니다', true); return; }
+    if (!items.length) { render(); toast('No curves selected', true); return; }
     sel = { items };
     changed(); showMenu();
   }
@@ -1991,7 +1991,7 @@ const KC = (function () {
       open: sel.items.filter(i => i.kind === 'open').map(i => i.ref.pts.map(q => ({ x: q.x, y: q.y }))),
       mem, cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2
     };
-    if (!quiet) toast('복사했습니다');
+    if (!quiet) toast('Copied');
     showMenu();
   }
   function deleteSel(quiet) {
@@ -2001,9 +2001,9 @@ const KC = (function () {
     const openSet = new Set(sel.items.filter(i => i.kind === 'open').map(i => i.ref));
     S.open = S.open.filter(o => !openSet.has(o));
     clearSel(); changed();
-    if (!quiet) toast('삭제했습니다');
+    if (!quiet) toast('Deleted');
   }
-  function cutSel() { if (!sel) return; copySel(true); deleteSel(true); toast('잘라냈습니다'); }
+  function cutSel() { if (!sel) return; copySel(true); deleteSel(true); toast('Cut'); }
   function pasteClip(at) {
     if (!clip) return;
     let tx, ty;
@@ -2017,7 +2017,7 @@ const KC = (function () {
     clip.closed.forEach(p => items.push({ kind: 'closed', ref: integrateClosed(tr(p)) }));
     clip.open.forEach(p => { const o = { pts: tr(p) }; S.open.push(o); items.push({ kind: 'open', ref: o }); });
     sel = { items }; pasteAt = null;
-    changed(); showMenu(); toast('붙여넣었습니다');
+    changed(); showMenu(); toast('Pasted');
   }
   // Moving a selection: take closed parts out of the diagram, carry them, then put them back
   function liftSelection() {
@@ -2163,12 +2163,12 @@ const KC = (function () {
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast' + (warn ? '' : ' info'), 1800);
   }
   function updateHint() {
-    const penNote = input.penOnly ? ' 손가락은 한 손가락으로 이동, 두 손가락으로 확대합니다.' : '';
-    $('hint').textContent = tool === 'move' ? (opts.under ? '현을 끌어 이동합니다. 새 교차에서 끄는 현이 아래로 갑니다 (Shift로 반대).' : '현을 끌어 이동합니다. 새 교차에서 끄는 현이 위로 갑니다 (Shift를 누르면 아래로).')
-      : tool === 'draw' ? (opts.autoClose ? '한 획으로 그리면 곡선이 닫힙니다. 끊긴 끝점에서 시작하거나 끝내면 그 곡선에 이어집니다.' : '그린 획은 열린 곡선으로 남습니다. 끝점끼리 이어 한 바퀴를 만들면 매듭 성분이 됩니다.')
-        : tool === 'lasso' ? (opts.lassoMode === 'curve' ? '둘러싼 곡선 전체를 선택합니다. 선택한 뒤 끌어서 옮기거나 메뉴에서 복사, 자르기, 삭제를 합니다. 빈 곳을 톡 치면 붙여넣기가 나옵니다.' : '둘러싼 영역 안쪽만 잘라서 선택합니다. 경계에서 곡선이 끊기고, 끊긴 끝점은 다시 이어 닫을 수 있습니다.')
-        : tool === 'erase' ? (opts.eraseMode === 'stroke' ? '곡선을 누르거나 문지르면 그 곡선 전체가 지워집니다.' : '문지른 부분만 지워집니다. 끊긴 끝점을 다시 이으면 닫히고, 남은 교차의 위아래는 유지됩니다.')
-          : '교차를 눌러 위아래를 바꿉니다.';
+    const penNote = input.penOnly ? ' Pan with one finger; zoom with two.' : '';
+    $('hint').textContent = tool === 'move' ? (opts.under ? 'Drag a strand to move it. It passes under at new crossings (hold Shift to pass over).' : 'Drag a strand to move it. It passes over at new crossings (hold Shift to pass under).')
+      : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join that curve.' : 'Strokes remain open. Join endpoints to complete a loop and create a link component.')
+        : tool === 'lasso' ? (opts.lassoMode === 'curve' ? 'Enclose curves to select them. Drag to move, or use the menu to copy, cut, or delete. Tap an empty area to paste.' : 'Select only the enclosed region. Curves are cut at the boundary; you can rejoin their endpoints to close them.')
+        : tool === 'erase' ? (opts.eraseMode === 'stroke' ? 'Tap or drag across a curve to erase the entire curve.' : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
+          : 'Tap a crossing to swap its over/under strands.';
     if (penNote) $('hint').textContent += penNote;
   }
   function setText(id, v) { $(id).textContent = v; }
@@ -2183,17 +2183,17 @@ const KC = (function () {
     setText('nflip', stats.flips);
     const flags = [];
     if (a.c) {
-      flags.push([a.alternating ? '교대 도식' : '비교대 도식', a.alternating]);
-      if (a.positive) flags.push(['양의 도식', true]); else if (a.negative) flags.push(['음의 도식', true]);
-      flags.push([a.sA.adequate ? 'A-adequate' : 'A-adequate 아님', a.sA.adequate]);
-      flags.push([a.sB.adequate ? 'B-adequate' : 'B-adequate 아님', a.sB.adequate]);
+      flags.push([a.alternating ? 'Alternating diagram' : 'Non-alternating diagram', a.alternating]);
+      if (a.positive) flags.push(['Positive diagram', true]); else if (a.negative) flags.push(['Negative diagram', true]);
+      flags.push([a.sA.adequate ? 'A-adequate' : 'Not A-adequate', a.sA.adequate]);
+      flags.push([a.sB.adequate ? 'B-adequate' : 'Not B-adequate', a.sB.adequate]);
     }
-    if (a.k > 1) flags.push([`분리된 조각 ${a.k}개`, false]);
-    if (S.open.length) flags.push([`열린 곡선 ${S.open.length}개는 계산에서 제외`, false]);
+    if (a.k > 1) flags.push([`Disconnected pieces: ${a.k}`, false]);
+    if (S.open.length) flags.push([`Open curves excluded from calculations: ${S.open.length}`, false]);
     $('flags').innerHTML = flags.map(([t, on]) => `<span class="flag${on ? ' on' : ''}">${t}</span>`).join('');
     let pdText = '';
-    if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# 교차 없는 성분 ${a.free}개는 PD 코드에 포함되지 않습니다`; }
-    $('pd').value = S.comps.length ? (pdText || '교차가 없습니다') : '';
+    if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# Components without crossings omitted from PD code: ${a.free}`; }
+    $('pd').value = S.comps.length ? (pdText || 'No crossings') : '';
     updateLegend();
   }
   const fmt = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
@@ -2201,9 +2201,9 @@ const KC = (function () {
     const L = $('legend'), a = analysis;
     if (viewMode === 'diagram' || !a || !S.comps.length) { L.style.display = 'none'; return; }
     L.style.display = 'block';
-    if (viewMode === 'A') L.innerHTML = `<b>all-A state</b>, 원 ${a.sA.count}개<div class="sub">점선은 A-smoothing 자리의 chord입니다. ${a.sA.adequate ? 'A-adequate' : '같은 원에 양 끝이 붙은 chord가 있어 A-adequate가 아닙니다'}</div>`;
-    else if (viewMode === 'B') L.innerHTML = `<b>all-B state</b>, 원 ${a.sB.count}개<div class="sub">점선은 B-smoothing 자리의 chord입니다. ${a.sB.adequate ? 'B-adequate' : '같은 원에 양 끝이 붙은 chord가 있어 B-adequate가 아닙니다'}</div>`;
-    else L.innerHTML = `<b>Seifert state</b>, 원 ${a.sS.count}개<div class="sub">방향을 따르는 smoothing입니다</div>`;
+    if (viewMode === 'A') L.innerHTML = `<b>all-A state</b>, ${a.sA.count} circles<div class="sub">Dashed lines are chords at A-smoothing sites. ${a.sA.adequate ? 'A-adequate' : 'Not A-adequate: a chord has both endpoints on the same circle'}</div>`;
+    else if (viewMode === 'B') L.innerHTML = `<b>all-B state</b>, ${a.sB.count} circles<div class="sub">Dashed lines are chords at B-smoothing sites. ${a.sB.adequate ? 'B-adequate' : 'Not B-adequate: a chord has both endpoints on the same circle'}</div>`;
+    else L.innerHTML = `<b>Seifert state</b>, ${a.sS.count} circles<div class="sub">Smoothing follows the strand orientations</div>`;
   }
 
   // ---------- rendering ----------
@@ -2443,9 +2443,9 @@ const KC = (function () {
   }
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('./sw.js').then(() => navigator.serviceWorker.ready).then(() => {
-      $('offlineStatus').textContent = '이 기기에서 오프라인으로도 그리기와 계산을 할 수 있습니다.';
-    }).catch(() => { $('offlineStatus').textContent = '현재는 인터넷에 연결해서 사용하세요.'; });
-  } else { $('offlineStatus').textContent = '웹주소로 열면 오프라인 사용을 준비합니다.'; }
+      $('offlineStatus').textContent = 'Drawing and calculations are available offline on this device.';
+    }).catch(() => { $('offlineStatus').textContent = 'Please stay connected to the internet for now.'; });
+  } else { $('offlineStatus').textContent = 'Open the site via a web address to enable offline access.'; }
   // ---------- boot ----------
   updateHint();
   resize();
@@ -2454,21 +2454,21 @@ const KC = (function () {
     const saved=localStorage.getItem(WORKSPACE_KEY);
     if(saved) {
       const data=JSON.parse(saved);
-      if(data.format!=='knot-lab-workspace'||!Array.isArray(data.tabs)||!data.tabs.length)throw new Error('저장된 탭 형식 오류');
-      const recovered=data.tabs.map((t,i)=>({id:String(i+1),title:typeof t.title==='string'?t.title:'새 도식 '+(i+1),fileName:typeof t.fileName==='string'?t.fileName:'',pdInput:typeof t.pdInput==='string'?t.pdInput:'',dirty:!!t.dirty,
+      if(data.format!=='knot-lab-workspace'||!Array.isArray(data.tabs)||!data.tabs.length)throw new Error('Invalid saved tab format');
+      const recovered=data.tabs.map((t,i)=>({id:String(i+1),title:typeof t.title==='string'?t.title:'New diagram '+(i+1),fileName:typeof t.fileName==='string'?t.fileName:'',pdInput:typeof t.pdInput==='string'?t.pdInput:'',dirty:!!t.dirty,
         state:deserialize(t.document),undo:[],redo:[],view:t.view&&['ox','oy','s'].every(k=>Number.isFinite(t.view[k]))&&t.view.s>0?t.view:null,viewMode:['diagram','A','B','S'].includes(t.viewMode)?t.viewMode:'diagram'}));
       const activeIndex=Math.max(0,data.tabs.findIndex(t=>t.id===data.activeId));
       tabs.push(...recovered);nextTabId=tabs.length+1;activeTabId=tabs[activeIndex].id;restored=true;
     } else {
       const legacy=localStorage.getItem(AUTOSAVE_KEY);
-      if(legacy) {const obj=deserialize(JSON.parse(legacy));tabs.push({id:'1',title:'이전 작업',fileName:'',pdInput:'',dirty:true,state:obj,undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';restored=true;}
+      if(legacy) {const obj=deserialize(JSON.parse(legacy));tabs.push({id:'1',title:'Previous work',fileName:'',pdInput:'',dirty:true,state:obj,undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';restored=true;}
     }
   } catch { recoveryFailed=true;$('autosave').checked=false; }
-  if(!tabs.length){tabs.push({id:'1',title:'새 도식 1',fileName:'',pdInput:'',dirty:false,state:blankState(),undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';}
+  if(!tabs.length){tabs.push({id:'1',title:'New diagram 1',fileName:'',pdInput:'',dirty:false,state:blankState(),undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';}
   analysis=KC.analyze(S.comps,S.crossings);setTool('draw');setEraseMode('stroke');
   activateTab(activeTabId,false,false);
-  if(recoveryFailed)$('saveStatus').textContent='이전 탭 복원 실패 · 자동 저장을 일시 중지했습니다';
-  requestAnimationFrame(()=>{resize();if(restored)toast('열린 탭과 작업을 복원했습니다');});
+  if(recoveryFailed)$('saveStatus').textContent='Could not restore previous tabs · Autosave paused';
+  requestAnimationFrame(()=>{resize();if(restored)toast('Open tabs and work restored');});
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', render);
 })();
 

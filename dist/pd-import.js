@@ -3,19 +3,19 @@
 'use strict';
 const fail = msg => { throw new Error(msg); };
 function parse(text) {
-  if(typeof text !== 'string' || text.length > 40000) fail('PD 코드는 40,000자 이하로 입력하세요.');
+  if(typeof text !== 'string' || text.length > 40000) fail('PD code must be no more than 40,000 characters.');
   let s=text.trim().replace(/^PD\s*(?=\[)/i,'').replace(/\bX\s*(?=\[)/g,'').replace(/\(/g,'[').replace(/\)/g,']');
-  if(!s) fail('PD 코드를 입력하세요.');
-  if(!/^[\s\d,\[\]]+$/.test(s)) fail('숫자 목록 또는 PD[X[…], …] 형식으로 입력하세요.');
-  let pd; try {pd=JSON.parse(s);} catch {fail('괄호와 쉼표를 확인하세요. 각 교차는 숫자 4개입니다.');}
-  if(!Array.isArray(pd)||!pd.length) fail('교차가 하나 이상인 PD 코드를 입력하세요. 교차 없는 원은 펜으로 그릴 수 있습니다.');
-  if(pd.length>80) fail('한 번에 교차 80개까지 불러올 수 있습니다.');
+  if(!s) fail('Enter a PD code.');
+  if(!/^[\s\d,\[\]]+$/.test(s)) fail('Use a list of numbers or the PD[X[…], …] format.');
+  let pd; try {pd=JSON.parse(s);} catch {fail('Check the brackets and commas. Each crossing requires four numbers.');}
+  if(!Array.isArray(pd)||!pd.length) fail('Enter a PD code with at least one crossing. Use the pen to draw a circle without crossings.');
+  if(pd.length>80) fail('You can import up to 80 crossings at a time.');
   const labels=new Map();
   pd.forEach((row,v)=>{
-    if(!Array.isArray(row)||row.length!==4||!row.every(n=>Number.isSafeInteger(n)&&n>0)) fail(`${v+1}번째 교차는 양의 정수 4개여야 합니다.`);
+    if(!Array.isArray(row)||row.length!==4||!row.every(n=>Number.isSafeInteger(n)&&n>0)) fail(`Crossing ${v+1} must contain four positive integers.`);
     row.forEach((n,p)=>{if(!labels.has(n))labels.set(n,[]);labels.get(n).push(4*v+p);});
   });
-  for(const [n,ds] of labels) if(ds.length!==2) fail(`현 번호 ${n}이 ${ds.length}번 나옵니다. 각 번호는 정확히 2번 나와야 합니다.`);
+  for(const [n,ds] of labels) if(ds.length!==2) fail(`Arc label ${n} occurs ${ds.length} times. Each label must occur exactly twice.`);
   return pd;
 }
 const opposite=d=> (d&~3)+((d+2)%4);
@@ -29,12 +29,12 @@ function topology(pd){
     while(todo.length){const a=todo.pop();vs.push(a);for(let p=0;p<4;p++){const b=twin[4*a+p]>>2;if(!seen.has(b)){seen.add(b);todo.push(b);}}}
     const faces=[],used=new Set();
     for(const a of vs)for(let p=0;p<4;p++) {const start=4*a+p;if(used.has(start))continue;const f=[];let d=start;do{used.add(d);f.push(d);d=next(twin[d]);}while(d!==start);faces.push(f);}
-    if(vs.length-vs.length*2+faces.length!==2)fail('이 PD 코드의 교차 순서는 평면 도식을 만들지 못합니다. 각 교차의 반시계 방향 순서를 확인하세요.');
+    if(vs.length-vs.length*2+faces.length!==2)fail('The crossing order in this PD code does not define a planar diagram. Check the counterclockwise order at each crossing.');
     groups.push({vs,faces});
   }
   // Every crossing's first port is the incoming underpass. Propagate orientation.
   const incoming=new Int8Array(twin.length).fill(-1);
-  const set=(d,val)=>{if(incoming[d]>=0&&incoming[d]!==val)fail('현의 방향이 일치하지 않습니다. 각 교차의 첫 번호는 들어오는 아래 현이어야 합니다.');incoming[d]=val;};
+  const set=(d,val)=>{if(incoming[d]>=0&&incoming[d]!==val)fail('Arc orientations are inconsistent. The first label at each crossing must be the incoming understrand.');incoming[d]=val;};
   for(let d=0;d<twin.length;d+=4) {
     let e=d;do{set(e,1);set(opposite(e),0);e=twin[opposite(e)];}while(e!==d);
   }
@@ -52,7 +52,7 @@ function embedding(group,twin){
   let outer=0;faces.forEach((f,i)=>{if(f.length>faces[outer].length)outer=i;});
   for(let i=0;i<faces.length;i++)if(i!==outer){const c=node();for(const p of faces[i])edge(c,p);}
   const boundary=faces[outer];
-  if(new Set(boundary).size!==boundary.length)fail('이 도식의 외곽을 구성하지 못했습니다. PD 코드의 연결을 확인하세요.');
+  if(new Set(boundary).size!==boundary.length)fail('Could not construct the outer boundary. Check the connections in the PD code.');
   const fixed=new Set(boundary);
   // The face walk follows next(twin(d)); counterclockwise screen boundary preserves the PD port order.
   boundary.forEach((v,i)=>{const t=2*Math.PI*i/boundary.length;xy[v]={x:Math.cos(t),y:-Math.sin(t)};});
@@ -77,7 +77,7 @@ function embedding(group,twin){
     // A disk strictly inside the crossing's four triangular wedges.
     let radius=Infinity;
     for(let p=0;p<4;p++){const a=ps[p],b=ps[(p+1)%4];const dist=Math.abs((b.x-a.x)*(a.y-c.y)-(b.y-a.y)*(a.x-c.x))/Math.hypot(b.x-a.x,b.y-a.y);radius=Math.min(radius,dist,Math.hypot(a.x-c.x,a.y-c.y));}
-    if(radius<1e-9)fail('도식의 일부가 너무 촘촘해 복원하지 못했습니다. 더 단순한 PD 코드로 나누어 입력하세요.');
+    if(radius<1e-9)fail('Part of the diagram is too dense to reconstruct. Try splitting it into simpler PD codes.');
     radius*=0.45;
     ps.forEach((p,i)=>{const l=Math.hypot(p.x-c.x,p.y-c.y);inner.set(v*4+i,{x:c.x+(p.x-c.x)*radius/l,y:c.y+(p.y-c.y)*radius/l});});
   }
@@ -109,10 +109,10 @@ function fromPD(text,KC){
     }
   }
   const crossings=KC.computeRaw(comps),seen=new Set();
-  if(crossings.length!==pd.length)fail('도식 복원 중 교차 수가 일치하지 않았습니다. 현재 작업은 유지됩니다.');
+  if(crossings.length!==pd.length)fail('The reconstructed crossing count did not match. Your current work is unchanged.');
   for(const [i,x] of crossings.entries()){
     const ts=x.occ.map(o=>segmentTags[o.c][o.seg]);
-    if(ts.some(t=>!t)||ts[0].cross!==ts[1].cross||ts[0].over===ts[1].over||seen.has(ts[0].cross))fail('교차 연결을 검증하지 못했습니다. 현재 작업은 유지됩니다.');
+    if(ts.some(t=>!t)||ts[0].cross!==ts[1].cross||ts[0].over===ts[1].over||seen.has(ts[0].cross))fail('Could not verify crossing connections. Your current work is unchanged.');
     seen.add(ts[0].cross);x.id=i+1;x.over=ts[0].over?0:1;
   }
   return {comps,crossings,nextId:crossings.length+1,open:[],memory:[]};

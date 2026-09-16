@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v3';
+const CACHE='knot-lab-v4-en';
 const FILES=['./','./index.html','./pd-import.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
