@@ -1,6 +1,14 @@
 # Release history
 
-## Invariant calculator update
+## GitHub backup and CI (source maintenance; no Sites deployment)
+
+- Preserve the complete six-commit Sites history and annotate its releases with tags v1–v6.
+- Back up source to the private `lunarjg/knot-lab` repository using a separate GitHub remote; retain the Sites origin.
+- Run all five regression suites on Node.js 22 and 24 for pushes and pull requests.
+- Document setup, tested release commits and tags, and separate Sites deployment rollback from Git history rollback.
+- Preserve application files, hosting configuration, site address, and access level.
+
+## Sites version 6 — `f98759e`
 
 - Add oriented linking numbers, knot determinant, Fox 3-coloring counts, and an exact Jones polynomial calculator.
 - Run calculations in a cancellable worker; discard stale results after topology or document changes.

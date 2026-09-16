@@ -1,0 +1,37 @@
+name: Node regression tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Reidemeister moves and geometry
+        run: node tests/moves.test.cjs
+      - name: PD import
+        run: node tests/pd.test.cjs
+      - name: App state and input
+        run: node tests/app.test.cjs
+      - name: Exact invariants and worker
+        run: node tests/invariants.test.cjs
+      - name: Offline cache
+        run: node tests/offline.test.cjs

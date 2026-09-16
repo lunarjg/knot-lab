@@ -1,18 +1,34 @@
-# 매듭 도식 실험실
+# Knot Diagram Lab
 
 아이패드의 펜·터치 입력으로 매듭 도식을 그리고 계산하는 정적 웹앱입니다.
+
+- 운영 사이트: https://jgkim.piano5788.chatgpt.site (Sites 배포)
+- 비공개 소스 백업: https://github.com/lunarjg/knot-lab
+- 웹사이트 UI는 영어를 유지합니다. GitHub push와 CI 실행은 Sites 운영 배포를 수행하지 않습니다.
 
 ## 파일 구성
 
 - `dist/index.html`: 화면, 매듭 기하 엔진, Reidemeister 이동 판정, 계산, 파일별 탭, 파일 저장·복원
 - `dist/pd-import.js`: PD 입력 검증과 평면 도식 구성
 - `dist/manifest.webmanifest`, `dist/sw.js`, `dist/icon-*.png`: 홈 화면 설치와 오프라인 지원
-- `tests/*.test.cjs`: 기하·PD·작업 상태·오프라인 회귀 검사
-- `.openai/hosting.json`: 현재 Sites 프로젝트의 배포 설정. 다른 Sites 프로젝트를 만들 때는 해당 프로젝트의 설정을 사용하세요.
+- `dist/invariants.js`, `dist/invariants-worker.js`: 정확한 불변량 계산과 취소 가능한 Web Worker
+- `tests/*.test.cjs`: 기하·PD·작업 상태·불변량·오프라인 회귀 검사
+- `.github/workflows/ci.yml`: push 및 pull request 시 Node.js 22/24 자동 검사
+- `.openai/hosting.json`: 현재 Sites 프로젝트의 배포 설정. 기존 project_id와 dist 정적 경로를 유지하세요.
 
 외부 패키지 설치나 빌드 과정 없이 `dist` 폴더를 정적 웹서버로 제공하면 됩니다. 서버로 도식 데이터를 전송하지 않습니다. 자동 저장은 기기 브라우저의 로컬 저장소를 사용합니다.
 
 ## 로컬 실행
+
+Git, Node.js 22 이상, Python 3이 필요합니다. npm 패키지 설치나 빌드 단계는 없습니다. 비공개 저장소를 읽을 수 있는 GitHub 계정으로 인증한 뒤 복제합니다.
+
+```sh
+git clone https://github.com/lunarjg/knot-lab.git
+cd knot-lab
+node --version
+```
+
+이 명령으로 새로 복제한 사본은 GitHub가 `origin`입니다. 기존 Sites 작업 사본에서는 Sites를 `origin`으로 유지하고 GitHub는 별도 `github` remote로 사용합니다. 서로 다른 사본의 remote를 혼동하지 않도록 push 전에 `git remote -v`를 확인하세요.
 
 Python 3이 설치된 컴퓨터에서 이 폴더를 연 뒤 실행합니다.
 
@@ -67,7 +83,7 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 
 ## 사이트 소유권과 데이터
 
-이 사본은 현재 계정의 별도 Sites 프로젝트로 게시합니다. 이전 계정의 사이트 주소나 권한은 변경하지 않습니다.
+기존 Sites 프로젝트와 운영 주소를 계속 사용합니다. GitHub 백업을 위해 새 사이트를 만들거나 공개 범위·편집 권한을 변경하지 않습니다.
 사이트 코드의 수정 및 재게시 권한은 Sites에서 소유 계정으로 관리하며, 방문자에게 편집 권한을 부여하지 않습니다.
 앱에는 공유 데이터를 수정하는 서버 API가 없습니다. 그리기·파일 열기·자동 저장은 각 방문자의 브라우저에서만 작동합니다.
 
@@ -102,6 +118,53 @@ Tests include the unknot, trefoil and mirror, figure-eight, Hopf link and mirror
 
 ## Version history and rollback
 
-See `CHANGELOG.md`. Source commits and saved Sites versions preserve previous releases. To restore the live site, select an existing saved version and redeploy it to this same project. Editing local source alone does not change the live site. A source rollback can instead use `git revert`, followed by the normal test, push, save, and deployment steps; avoid rewriting shared history.
+See `CHANGELOG.md`. The original six commits are preserved, with annotated release tags:
 
-GitHub can provide a separate backup: use one private repository, commit each tested change, and tag releases. No GitHub remote is configured by this update. Source history does not back up users' diagrams: those remain browser-local and can be exported as JSON.
+| Tag | Commit | Release |
+| --- | --- | --- |
+| v1 | `9fbf988` | Initial import |
+| v2 | `5df475b` | English UI |
+| v3 | `747a1a6` | Document tabs, crossing spacing, eraser fix |
+| v4 | `8b55e5b` | R1 drag assistance |
+| v5 | `71a74d0` | Bigon/kink protection |
+| v6 | `f98759e3bd78758956a9af142ef6cb4b5a179528` | Invariant calculator |
+
+The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
+
+### Backup and future releases
+
+In the existing Sites checkout, `origin` remains the Sites source repository and `github` points to `https://github.com/lunarjg/knot-lab.git`. Never embed credentials in remote URLs or tracked files. No collaborators are required for this private backup.
+
+```sh
+git status
+git remote -v
+git push github main
+git push github --tags
+git ls-remote --heads --tags github
+```
+
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v7 for the next application release), and create an annotated tag:
+
+```sh
+git tag -a v7 -m "Describe the tested application release"
+git push github main
+git push github v7
+```
+
+Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.
+
+### Roll back the live Sites deployment
+
+Select and redeploy a previously saved Sites version to the **same existing project**. This changes what visitors receive without changing GitHub branches or tags. Record which saved version and source commit were restored. A GitHub push, a local checkout, or a Git revert alone never changes the live site. After a deployment rollback, verify the served version and service-worker update behavior in a real browser; previously cached clients can require a reload.
+
+### Roll back source history without rewriting it
+
+For inspection only, use `git switch --detach v6` in a clean checkout; return with `git switch main`. This changes only the local working tree.
+
+To undo a selected change on the shared branch, first identify its full SHA with `git log --oneline`, ensure the worktree is clean, and use `git revert <commit-sha>`. Resolve any conflicts, run all five tests, and push the resulting new commit. For merge commits or several dependent changes, inspect the history and plan the reverts before applying them. Do not use `reset --hard` or force-push as the shared-history rollback method. If the reverted source should go live, give the tested result a new annotated release tag and complete the separate Sites save/deploy workflow.
+
+### What the backup does not contain
+
+Source history does **not** back up visitors' diagrams, document tabs, browser-local autosave, or local undo history. Users must export their diagrams as JSON and keep those files separately. The static JavaScript is delivered to browsers and can be inspected, but visitors receive no repository write permission or Sites deployment permission.
+
+CI and the local test commands use automated Node mock environments. They do not establish real Safari rendering, touch behavior, Apple Pencil hardware behavior, or production service-worker behavior; validate those separately when making UI/input/offline changes.
