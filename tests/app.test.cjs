@@ -38,6 +38,28 @@ const cr=lab.state.crossings[0],old=cr.over,e={pointerType:'mouse',pointerId:1,c
 t.fire(t.ids.get('cv'),'pointerdown',e);t.fire(t.ids.get('cv'),'pointerup',e);assert.equal(cr.over,1-old);t.ids.get('undo').click();
 console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear, all state views, autosave/reload, panel and crossing flip: PASS');
 
+// Tap the active title to rename in place. Selecting another tab remains one
+// tap; renaming changes neither the diagram nor its undo/redo history.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);const id=api.activeTabId;
+ const diagram=JSON.stringify(api.serialize().comps),original=api.tabs[0].title;
+ const item=()=>p.ids.get('documentTabs').children.find(i=>i.children[0].getAttribute('aria-selected')==='true'||i.children[0].tagName==='INPUT');
+ const key=(field,name,composing=false)=>p.fire(field,'keydown',{key:name,isComposing:composing,preventDefault(){},stopPropagation(){}});
+ item().children[0].click();let field=item().children[0];assert.equal(field.tagName,'INPUT');assert.equal(field.value,original);
+ field.value='  My trefoil  ';key(field,'Enter',true);assert.equal(api.tabs[0].title,original,'IME Enter must not prematurely commit');key(field,'Enter');
+ assert.equal(api.tabs[0].title,'My trefoil');assert.equal(p.ids.get('fileName').value,'My trefoil');assert.equal(JSON.stringify(api.serialize().comps),diagram);
+ item().children[0].click();field=item().children[0];field.value='Canceled';key(field,'Escape');assert.equal(api.tabs[0].title,'My trefoil');
+ item().children[0].click();field=item().children[0];field.value='   ';p.fire(field,'blur',{});assert.equal(api.tabs[0].title,'My trefoil');
+ p.fire(item().children[0],'keydown',{key:'F2',preventDefault(){},stopPropagation(){}});field=item().children[0];field.value='Renamed <knot>';p.fire(field,'blur',{});assert.equal(api.tabs[0].title,'Renamed <knot>');
+ assert.equal(item().children[1].getAttribute('aria-label'),'Close tab Renamed <knot>');
+ const second=api.openTab();p.ids.get('documentTabs').children[0].children[0].click();assert.equal(api.activeTabId,id);assert.equal(item().children[0].tagName,'BUTTON');
+ item().children[0].click();field=item().children[0];field.value='Saved on switch';api.activateTab(second);assert.equal(api.tabs[0].title,'Saved on switch');
+ api.activateTab(id);assert.equal(p.ids.get('fileName').value,'Saved on switch');
+ for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert.equal(restored.ctx.knotLab.tabs[0].title,'Saved on switch');
+ p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.tabs[0].title,'Saved on switch');p.ids.get('redo').click();assert.equal(api.analysis.c,3);
+}
+console.log('Tab title rename: tap/F2, Enter/blur, cancel, IME, switching, autosave and independent diagram history: PASS');
+
 // Resize and hide gestures use the same handlers for finger, Pencil and mouse.
 for (const pointerType of ['touch','pen','mouse']) {
  const p=boot(),h=p.ids.get('panelResize'),toggle=p.ids.get('panelToggle');

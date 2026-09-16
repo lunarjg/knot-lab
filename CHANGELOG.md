@@ -1,5 +1,12 @@
 # Release history
 
+## v10 — Rename document tabs in place
+
+- Tap the active tab title or press F2 to edit its name; inactive tabs retain one-tap selection.
+- Save with Enter or blur and cancel with Escape. Ignore composing Enter events and empty names.
+- Preserve names and filename suggestions through tab switches and autosave without changing diagram undo/redo history.
+- Add rename regression coverage and refresh the offline cache.
+
 ## v9 — Join arcs underneath existing strands
 
 - Make newly drawn endpoint connectors pass under existing open arcs, closed components, and older parts of their own arc.

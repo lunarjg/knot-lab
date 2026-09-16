@@ -45,6 +45,7 @@ python3 -m http.server 8000 --directory dist
 - 위쪽 `＋` 버튼: 빈 도식을 새 탭에 생성
 - `열기`: JSON 파일을 새 탭에 열기. 여러 파일을 한 번에 선택할 수 있음
 - 파일 탭: 도식, 확대·이동 위치, 실행 취소·다시 실행, 이동 횟수를 각각 유지
+- 선택된 탭의 이름을 터치하면 바로 이름 편집. 다른 탭은 먼저 선택한 뒤 이름을 다시 터치. Enter 또는 바깥 터치로 저장, Esc로 취소하며 키보드 F2도 지원. 이름과 저장 파일명 제안은 자동 저장되고 도식의 실행 취소 이력은 유지
 - `저장`: 현재 탭을 JSON으로 내보내기. 이동 횟수도 파일에 포함됨
 - 자동 저장: 열린 탭과 도식·이동 횟수를 다음 접속 때 복원. 실행 취소 스택은 현재 세션에서만 유지
 - `PD 불러오기`: 현재 탭의 도식을 PD 코드로 교체. 실행 취소 가능
@@ -143,6 +144,7 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 | v7 | See annotated tag `v7` | Protect only alternating, non-R2 bigons |
 | v8 | See annotated tag `v8` | Allow new R1 self-crossings with protection enabled |
 | v9 | See annotated tag `v9` | Connecting arcs pass under existing arcs |
+| v10 | See annotated tag `v10` | Tap the active tab title to rename it |
 
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
@@ -158,12 +160,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v10 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v11 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v10 -m "Describe the tested application release"
+git tag -a v11 -m "Describe the tested application release"
 git push github main
-git push github v10
+git push github v11
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

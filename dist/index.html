@@ -219,6 +219,7 @@ h2{font-size:15px}
 .document-tab button{border:0;background:transparent;cursor:pointer;min-height:44px}
 .document-tab .tab-select{max-width:190px;flex:1;min-width:0;padding:8px 10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14px;text-align:left}
 .document-tab.is-active .tab-select{color:var(--accent);font-weight:600}
+.document-tab .tab-rename{width:160px;max-width:190px;min-width:0;flex:1;border:0;border-radius:0;padding:8px 10px;font:inherit;font-size:16px;min-height:44px;background:var(--paper);color:var(--ink)}
 .document-tab .tab-close{width:36px;flex-shrink:0;font-size:19px;color:var(--muted)}
 .document-tab .tab-close:hover{background:var(--warn-soft);color:var(--warn)}
 .new-tab{flex-shrink:0;padding:6px 10px;font-size:14px;white-space:nowrap}
@@ -1348,20 +1349,46 @@ const KC = (function () {
   wrap.addEventListener('drop', e => { e.preventDefault(); wrap.classList.remove('dropping'); openFiles(e.dataTransfer.files); });
 
   function currentTab() { return tabs.find(t=>t.id===activeTabId); }
+  let finishTabRename=null;
   function updateTabLabel(tab) {
     const button=tabButtons.get(tab.id);if(!button)return;
     button.textContent=tab.title+(tab.dirty?' *':'');
-    button.title=tab.title+(tab.dirty?' — Changes not yet exported':'');
+    button.title=tab.title+(tab.dirty?' — Changes not yet exported':'')+' — Tap the active tab to rename';
+  }
+  function beginTabRename(tab,button,item,close) {
+    if(finishTabRename)finishTabRename(true);
+    const field=document.createElement('input');field.className='tab-rename';field.type='text';field.value=tab.title;field.maxLength=120;
+    field.setAttribute('aria-label','Tab name');field.setAttribute('enterkeyhint','done');
+    let done=false;
+    const finish=(save,focus=false)=>{
+      if(done)return;done=true;finishTabRename=null;
+      const name=field.value.trim().slice(0,120);
+      if(save&&name&&tabs.includes(tab)){
+        tab.title=name;tab.fileName=name;
+        if(tab.id===activeTabId)$('fileName').value=name;
+        close.setAttribute('aria-label','Close tab '+name);scheduleAutosave();
+      }
+      item.replaceChildren(button,close);updateTabLabel(tab);if(focus)button.focus();
+    };
+    finishTabRename=finish;
+    field.addEventListener('blur',()=>finish(true));
+    field.addEventListener('keydown',e=>{
+      if(e.isComposing)return;
+      if(e.key==='Enter'||e.key==='Escape'){e.preventDefault();e.stopPropagation();finish(e.key==='Enter',true);}
+    });
+    item.replaceChildren(field,close);field.focus();field.select();
   }
   function renderTabs() {
+    if(finishTabRename)finishTabRename(true);
     $('documentTabs').replaceChildren();tabButtons.clear();
     tabs.forEach(tab=>{
       const item=document.createElement('div');item.className='document-tab'+(tab.id===activeTabId?' is-active':'');
       const button=document.createElement('button');button.className='tab-select';button.id='document-tab-'+tab.id;
       button.setAttribute('role','tab');button.setAttribute('aria-selected',String(tab.id===activeTabId));
       button.setAttribute('aria-controls','wrap');button.tabIndex=tab.id===activeTabId?0:-1;
-      button.onclick=()=>activateTab(tab.id,true);
+      button.onclick=()=>{if(tab.id===activeTabId)beginTabRename(tab,button,item,close);else activateTab(tab.id,true);};
       button.addEventListener('keydown',e=>{
+        if(e.key==='F2'){e.preventDefault();e.stopPropagation();if(tab.id===activeTabId)beginTabRename(tab,button,item,close);return;}
         if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
         e.preventDefault();e.stopPropagation();const i=tabs.findIndex(t=>t.id===tab.id);
         const n=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length;

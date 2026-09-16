@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v11-under-arc-joins';
+const CACHE='knot-lab-v12-tab-renaming';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
