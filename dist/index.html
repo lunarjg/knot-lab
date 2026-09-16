@@ -107,7 +107,11 @@ dl.inv dd{margin:0;text-align:right;font-weight:600;font-variant-numeric:tabular
 .flag{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--rule);color:var(--muted)}
 .flag.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .row{display:flex;align-items:center;gap:10px;margin:8px 0}
-.row label{flex:1}
+.row label{flex:1;min-width:0}
+.row output{min-width:64px;text-align:right;font-size:13px}
+.row:has(output){flex-wrap:wrap}
+.row:has(output) label{flex-basis:100%}
+.row:has(output) input{flex:1;min-width:0}
 input[type=range]{width:130px;accent-color:var(--accent)}
 input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px}
 .chk{display:flex;gap:8px;align-items:flex-start;margin:7px 0;cursor:pointer}
@@ -322,7 +326,11 @@ h2{font-size:15px}
       <h2>Drag &amp; view settings</h2>
       <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
       <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
-      <label class="chk"><input type="checkbox" id="crossingSpacing" checked><span>Keep crossings apart<small>Prevents crossings from moving within 20 screen pixels of one another while dragging. Already crowded crossings can move apart. Turn off for R2 or R3 moves that bring crossings together.</small></span></label>
+      <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect bigons<small>Keeps two-sided regions from collapsing while dragging. Checks the curved area, thinness, and spacing of the two crossings.</small></span></label>
+      <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
+      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect R1 kinks<small>Keeps one-crossing loops from being squeezed flat. Empty small loops can still untwist when R1 assistance is on.</small></span></label>
+      <div class="row"><label for="kinkArea">Minimum kink area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
+      <p class="small">Sizes use screen pixels at the current zoom. Already small regions can expand. Other crossing pairs are not held apart. Turn a protection off to deliberately collapse that type of region.</p>
       <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Loosen small R1 loops while dragging<small>Straightens small empty loops near the strand you drag. Other crossings keep their over/under order. Turn off to keep these curls.</small></span></label>
       <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
@@ -705,26 +713,78 @@ const KC = (function () {
     return { ok: true, crossings: raw, ev };
   }
 
-  // Check the swept separation as well as the endpoint, so a fast or nearly
-  // tangent drag cannot jump one crossing through another between frames.
-  function crossingsTooClose(before, after, distance) {
-    if (!(distance > 0)) return false;
-    const old = new Map(before.map(x => [x.id, x]));
-    for (let i = 0; i < after.length; i++) for (let j = i + 1; j < after.length; j++) {
-      const a = after[i], b = after[j], oa = old.get(a.id), ob = old.get(b.id);
-      const x = a.x - b.x, y = a.y - b.y;
-      let separation = Math.hypot(x, y), limit = distance;
-      if (oa && ob) {
-        const ox = oa.x - ob.x, oy = oa.y - ob.y, dx = x - ox, dy = y - oy;
-        const length2 = dx * dx + dy * dy;
-        const t = length2 ? Math.max(0, Math.min(1, -(ox * dx + oy * dy) / length2)) : 0;
-        separation = Math.hypot(ox + t * dx, oy + t * dy);
-        // Dense imported diagrams remain usable: permit separation to increase.
-        limit = Math.min(distance, Math.hypot(ox, oy));
-      }
-      if (separation + 1e-6 < limit) return true;
+  // Trace bounded faces of the embedded diagram. Each edge is the complete
+  // curved arc between consecutive crossing occurrences, not their chord.
+  function smallFaces(comps, crossings) {
+    const lists=comps.map(()=>[]), outgoing=new Map(), edges=[];
+    crossings.forEach(X=>{
+      outgoing.set(X.id,[]);
+      X.occ.forEach((o,k)=>lists[o.c].push({X,o,key:X.id+':'+(k===X.over?'o':'u')}));
+    });
+    lists.forEach((list,c)=>{
+      list.sort((a,b)=>a.o.s-b.o.s);
+      const cm=comps[c];
+      list.forEach((a,i)=>{
+        const b=list[(i+1)%list.length];
+        const span=i===list.length-1?cm.len+b.o.s-a.o.s:b.o.s-a.o.s;
+        const middle=cm.pts.map((p,j)=>({p,s:mod(cm.cum[j]-a.o.s,cm.len)}))
+          .filter(v=>v.s>1e-7 && v.s<span-1e-7).sort((a,b)=>a.s-b.s);
+        const points=[{x:a.X.x,y:a.X.y},...middle.map(v=>v.p),{x:b.X.x,y:b.X.y}];
+        const id=c+':'+a.key+'>'+b.key;
+        const f={from:a.X.id,to:b.X.id,points,key:id+'+'};
+        const r={from:b.X.id,to:a.X.id,points:[...points].reverse(),key:id+'-'};
+        f.twin=r;r.twin=f;
+        for(const [e,occ,sign] of [[f,a.o,1],[r,b.o,-1]]) {
+          const q=e.points.find(p=>Math.hypot(p.x-e.points[0].x,p.y-e.points[0].y)>1e-8);
+          e.angle=q?Math.atan2(q.y-e.points[0].y,q.x-e.points[0].x):Math.atan2(sign*occ.dy,sign*occ.dx);
+          outgoing.get(e.from).push(e);edges.push(e);
+        }
+      });
+    });
+    outgoing.forEach(es=>es.sort((a,b)=>a.angle-b.angle||a.key.localeCompare(b.key)));
+    for(const e of edges) {
+      const es=outgoing.get(e.to),i=es.indexOf(e.twin);
+      e.next=es[(i+es.length-1)%es.length];
     }
-    return false;
+    const seen=new Set(),faces=[];
+    for(const start of edges) {
+      if(seen.has(start))continue;
+      const cycle=[];let e=start;
+      while(!seen.has(e)) {seen.add(e);cycle.push(e);e=e.next;}
+      if(e!==start || cycle.length>2)continue;
+      if(cycle.length===2 && cycle[0].from===cycle[1].from)continue;
+      const points=cycle.flatMap(e=>e.points.slice(0,-1));
+      if(points.length<3)continue;
+      const origin=points[0];let twiceArea=0,perimeter=0;
+      points.forEach((a,i)=>{const b=points[(i+1)%points.length];
+        twiceArea+=(a.x-origin.x)*(b.y-origin.y)-(a.y-origin.y)*(b.x-origin.x);
+        perimeter+=Math.hypot(b.x-a.x,b.y-a.y);
+      });
+      // Clockwise exterior walks have negative area. Degenerate regions have
+      // no interior and are handled by the normal Reidemeister checks.
+      if(twiceArea<=0 || perimeter<=0)continue;
+      const type=cycle.length===1?'kink':'bigon',area=twiceArea/2;
+      const separation=type==='bigon'?Math.hypot(cycle[0].points[0].x-cycle[1].points[0].x,cycle[0].points[0].y-cycle[1].points[0].y):Infinity;
+      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,area,thickness:2*area/perimeter,separation});
+    }
+    return faces;
+  }
+
+  function faceSizeViolation(beforeComps,beforeX,afterComps,afterX,limits) {
+    if(!limits || (!limits.bigon && !limits.kink))return null;
+    const previous=new Map(smallFaces(beforeComps,beforeX).map(f=>[f.key,f]));
+    for(const face of smallFaces(afterComps,afterX)) {
+      const rule=limits[face.type];if(!rule)continue;
+      const old=previous.get(face.key);
+      for(const metric of ['area','thickness','separation']) {
+        const minimum=rule[metric]||0;
+        // Existing small imported faces can expand without being locked in
+        // place. They cannot become still smaller; new faces obey the limit.
+        const floor=old?Math.min(minimum,old[metric]):minimum;
+        if(face[metric]+1e-7<floor)return face.type;
+      }
+    }
+    return null;
   }
 
   function attemptStep(S, mutator, opt) {
@@ -735,9 +795,10 @@ const KC = (function () {
     const raw = computeRaw(S.comps);
     const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
-    if (crossingsTooClose(S.crossings, r.crossings, opt?.minCrossingDistance)) {
+    const smallFace=faceSizeViolation(backup,S.crossings,S.comps,r.crossings,opt?.faceLimits);
+    if (smallFace) {
       S.comps = backup; S.nextId = next;
-      return { ok: false, reason: 'spacing' };
+      return { ok: false, reason: smallFace };
     }
     S.crossings = r.crossings;
     // A frame exactly on a triple point has no well-defined crossing order.
@@ -1060,7 +1121,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, smallFaces, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, circD, mod
   };
 })();
@@ -1075,7 +1136,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, crossingSpacing: true, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: true, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1512,7 +1573,8 @@ const KC = (function () {
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
-  $('crossingSpacing').onchange = e => { opts.crossingSpacing = e.target.checked; };
+  ['protectBigons','protectKinks'].forEach(id=>$(id).onchange=e=>{opts[id]=e.target.checked;});
+  ['bigonArea','kinkArea'].forEach(id=>$(id).oninput=e=>{opts[id]=+e.target.value;$(id+'V').textContent=opts[id]+' px²';});
   $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
@@ -1822,7 +1884,10 @@ const KC = (function () {
         KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
       }, {
         under: drag.under,
-        minCrossingDistance: opts.crossingSpacing ? 20 / view.s : 0,
+        faceLimits: {
+          bigon: opts.protectBigons ? {area:opts.bigonArea/(view.s*view.s),thickness:8/view.s,separation:16/view.s} : null,
+          kink: opts.protectKinks ? {area:opts.kinkArea/(view.s*view.s),thickness:6/view.s} : null
+        },
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
       if (!r.ok) { blocked = r.reason; break; }
@@ -1833,7 +1898,7 @@ const KC = (function () {
       if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
     }
     if (steps) changed();
-    if (blocked && blocked !== drag.lastBlocked) toast({ spacing: 'Crossings are too close. Turn off “Keep crossings apart” in settings to allow closer moves.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ bigon: 'This bigon is too small or thin. Adjust Protect bigons in settings to allow it to shrink.', kink: 'This R1 kink is too small or thin. Adjust Protect R1 kinks in settings to allow it to shrink.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }

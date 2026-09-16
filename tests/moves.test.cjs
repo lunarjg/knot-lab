@@ -23,26 +23,62 @@ const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);asser
 const r1birth=KC.reconcile([],[flat],[curled],KC.computeRaw([curled]),{nextId:()=>id++});assert(r1birth.ok);assert.deepEqual(r1birth.ev,{r1:1,r2:0,r3:0});
 console.log('R1 birth and death remain correctly classified: PASS');
 
-// Drag spacing is transactional and checks the swept path, not just endpoints.
+// Only monogons and bigons are protected: a nearby R3 triangle remains free.
 const moveBottom = y => cm => { cm[2].pts[0].y=y;cm[2].pts[1].y=y; };
-const spaced=state(fixture(-30)),spacedBefore=JSON.stringify(spaced);
-const crowded=KC.attemptStep(spaced,moveBottom(-5),{minCrossingDistance:20});
-assert.equal(crowded.ok,false);assert.equal(crowded.reason,'spacing');
-assert.equal(JSON.stringify(spaced),spacedBefore,'Rejected drag must preserve geometry, crossings and next ID');
-const jump=state(fixture(-30)),jumpBefore=JSON.stringify(jump);
-const crossed=KC.attemptStep(jump,moveBottom(30),{minCrossingDistance:20});
-assert.equal(crossed.ok,false);assert.equal(crossed.reason,'spacing');assert.equal(JSON.stringify(jump),jumpBefore);
-const dense=state(fixture(-5));
-assert(KC.attemptStep(dense,moveBottom(-10),{minCrossingDistance:20}).ok,'Dense diagrams must be able to spread out');
-const unchanged=state(fixture(-5));
-assert(KC.attemptStep(unchanged,()=>{},{minCrossingDistance:20}).ok,'Existing density must not block no-op steps');
-const unrestricted=state(fixture(-30));
-const allowed=KC.attemptStep(unrestricted,moveBottom(30),{minCrossingDistance:0});
-assert(allowed.ok);assert.equal(allowed.ev.r3,1,'Turning spacing off must preserve R3 classification');
-const birthState=state([kink(.5),bar()]),birthBefore=JSON.stringify(birthState);
-const closeBirth=KC.attemptStep(birthState,cm=>{cm[0].pts[2].y=-1},{minCrossingDistance:20});
-assert.equal(closeBirth.reason,'spacing');assert.equal(JSON.stringify(birthState),birthBefore,'Rejected new crossings must not consume IDs');
-console.log('Crossing spacing, swept collision, rollback, dense-diagram recovery and unrestricted R3: PASS');
+const faceLimits={bigon:{area:400,thickness:8,separation:16},kink:{area:180,thickness:6}};
+const triangle=state(fixture(-30));
+assert.equal(KC.smallFaces(triangle.comps,triangle.crossings).length,0);
+assert(KC.attemptStep(triangle,moveBottom(-5),{faceLimits}).ok,'Close crossings outside bigons/kinks must remain free');
+const triple=state(fixture(-1));let r3Count=0;
+for(const y of [0,1]) {const r=KC.attemptStep(triple,cm=>cm[2].pts.forEach(p=>{if(p.y<2)p.y=y}),{faceLimits});assert(r.ok);r3Count+=r.ev.r3;}
+assert.equal(r3Count,1);
+const trianglePass=state(fixture(-1));
+const triangleMove=KC.attemptStep(trianglePass,moveBottom(1),{faceLimits});
+assert(triangleMove.ok);assert.equal(triangleMove.ev.r3,1);
+
+// The crossings of this lens stay 80 units apart while its curved area collapses.
+const lensCoords=h=>[
+ [[-80,-40],[-40,0],[0,h],[40,0],[80,-40],[80,-100],[-80,-100]],
+ [[-80,40],[-40,0],[0,-h],[40,0],[80,40],[80,100],[-80,100]]
+];
+const lens=h=>state(lensCoords(h).map(poly));
+const flattenLens=h=>cm=>{cm[0].pts[2].y=h;cm[1].pts[2].y=-h;};
+const lensState=lens(20);assert.equal(lensState.crossings.length,2);
+assert(KC.smallFaces(lensState.comps,lensState.crossings).some(f=>f.type==='bigon'&&Math.abs(f.area-1600)<1e-7));
+const lensBefore=JSON.stringify(lensState);
+const collapsed=KC.attemptStep(lensState,flattenLens(2),{faceLimits});
+assert.equal(collapsed.reason,'bigon');assert.equal(JSON.stringify(lensState),lensBefore,'Rejected bigon squeeze must roll back');
+const almostFlat=lens(20);assert.equal(KC.attemptStep(almostFlat,flattenLens(1e-10),{faceLimits}).reason,'bigon');
+const wide=lens(20);assert(KC.attemptStep(wide,flattenLens(12),{faceLimits}).ok);
+const disabled=lens(20);assert(KC.attemptStep(disabled,flattenLens(2),{faceLimits:{kink:faceLimits.kink}}).ok,'Bigon toggle must act independently');
+const narrow=lens(1);assert(KC.attemptStep(narrow,flattenLens(2),{faceLimits}).ok,'Small imported bigons must be able to expand');
+const shrinking=lens(1),shrinkingBefore=JSON.stringify(shrinking);
+assert.equal(KC.attemptStep(shrinking,flattenLens(.5),{faceLimits}).reason,'bigon');assert.equal(JSON.stringify(shrinking),shrinkingBefore);
+// Sufficient area alone must not admit a long, thin bigon.
+const thin=lens(20);const thinResult=KC.attemptStep(thin,flattenLens(6),{faceLimits});
+assert.equal(thinResult.reason,'bigon','Area 480 passes the area floor but must fail thickness');
+// Applying scale-aware world limits yields the same decision at every zoom.
+for(const zoom of [.25,1,4]) {
+ const coords=lensCoords(20).map(p=>p.map(([x,y])=>[x/zoom,y/zoom]));const s=state(coords.map(poly));
+ const r=KC.attemptStep(s,cm=>{cm[0].pts[2].y=2/zoom;cm[1].pts[2].y=-2/zoom;},{faceLimits:{bigon:{area:400/zoom**2,thickness:8/zoom,separation:16/zoom}}});
+ assert.equal(r.reason,'bigon');
+}
+const scaledCurl=()=>state([poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[x*20,y*20]))]);
+const kinkState=scaledCurl(),kinkBefore=JSON.stringify(kinkState);
+assert(KC.smallFaces(kinkState.comps,kinkState.crossings).some(f=>f.type==='kink'&&Math.abs(f.area-400)<1e-7));
+const flattenKink=cm=>cm[0].pts.forEach(p=>p.y*=.1);
+assert.equal(KC.attemptStep(kinkState,flattenKink,{faceLimits}).reason,'kink');assert.equal(JSON.stringify(kinkState),kinkBefore);
+const kinkDisabled=scaledCurl();assert(KC.attemptStep(kinkDisabled,flattenKink,{faceLimits:{bigon:faceLimits.bigon}}).ok);
+const born=state([flat]),bornBefore=JSON.stringify(born);
+assert.equal(KC.attemptStep(born,cm=>{cm[0].pts=curled.pts.map(p=>({...p}));},{faceLimits}).reason,'kink');assert.equal(JSON.stringify(born),bornBefore,'Rejected kink birth must preserve IDs');
+// Face detection must not depend on orientation or the cyclic polyline seam.
+for(const reverse of [false,true])for(let shift=0;shift<8;shift++) {
+ let pts=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]];
+ if(reverse)pts.reverse();pts=pts.slice(shift).concat(pts.slice(0,shift));
+ const s=state([poly(pts)]),faces=KC.smallFaces(s.comps,s.crossings);
+ assert.equal(faces.length,1);assert.equal(faces[0].type,'kink');assert(Math.abs(faces[0].area-1)<1e-8);
+}
+console.log('Bigon/kink area, thinness, independent toggles, curved boundaries, zoom, rollback and unrestricted R3: PASS');
 
 // Assisted R1 removes only a nearby empty monogon, never a threaded/enclosing loop.
 const curlPoints=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]];

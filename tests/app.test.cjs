@@ -144,3 +144,26 @@ for(const enabled of [true,false]) {
  p.ids.get('redo').click();assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
 }
 console.log('R1 drag assistance, click-only preservation, off switch and single-gesture undo/redo: PASS');
+
+// Exercise the two independent controls through the actual drag event path.
+for(const protect of [true,false]) {
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();d.comps=[
+ [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
+ [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
+ ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
+ api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('protectBigons').onchange({target:{checked:protect}});
+ p.ids.get('bigonArea').oninput({target:{value:'600'}});assert.equal(p.ids.get('bigonAreaV').textContent,'600 px²');
+ p.ids.get('kinkArea').oninput({target:{value:'240'}});assert.equal(p.ids.get('kinkAreaV').textContent,'240 px²');
+ const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
+ for(let i=0;i<4;i++)p.step();p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
+ const faces=vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
+ assert(faces.length);
+ if(protect){assert(faces.every(f=>f.area>=600-1e-6&&f.thickness>=8-1e-6&&f.separation>=16-1e-6));assert(p.ids.get('toast').textContent.includes('bigon'));}
+ else assert(faces.some(f=>f.area<600),'Disabling only bigon protection must allow a smaller bigon');
+ p.ids.get('undo').click();assert.equal(api.analysis.c,2);
+}
+console.log('Bigon drag constraint, separate area controls, off switch and undo through pointer events: PASS');

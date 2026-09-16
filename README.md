@@ -73,10 +73,16 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 ## Interaction update
 
 - Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
-- Keep crossings apart is on by default for strand dragging, with a 20-screen-pixel minimum. Existing dense diagrams can spread out. The check also guards the swept crossing path and rolls back rejected geometry and crossing IDs. Turn it off for R2/R3 moves requiring close crossings.
+- Protect bigons and Protect R1 kinks independently constrain the size of those regions during dragging. Other crossing pairs are unrestricted. Minimum areas are adjustable; existing undersized regions may expand. Rejected moves restore geometry and crossing IDs.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
 ## R1 drag assistance
 
 Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Loosen small R1 loops while dragging” to retain curls.
+
+## Bigon and kink size protection
+
+The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. Default minimum areas are 400 screen px² for bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for bigons, 6 px for kinks) and a 16 px crossing separation for bigons. Limits scale with the current zoom. Existing undersized faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
+
+Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.

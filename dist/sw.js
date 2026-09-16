@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v6-r1-drag';
+const CACHE='knot-lab-v7-bigon-kink-area';
 const FILES=['./','./index.html','./pd-import.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
