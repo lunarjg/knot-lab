@@ -69,3 +69,10 @@ R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않�
 이 사본은 현재 계정의 별도 Sites 프로젝트로 게시합니다. 이전 계정의 사이트 주소나 권한은 변경하지 않습니다.
 사이트 코드의 수정 및 재게시 권한은 Sites에서 소유 계정으로 관리하며, 방문자에게 편집 권한을 부여하지 않습니다.
 앱에는 공유 데이터를 수정하는 서버 API가 없습니다. 그리기·파일 열기·자동 저장은 각 방문자의 브라우저에서만 작동합니다.
+
+## Interaction update
+
+- Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
+- Keep crossings apart is on by default for strand dragging, with a 20-screen-pixel minimum. Existing dense diagrams can spread out. The check also guards the swept crossing path and rolls back rejected geometry and crossing IDs. Turn it off for R2/R3 moves requiring close crossings.
+- The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
+- Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.

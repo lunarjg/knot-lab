@@ -1,14 +1,14 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
 function boot(saved,narrow=true){
- const all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ const arcs=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
   setAttribute(k,v){this.attrs[k]=String(v)} removeAttribute(k){delete this.attrs[k]} getAttribute(k){return this.attrs[k]}
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
-  getContext(){return new Proxy({measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
+  getContext(){return new Proxy({arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
   focus(){doc.activeElement=this} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
@@ -17,7 +17,7 @@ function boot(saved,narrow=true){
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,flush,fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
+ flush();return {ctx:context,doc,ids,store,timers,arcs,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
 assert.equal(lab.analysis.c,0);assert(t.ids.get('inspector').inert);
@@ -83,4 +83,44 @@ console.log('Touch, pen and mouse resize, drag-to-hide, edge-arrow reopen, width
  r.ctx.knotLab.closeTab(original);assert.equal(r.ctx.knotLab.tabs.length,1);assert.equal(r.ctx.knotLab.analysis.c,0);
  const migrated=boot(originalDoc);assert.equal(migrated.ctx.knotLab.analysis.c,3);assert.equal(migrated.ctx.knotLab.tabs.length,1);
  console.log('New-file tabs, invalid-file isolation, independent geometry/history/counters, workspace reload, closing and legacy migration: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1});
+
+// The precise eraser outline follows every pressed sample, even before hover,
+// over empty space, and when the final pointer-up position has no move event.
+for (const pointerType of ['mouse','pen','touch']) {
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ p.doc.querySelectorAll('#eraseModes button').find(e=>e.dataset.erase==='precise').click();
+ p.ids.get('penDoubleTap').onchange({target:{checked:false}});
+ p.ids.get('palm').onchange({target:{checked:false}});
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ api.state.open=[{pts:Array.from({length:41},(_,i)=>({x:100+i*5,y:100}))}];
+ const ev=(x,y,type)=>({pointerType,pointerId:80,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ const fire=(type,e)=>{p.arcs.length=0;p.fire(canvas,type,e);const last=p.arcs.at(-1);assert(last,'Eraser outline must be rendered');assert.equal(last[0],e.clientX);assert.equal(last[1],e.clientY);};
+ fire('pointerdown',ev(120,100,'pointerdown'));
+ assert(api.state.open.every(st=>st.pts.every(q=>Math.abs(q.x-120)>=12)));
+ const moving=ev(180,100,'pointermove');moving.getCoalescedEvents=()=>[ev(150,100,'pointermove'),ev(165,100,'pointermove')];
+ fire('pointermove',moving);
+ assert(api.state.open.every(st=>st.pts.every(q=>q.x<=108||q.x>=192)),'Pressed movement must erase the entire path');
+ fire('pointermove',ev(180,160,'pointermove'));
+ fire('pointerup',ev(210,160,'pointerup'));
+ p.ids.get('undo').click();assert.equal(api.state.open.length,1);assert.equal(api.state.open[0].pts.length,41,'One stroke is one undo');
+ p.ids.get('redo').click();assert(api.state.open[0].pts.length<41);
+ fire('pointerdown',ev(250,100,'pointerdown'));fire('pointerup',ev(250,100,'pointerup'));
+ assert(api.state.open.every(st=>st.pts.every(q=>Math.abs(q.x-250)>=12)),'Repeated clicks erase at the new cursor position');
+}
+console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space movement and undo for mouse/pen/touch: PASS');
+
+(async()=>{
+ const p=boot(),api=p.ctx.knotLab,original=api.activeTabId;
+ api.importPD(pd);const originalJSON=JSON.stringify(api.serialize()),originalW=api.analysis.writhe;
+ const fileA=new File([originalJSON],'first.json'),fileB=new File([originalJSON],'second.json');
+ await p.ids.get('fileInput').onchange({target:{files:[fileA,new File(['broken'],'invalid.json'),fileB]}});
+ assert.equal(api.tabs.length,3);assert.deepEqual(Array.from(api.tabs,t=>t.title).slice(1),['first','second']);
+ assert.equal(p.ids.get('documentTabs').children.length,3);
+ assert.equal(p.ids.get('documentTabs').children[2].children[0].getAttribute('aria-selected'),'true');
+ api.activateTab(original);assert.equal(api.analysis.writhe,originalW);
+ p.ids.get('newTab').click();assert.equal(api.tabs.length,4);assert.equal(api.analysis.c,0);
+ api.activateTab(original);assert.equal(api.analysis.c,3);
+ console.log('File picker batch opens, failed-file isolation, visible selected tabs and New tab: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});

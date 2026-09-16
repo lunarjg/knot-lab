@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v4-en';
+const CACHE='knot-lab-v5-tabs-spacing-eraser';
 const FILES=['./','./index.html','./pd-import.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

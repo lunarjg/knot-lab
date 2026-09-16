@@ -22,3 +22,24 @@ const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});
 const r1birth=KC.reconcile([],[flat],[curled],KC.computeRaw([curled]),{nextId:()=>id++});assert(r1birth.ok);assert.deepEqual(r1birth.ev,{r1:1,r2:0,r3:0});
 console.log('R1 birth and death remain correctly classified: PASS');
+
+// Drag spacing is transactional and checks the swept path, not just endpoints.
+const moveBottom = y => cm => { cm[2].pts[0].y=y;cm[2].pts[1].y=y; };
+const spaced=state(fixture(-30)),spacedBefore=JSON.stringify(spaced);
+const crowded=KC.attemptStep(spaced,moveBottom(-5),{minCrossingDistance:20});
+assert.equal(crowded.ok,false);assert.equal(crowded.reason,'spacing');
+assert.equal(JSON.stringify(spaced),spacedBefore,'Rejected drag must preserve geometry, crossings and next ID');
+const jump=state(fixture(-30)),jumpBefore=JSON.stringify(jump);
+const crossed=KC.attemptStep(jump,moveBottom(30),{minCrossingDistance:20});
+assert.equal(crossed.ok,false);assert.equal(crossed.reason,'spacing');assert.equal(JSON.stringify(jump),jumpBefore);
+const dense=state(fixture(-5));
+assert(KC.attemptStep(dense,moveBottom(-10),{minCrossingDistance:20}).ok,'Dense diagrams must be able to spread out');
+const unchanged=state(fixture(-5));
+assert(KC.attemptStep(unchanged,()=>{},{minCrossingDistance:20}).ok,'Existing density must not block no-op steps');
+const unrestricted=state(fixture(-30));
+const allowed=KC.attemptStep(unrestricted,moveBottom(30),{minCrossingDistance:0});
+assert(allowed.ok);assert.equal(allowed.ev.r3,1,'Turning spacing off must preserve R3 classification');
+const birthState=state([kink(.5),bar()]),birthBefore=JSON.stringify(birthState);
+const closeBirth=KC.attemptStep(birthState,cm=>{cm[0].pts[2].y=-1},{minCrossingDistance:20});
+assert.equal(closeBirth.reason,'spacing');assert.equal(JSON.stringify(birthState),birthBefore,'Rejected new crossings must not consume IDs');
+console.log('Crossing spacing, swept collision, rollback, dense-diagram recovery and unrestricted R3: PASS');

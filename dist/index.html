@@ -203,7 +203,7 @@ h2{font-size:15px}
  .hint{left:10px;right:10px;bottom:8px;font-size:11px}
 }
 
-.document-tabs{display:flex;align-items:stretch;gap:6px;margin:0 0 10px;min-width:0}
+.document-tabs{display:flex;align-items:stretch;gap:6px;margin:0 0 10px;min-width:0;flex-shrink:0}
 .tab-list{display:flex;align-items:stretch;gap:4px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;min-width:0;flex:1;padding-bottom:3px}
 .document-tab{display:flex;align-items:center;flex:0 0 auto;max-width:240px;min-width:130px;border:1px solid var(--rule);border-radius:10px;background:var(--bg);overflow:hidden}
 .document-tab.is-active{background:var(--paper);border-color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
@@ -212,7 +212,9 @@ h2{font-size:15px}
 .document-tab.is-active .tab-select{color:var(--accent);font-weight:600}
 .document-tab .tab-close{width:36px;flex-shrink:0;font-size:19px;color:var(--muted)}
 .document-tab .tab-close:hover{background:var(--warn-soft);color:var(--warn)}
-.new-tab{flex-shrink:0;width:44px;padding:0;font-size:24px}
+.new-tab{flex-shrink:0;padding:6px 10px;font-size:14px;white-space:nowrap}
+.document-tabs>.iconbtn{flex-shrink:0}
+@media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
 </style>
 </head>
 <body>
@@ -221,7 +223,8 @@ h2{font-size:15px}
     <header class="apphead"><strong>Knot Diagram Lab</strong><span class="save-status" id="saveStatus" role="status">Autosaved on this device</span></header>
     <div class="document-tabs">
       <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
-      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
+      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋ New tab</button>
+      <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
     </div>
     <div class="bar">
       <div class="seg views" role="group" aria-label="Views">
@@ -231,7 +234,6 @@ h2{font-size:15px}
         <button data-view="S" aria-pressed="false">Seifert</button>
       </div>
       <span class="spacer"></span><button class="iconbtn" id="pdOpen">Import PD</button>
-      <button class="iconbtn" id="openBtn" title="Open file (Ctrl+O)">Open</button>
       <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
       <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
       <input type="file" id="fileInput" accept=".json,application/json" multiple hidden>
@@ -320,6 +322,7 @@ h2{font-size:15px}
       <h2>Drag &amp; view settings</h2>
       <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
       <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
+      <label class="chk"><input type="checkbox" id="crossingSpacing" checked><span>Keep crossings apart<small>Prevents crossings from moving within 20 screen pixels of one another while dragging. Already crowded crossings can move apart. Turn off for R2 or R3 moves that bring crossings together.</small></span></label>
       <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Show crossing signs</span></label>
@@ -331,7 +334,8 @@ h2{font-size:15px}
         <input id="fileName" placeholder="Filename (defaults to date)" aria-label="Filename">
         <button id="saveBtn2">Save</button>
       </div>
-      <div class="btns" style="margin-top:6px"><button id="openBtn2">Open file</button></div>
+      <div class="btns" style="margin-top:6px"><button id="openBtn2">Open files in new tabs</button></div>
+      <p class="small">Each file opens in its own tab with separate undo history. Select multiple JSON files to open them together.</p>
       <label class="chk"><input type="checkbox" id="autosave" checked><span>Autosave in this browser<small>Restores open tabs, diagrams, and move counts on this device. Use Save to export a JSON file for backup or transfer to another device.</small></span></label>
     </section>
 
@@ -700,6 +704,28 @@ const KC = (function () {
     return { ok: true, crossings: raw, ev };
   }
 
+  // Check the swept separation as well as the endpoint, so a fast or nearly
+  // tangent drag cannot jump one crossing through another between frames.
+  function crossingsTooClose(before, after, distance) {
+    if (!(distance > 0)) return false;
+    const old = new Map(before.map(x => [x.id, x]));
+    for (let i = 0; i < after.length; i++) for (let j = i + 1; j < after.length; j++) {
+      const a = after[i], b = after[j], oa = old.get(a.id), ob = old.get(b.id);
+      const x = a.x - b.x, y = a.y - b.y;
+      let separation = Math.hypot(x, y), limit = distance;
+      if (oa && ob) {
+        const ox = oa.x - ob.x, oy = oa.y - ob.y, dx = x - ox, dy = y - oy;
+        const length2 = dx * dx + dy * dy;
+        const t = length2 ? Math.max(0, Math.min(1, -(ox * dx + oy * dy) / length2)) : 0;
+        separation = Math.hypot(ox + t * dx, oy + t * dy);
+        // Dense imported diagrams remain usable: permit separation to increase.
+        limit = Math.min(distance, Math.hypot(ox, oy));
+      }
+      if (separation + 1e-6 < limit) return true;
+    }
+    return false;
+  }
+
   function attemptStep(S, mutator, opt) {
     const backup = cloneComps(S.comps), next = S.nextId;
     const baseline = S.moveCheckpoint || { comps:backup, crossings:cloneCrossings(S.crossings) };
@@ -708,6 +734,10 @@ const KC = (function () {
     const raw = computeRaw(S.comps);
     const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
+    if (crossingsTooClose(S.crossings, r.crossings, opt?.minCrossingDistance)) {
+      S.comps = backup; S.nextId = next;
+      return { ok: false, reason: 'spacing' };
+    }
     S.crossings = r.crossings;
     // A frame exactly on a triple point has no well-defined crossing order.
     // Keep the last regular diagram and classify once the strands separate.
@@ -967,7 +997,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, crossingSpacing: true, arrows: true, signs: false, grid: false, autoClose: true, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1404,6 +1434,7 @@ const KC = (function () {
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
+  $('crossingSpacing').onchange = e => { opts.crossingSpacing = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
 
@@ -1502,6 +1533,8 @@ const KC = (function () {
       active = { ...base, kind: 'draw' }; return;
     }
     if (t === 'erase') {
+      cursor = w;
+      cv.style.cursor = opts.eraseMode === 'precise' ? 'none' : 'cell';
       pushUndo(); erasing = { last: w, changed: false };
       active = { ...base, kind: 'erase' };
       eraseAlong(w, w, tol); return;
@@ -1535,7 +1568,15 @@ const KC = (function () {
       hoverSnap = nearestEndpoint(w, SNAP / view.s, stroke.attach);
       render(); return;
     }
-    if (active.kind === 'erase') { eraseAlong(erasing.last, w, tolFor(e)); erasing.last = w; return; }
+    if (active.kind === 'erase') {
+      const samples = e.getCoalescedEvents?.() || [];
+      for (const ev of [...samples, e]) {
+        const q = toWorld(ev);
+        cursor = q;
+        eraseAlong(erasing.last, q, tolFor(e)); erasing.last = q;
+      }
+      return;
+    }
     if (active.kind === 'lasso') {
       const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
       evs.forEach(ev => { const q = toWorld(ev), l = lasso.pts[lasso.pts.length - 1]; if (Math.hypot(l.x - q.x, l.y - q.y) * view.s > 3) lasso.pts.push(q); });
@@ -1669,6 +1710,7 @@ const KC = (function () {
       }
     }
     if (active && active.id === (e.pointerType === 'mouse' ? 'mouse' : e.pointerId)) {
+      if (active.kind === 'erase' && e.type !== 'pointercancel') moveAction(e);
       if (active.kind === 'ignore') active = null;
       else if (e.type === 'pointercancel' && active.type === 'touch' && active.kind !== 'pan') cancelAction(); else endAction();
     }
@@ -1701,13 +1743,15 @@ const KC = (function () {
         KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
       }, {
         under: drag.under,
+        minCrossingDistance: opts.crossingSpacing ? 20 / view.s : 0,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
       if (!r.ok) { blocked = r.reason; break; }
       drag.changed = true; addEvents(r.ev); steps++;
     }
     if (steps) changed();
-    if (blocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ spacing: 'Crossings are too close. Turn off “Keep crossings apart” in settings to allow closer moves.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
+    drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }
 
