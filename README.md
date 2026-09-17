@@ -167,12 +167,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v17 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v18 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v17 -m "Describe the tested application release"
+git tag -a v18 -m "Describe the tested application release"
 git push github main
-git push github v17
+git push github v18
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.
@@ -192,3 +192,7 @@ To undo a selected change on the shared branch, first identify its full SHA with
 Source history does **not** back up visitors' diagrams, document tabs, browser-local autosave, or local undo history. Users must export their diagrams as JSON and keep those files separately. The static JavaScript is delivered to browsers and can be inspected, but visitors receive no repository write permission or Sites deployment permission.
 
 CI and the local test commands use automated Node mock environments. They do not establish real Safari rendering, touch behavior, Apple Pencil hardware behavior, or production service-worker behavior; validate those separately when making UI/input/offline changes.
+
+### Strand eraser
+
+Erase strand removes the touched arc between consecutive crossings or open endpoints. Its hover preview shows that arc only. Boundaries stay fixed throughout one gesture so removing a crossing cannot cascade into deleting the rest of the component. Crossing-free loops are one strand. Erase segment remains available for small local cuts. Remaining pieces stay open and can be joined again; surviving crossing heights, JSON/autosave and undo/redo are preserved.

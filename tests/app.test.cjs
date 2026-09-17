@@ -387,3 +387,80 @@ for(const pointerType of ['mouse','pen','touch']) {
  p.ids.get('redo').click();assert.equal(api.analysis.c,2);assert(api.state.comps[0].pts.some(q=>q.y<195));
 }
 console.log('Crowded crossing escape through mouse/pen/touch, undo and redo: PASS');
+
+// Strand eraser removes a crossing-bounded arc, never its entire component.
+for(const pointerType of ['mouse','pen','touch'])for(const wrap of [false,true]) {
+ const p=boot(),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx);api.importPD(pd);
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.ids.get('penDoubleTap').onchange({target:{checked:false}});p.ids.get('palm').onchange({target:{checked:false}});
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ assert.equal(p.doc.querySelectorAll('#eraseModes button').find(e=>e.dataset.erase==='strand').getAttribute('aria-pressed'),'true');
+ const c=api.state.comps[0],L=c.len,cuts=api.state.crossings.flatMap(X=>X.occ.map(o=>o.s)).sort((a,b)=>a-b);
+ const i=wrap?cuts.length-1:0,start=cuts[i],end=wrap?cuts[0]+L:cuts[i+1],hit=K.pointAtS(c,(start+end)/2);
+ const original=JSON.stringify(api.serialize().comps),oldCrossings=api.state.crossings.map(X=>({x:X.x,y:X.y,over:X.occ[X.over]}));
+ const ev=()=>({pointerType,pointerId:81,clientX:hit.x,clientY:hit.y,button:0,width:1,height:1,preventDefault(){}});
+ p.fire(p.ids.get('cv'),'pointerdown',ev());
+ const afterDown=JSON.stringify(api.serialize().open);
+ for(let j=0;j<4;j++)p.fire(p.ids.get('cv'),'pointermove',ev());
+ p.fire(p.ids.get('cv'),'pointerup',ev());p.flush();
+ assert.equal(JSON.stringify(api.serialize().open),afterDown,'Repeated samples cannot cascade into neighboring strands');
+ assert.equal(api.state.comps.length,0);assert.equal(api.state.open.length,1);
+ const points=api.state.open[0].pts,remaining=points.slice(1).reduce((sum,q,j)=>sum+Math.hypot(q.x-points[j].x,q.y-points[j].y),0);
+ assert(Math.abs(remaining-(L-(end-start)))<4.01);assert(remaining>L*.4);
+ assert(oldCrossings.every(X=>api.state.memory.some(m=>Math.hypot(m.x-X.x,m.y-X.y)<1e-6&&Math.abs(m.ox*X.over.dy-m.oy*X.over.dx)<1e-6)),'Remember crossing heights for reconnection');
+ const restored=api.deserialize(api.serialize());assert.equal(restored.open.length,1);
+ p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),original);assert.equal(api.analysis.c,3);
+ p.ids.get('redo').click();assert.equal(api.state.open.length,1);
+}
+// Open arcs are cut only at their own crossing boundaries; other curves survive.
+{
+ const p=boot(),api=p.ctx.knotLab;api.view.s=1;api.view.ox=0;api.view.oy=0;
+ api.state.open=[{pts:[{x:100,y:200},{x:500,y:200}]},{pts:[{x:200,y:100},{x:200,y:300}]},{pts:[{x:400,y:100},{x:400,y:300}]}];
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ const ev=x=>({pointerType:'mouse',pointerId:82,clientX:x,clientY:200,button:0,preventDefault(){}});
+ p.fire(p.ids.get('cv'),'pointerdown',ev(300));p.fire(p.ids.get('cv'),'pointerup',ev(300));
+ assert.equal(api.state.open.length,4);assert(api.state.open.some(s=>s.pts[0].x===200&&s.pts[0].y===100));
+ const horizontal=api.state.open.filter(s=>s.pts.every(q=>q.y===200));assert.equal(horizontal.length,2);
+ assert(horizontal[0].pts.at(-1).x<200);assert(horizontal[1].pts[0].x>400);
+ p.ids.get('undo').click();assert.equal(api.state.open.length,3);
+ // At a crossing, choose the visually upper (later drawn) vertical strand only.
+ p.fire(p.ids.get('cv'),'pointerdown',ev(200));p.fire(p.ids.get('cv'),'pointerup',ev(200));
+ assert(api.state.open.some(s=>s.pts[0].x===100&&s.pts.at(-1).x===500));
+ assert(api.state.open.some(s=>s.pts[0].x===400&&s.pts.at(-1).y===300));
+ p.ids.get('undo').click();
+ // Drag across two separate strands in one gesture; one undo restores both.
+ const v=(x,y)=>({...ev(x),clientY:y});
+ p.fire(p.ids.get('cv'),'pointerdown',v(200,150));p.fire(p.ids.get('cv'),'pointermove',v(400,150));p.fire(p.ids.get('cv'),'pointerup',v(400,150));
+ assert(api.state.open.filter(s=>s.pts[0].x===200||s.pts[0].x===400).every(s=>s.pts[0].y>200));
+ p.ids.get('undo').click();assert.equal(api.state.open.length,3);
+}
+console.log('Strand eraser: mouse/pen/touch, cyclic arcs, stable gesture boundaries, open crossings, upper-strand hit, multi-delete, memory, JSON and undo/redo: PASS');
+// Reconnect a strand-erased knot and retain a surviving crossing's height.
+{
+ const p=arcSession('mouse',false),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx);api.importPD(pd);api.view.s=1;api.view.ox=0;api.view.oy=0;
+ const cm=K.cloneComps(api.state.comps)[0],xs=api.state.crossings.map(X=>({x:X.x,y:X.y,over:{...X.occ[X.over]}}));
+ const cut=api.state.crossings.flatMap(X=>X.occ.map(o=>o.s)).sort((a,b)=>a-b),a=cut[0],b=cut[1],hit=K.pointAtS(cm,(a+b)/2);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ const ev={pointerType:'mouse',pointerId:83,clientX:hit.x,clientY:hit.y,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);
+ const rem=api.state.open[0].pts,path=[[rem.at(-1).x,rem.at(-1).y]];
+ for(let s=a;s<b;s+=4){const q=K.pointAtS(cm,s);path.push([q.x,q.y]);}path.push([rem[0].x,rem[0].y]);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();p.draw(path);
+ assert.equal(api.state.open.length,0);assert.equal(api.state.comps.length,1);assert.equal(api.analysis.c,3);
+ const boundary=[K.pointAtS(cm,a),K.pointAtS(cm,b)];
+ const survivor=xs.find(X=>boundary.every(q=>Math.hypot(q.x-X.x,q.y-X.y)>10));assert(survivor);
+ const now=api.state.crossings.find(X=>Math.hypot(X.x-survivor.x,X.y-survivor.y)<1);assert(now);
+ const over=now.occ[now.over];assert(Math.abs(over.dx*survivor.over.dy-over.dy*survivor.over.dx)<.01);
+ p.ids.get('undo').click();assert.equal(api.state.open.length,1);
+}
+// Crossing-free loops still constitute a single strand; other components survive.
+{
+ const p=boot(),api=p.ctx.knotLab,d=api.serialize();d.comps=[[[100,100],[200,100],[200,200],[100,200]],[[400,100],[500,100],[500,200],[400,200]]];
+ api.openTab(api.deserialize(d));api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ const ev={pointerType:'mouse',pointerId:84,clientX:150,clientY:100,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);
+ assert.equal(api.state.comps.length,1);assert(api.state.comps[0].pts.every(q=>q.x>=400));
+ p.ids.get('undo').click();assert.equal(api.state.comps.length,2);
+}
+console.log('Strand erase/rejoin preserves surviving crossing heights; isolated loops and other components: PASS');

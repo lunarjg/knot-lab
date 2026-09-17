@@ -292,7 +292,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           </div>
           <div class="toolopt" id="optErase" hidden>
             <div class="seg sub" id="eraseModes" role="group" aria-label="Eraser mode">
-              <button data-erase="stroke" aria-pressed="true">Erase stroke</button>
+              <button data-erase="strand" aria-pressed="true">Erase strand</button>
               <button data-erase="precise" aria-pressed="false">Erase segment</button>
             </div>
             <label class="inline" id="eraseSizeWrap" hidden>Size <input type="range" id="eraseSize" min="6" max="80" value="24"></label>
@@ -1256,7 +1256,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, protectBigons: false, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, protectBigons: false, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1775,7 +1775,7 @@ const KC = (function () {
     if (mod) return;
     const k = kk;
     if (k === 'v') setTool('move'); else if (k === 'd') setTool('draw'); else if (k === 'x') setTool('flip'); else if (k === 'l') setTool('lasso');
-    else if (k === 'e') { if (tool === 'erase') setEraseMode(opts.eraseMode === 'stroke' ? 'precise' : 'stroke'); else setTool('erase'); }
+    else if (k === 'e') { if (tool === 'erase') setEraseMode(opts.eraseMode === 'strand' ? 'precise' : 'strand'); else setTool('erase'); }
     else if (k === '1') setView('diagram'); else if (k === '2') setView('A'); else if (k === '3') setView('B'); else if (k === '4') setView('S');
   });
   window.addEventListener('keyup', e => { if (e.key === 'Shift') { shiftDown = false; if (drag) drag.under = opts.under; } });
@@ -1814,14 +1814,6 @@ const KC = (function () {
     endpoints().forEach(e => { if (exclude && e.i === exclude.i && e.end === exclude.end) return; const d = Math.hypot(e.p.x - w.x, e.p.y - w.y); if (d < bd) { bd = d; best = e; } });
     return best;
   }
-  function hitCurve(w, tol) {
-    let best = null, bd = tol;
-    const scan = (pts, closed, kind, i) => { const n = pts.length; for (let j = 0; j < (closed ? n : n - 1); j++) { const d = distSeg(w, pts[j], pts[(j + 1) % n]); if (d < bd) { bd = d; best = { kind, i }; } } };
-    S.comps.forEach((cm, i) => scan(cm.pts, true, 'closed', i));
-    S.open.forEach((st, i) => scan(st.pts, false, 'open', i));
-    return best;
-  }
-
   // ---------- pen / touch / palm rejection ----------
   const touches = new Map();
   let active = null, pinch = null;
@@ -1865,6 +1857,7 @@ const KC = (function () {
       cursor = w;
       cv.style.cursor = opts.eraseMode === 'precise' ? 'none' : 'cell';
       pushUndo(); erasing = { last: w, changed: false };
+      if(opts.eraseMode==='strand')erasing.strands=strandModel(true);
       active = { ...base, kind: 'erase' };
       eraseAlong(w, w, tol); return;
     }
@@ -2015,7 +2008,7 @@ const KC = (function () {
     cursor = w;
     if (tool === 'flip') { const X = nearestCrossing(w, tol * 1.4); if (X !== hoverX) { hoverX = X; render(); } cv.style.cursor = X ? 'pointer' : 'default'; }
     else if (tool === 'move') { const p = nearestPoint(w, tol); cv.style.cursor = p ? 'grab' : 'default'; }
-    else if (tool === 'erase') { cv.style.cursor = opts.eraseMode === 'precise' ? 'none' : 'cell'; hoverErase = opts.eraseMode === 'stroke' ? hitCurve(w, tol) : null; render(); }
+    else if (tool === 'erase') { cv.style.cursor = opts.eraseMode === 'precise' ? 'none' : 'cell'; hoverErase = opts.eraseMode === 'strand' ? hitStrand(w, tol, strandModel()) : null; render(); }
     else if (tool === 'lasso') { cv.style.cursor = sel && onRotateHandle(e) ? 'grab' : sel && inBox(w, selBox(), 14 / view.s) ? 'move' : 'crosshair'; }
     else { cv.style.cursor = 'crosshair'; const s = nearestEndpoint(w, SNAP / view.s); if ((s && s.p) !== (hoverSnap && hoverSnap.p)) { hoverSnap = s; render(); } }
   });
@@ -2526,18 +2519,108 @@ const KC = (function () {
     S.comps = S.comps.filter((_, i) => !idx.has(i)); S.crossings = keep;
   }
 
-  function eraseAlong(a, b, tol) {
-    let did = false;
-    if (opts.eraseMode === 'stroke') {
-      const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / (tol * 0.5)));
-      for (let k = 0; k <= steps; k++) {
-        const w = { x: a.x + (b.x - a.x) * k / steps, y: a.y + (b.y - a.y) * k / steps };
-        let h;
-        while ((h = hitCurve(w, tol))) {
-          if (h.kind === 'closed') removeClosed(new Set([h.i]), false); else S.open.splice(h.i, 1);
-          did = true;
+  // Freeze strand boundaries for the gesture: erasing a crossing must not
+  // merge neighboring strands and make the same gesture erase the whole knot.
+  function strandPath(cm,start,end) {
+    const first=KC.pointAtS(cm,start),last=KC.pointAtS(cm,end),pts=[{x:first.x,y:first.y}];
+    for(let lap=Math.floor(start/cm.len);lap<=Math.floor(end/cm.len);lap++) {
+      cm.pts.forEach((p,i)=>{
+        const at=cm.cum[i]+lap*cm.len;
+        if(at>start+1e-8&&at<end-1e-8)pts.push({x:p.x,y:p.y});
+      });
+    }
+    pts.push({x:last.x,y:last.y});return pts;
+  }
+  function strandModel(capture=false) {
+    const draft=draftGeometry(),offset=S.comps.length;
+    const crossings=S.crossings.concat(draft.crossings),groups=draft.curves.map((cm,c)=>({
+      cm,closed:c<offset,index:c<offset?c:c-offset,
+      length:c<offset?cm.len:cm.cum[cm.pts.length-1],cuts:[],strands:[]
+    }));
+    crossings.forEach(X=>X.occ.forEach((o,k)=>groups[o.c].cuts.push({s:o.s,over:k===X.over})));
+    const strands=[];
+    groups.forEach(group=>{
+      const L=group.length;if(L<1e-8)return;
+      let cuts=group.cuts.filter(x=>x.s>=0&&x.s<L-1e-8).sort((a,b)=>a.s-b.s);
+      cuts=cuts.filter((x,i)=>!i||x.s-cuts[i-1].s>1e-8);
+      if(!group.closed)cuts=[{s:0,over:false},...cuts.filter(x=>x.s>1e-8),{s:L,over:false}];
+      if(group.closed&&!cuts.length)cuts=[{s:0,over:false}];
+      const count=group.closed?cuts.length:cuts.length-1;
+      for(let i=0;i<count;i++) {
+        const a=cuts[i],b=cuts[(i+1)%cuts.length],end=i===cuts.length-1?b.s+L:b.s;
+        if(end-a.s<1e-8)continue;
+        const strand={group,start:a.s,end,fromOver:a.over,toOver:b.over,pts:strandPath(group.cm,a.s,end),erased:false};
+        group.strands.push(strand);strands.push(strand);
+      }
+    });
+    return {groups,strands,crossings,base:capture?snapshot():null};
+  }
+  function hitStrand(w,tol,model) {
+    let best=null,bd=tol,priority=-1;
+    for(const strand of model.strands) {
+      const p=strand.pts;
+      const rank=(strand.fromOver&&Math.hypot(w.x-p[0].x,w.y-p[0].y)<tol)||
+        (strand.toOver&&Math.hypot(w.x-p.at(-1).x,w.y-p.at(-1).y)<tol)?1:0;
+      for(let i=1;i<p.length;i++) {
+        const d=distSeg(w,p[i-1],p[i]);
+        if(d<bd-1e-8||(Math.abs(d-bd)<1e-8&&rank>priority)) {best=strand;bd=d;priority=rank;}
+      }
+    }
+    // Already erased targets still mask nearby strands for this gesture.
+    return best;
+  }
+  function applyStrandErase(model) {
+    const base=model.base;
+    S.comps=KC.cloneComps(base.comps);S.crossings=KC.cloneCrossings(base.crossings);S.nextId=base.nextId;
+    S.memory=base.memory.map(m=>({...m}));S.open=[];S.moveCheckpoint=null;
+    model.crossings.forEach(X=>rememberCrossing(X));
+    const removed=new Set();
+    for(const group of model.groups) {
+      const deleted=group.strands.filter(s=>s.erased),L=group.length;
+      if(!deleted.length) {
+        if(!group.closed)S.open.push({pts:group.cm.pts.map(p=>({x:p.x,y:p.y}))});
+        continue;
+      }
+      if(group.closed)removed.add(group.index);
+      const intervals=[];
+      for(const strand of deleted) {
+        const i=group.strands.indexOf(strand),all=group.strands;
+        const prev=all[(i+all.length-1)%all.length],next=all[(i+1)%all.length];
+        // Leave a small visible endpoint gap without consuming a short neighbor.
+        const pad=Math.min(2/view.s,(prev.end-prev.start)*.1,(next.end-next.start)*.1);
+        let a=strand.start-pad,b=strand.end+pad;
+        if(!group.closed)intervals.push([Math.max(0,a),Math.min(L,b)]);
+        else if(b-a>=L)intervals.push([0,L]);
+        else {
+          if(a<0){intervals.push([L+a,L]);a=0;}
+          if(b>L){intervals.push([0,b-L]);b=L;}
+          intervals.push([a,b]);
         }
       }
+      intervals.sort((a,b)=>a[0]-b[0]);
+      const kept=[];let end=0;
+      for(const [a,b] of intervals){if(a>end+1e-8)kept.push([end,a]);end=Math.max(end,b);}
+      if(end<L-1e-8)kept.push([end,L]);
+      if(group.closed&&kept.length>1&&kept[0][0]===0&&kept.at(-1)[1]===L) {
+        const first=kept.shift(),last=kept.pop();kept.push([last[0],first[1]+L]);
+      }
+      kept.forEach(([a,b])=>S.open.push({pts:strandPath(group.cm,a,b)}));
+    }
+    removeClosed(removed,false);
+  }
+
+  function eraseAlong(a, b, tol) {
+    let did = false;
+    if (opts.eraseMode === 'strand') {
+      const model=erasing?.strands;
+      if(!model)return;
+      const steps=Math.max(1,Math.ceil(Math.hypot(b.x-a.x,b.y-a.y)/(tol*.5)));
+      for(let k=0;k<=steps;k++) {
+        const w={x:a.x+(b.x-a.x)*k/steps,y:a.y+(b.y-a.y)*k/steps};
+        const strand=hitStrand(w,tol,model);
+        if(strand&&!strand.erased){strand.erased=true;did=true;}
+      }
+      if(did)applyStrandErase(model);
     } else {
       const r = Math.max(opts.eraseSize / 2 / view.s, SEG * 0.6);
       const inside = q => distSeg(q, a, b) < r;
@@ -2579,7 +2662,7 @@ const KC = (function () {
     $('hint').textContent = tool === 'move' ? (opts.under ? 'Drag a strand to move it. It passes under at new crossings (hold Shift to pass over).' : 'Drag a strand to move it. It passes over at new crossings (hold Shift to pass under).')
       : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join it; connecting segments pass under existing arcs.' : 'Strokes remain open. Join endpoints to complete a loop; connecting segments pass under existing arcs.')
         : tool === 'lasso' ? (opts.lassoMode === 'curve' ? 'Enclose curves to select them. Drag to move, or use the menu to copy, cut, or delete. Tap an empty area to paste.' : 'Select only the enclosed region. Curves are cut at the boundary; you can rejoin their endpoints to close them.')
-        : tool === 'erase' ? (opts.eraseMode === 'stroke' ? 'Tap or drag across a curve to erase the entire curve.' : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
+        : tool === 'erase' ? (opts.eraseMode === 'strand' ? 'Erase one strand between crossings or endpoints. Rejoin the remaining endpoints to close the curve.' : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
           : 'Tap a crossing to swap its over/under strands.';
     if (penNote) $('hint').textContent += penNote;
   }
@@ -2764,8 +2847,8 @@ const KC = (function () {
     }
     if (hoverErase) {
       ctx.save(); ctx.globalAlpha = 0.55; ctx.strokeStyle = cssv('--warn'); ctx.lineWidth = 7 / view.s; ctx.beginPath();
-      const pts = hoverErase.kind === 'closed' ? S.comps[hoverErase.i]?.pts : S.open[hoverErase.i]?.pts;
-      if (pts) { ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(q => ctx.lineTo(q.x, q.y)); if (hoverErase.kind === 'closed') ctx.closePath(); ctx.stroke(); }
+      const pts = hoverErase.pts;
+      if (pts) { ctx.moveTo(pts[0].x, pts[0].y); pts.forEach(q => ctx.lineTo(q.x, q.y));  ctx.stroke(); }
       ctx.restore();
     }
     if (tool === 'erase' && opts.eraseMode === 'precise' && cursor) {
@@ -2945,7 +3028,7 @@ const KC = (function () {
     }
   } catch { recoveryFailed=true;$('autosave').checked=false; }
   if(!tabs.length){tabs.push({id:'1',title:'New diagram 1',fileName:'',pdInput:'',dirty:false,state:blankState(),undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';}
-  analysis=KC.analyze(S.comps,S.crossings);setTool('draw');setEraseMode('stroke');
+  analysis=KC.analyze(S.comps,S.crossings);setTool('draw');setEraseMode('strand');
   activateTab(activeTabId,false,false);
   if(recoveryFailed)$('saveStatus').textContent='Could not restore previous tabs · Autosave paused';
   requestAnimationFrame(()=>{resize();if(restored)toast('Open tabs and work restored');});

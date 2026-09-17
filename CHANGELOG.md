@@ -1,5 +1,12 @@
 # Release history
 
+## v17 — Strand eraser
+
+- Replace whole-curve Erase stroke with Erase strand: delete only between crossings or open endpoints, with a matching hover preview.
+- Freeze gesture boundaries to prevent cascading deletion as crossings disappear; prefer the visible overstrand on exact crossing hits.
+- Retain the remaining geometry as open arcs, remember crossing heights for reconnection, and keep precise segment erasing unchanged.
+- Cover mouse/pen/touch, cyclic and open arcs, repeated samples, multi-strand gestures, unrelated components, reconnecting, JSON and undo/redo. Verify deletion and restoration in the browser; refresh offline assets.
+
 ## v16 — Crowded crossing and relaxation fixes
 
 - Stabilize crossing ownership at spatial-grid boundaries and segment endpoints, preventing floating-point noise from dropping closely spaced crossings and blocking valid drags.
