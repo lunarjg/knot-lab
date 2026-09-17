@@ -952,8 +952,11 @@ const KC = (function () {
   // Relaxation stops cleanly the moment a step would violate topology, as in
   // the original relax, rather than creeping through via ever-smaller scales
   // (that adaptive retry belongs to interactive crowded-crossing dragging).
-  function relaxStep(S) {
-    return attemptStep(S,comps=>relaxMutator(comps,40,1.0),{});
+  // The same default crossing clearance used while dragging also applies
+  // here, so smoothing can never pile up crossings that a genuine
+  // Reidemeister move would not actually resolve.
+  function relaxStep(S, clearance) {
+    return attemptStep(S,comps=>relaxMutator(comps,40,1.0),{crossingClearance:clearance});
   }
 
   function moveWeighted(comp, gi, ux, uy, sigma, u=comp.pts[gi].u) {
@@ -1626,7 +1629,7 @@ const KC = (function () {
   $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
-  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj); if (!r.ok) break; } return obj; }
+  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj, 16); if (!r.ok) break; } return obj; }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
     if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
@@ -1776,7 +1779,7 @@ const KC = (function () {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S);
+        const r = KC.relaxStep(S, 16/view.s);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
         addEvents(r.ev);
       }

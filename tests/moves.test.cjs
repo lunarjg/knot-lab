@@ -235,6 +235,23 @@ for(const s of [altTrefoil(),KC.fromCurves3D([KC.torusCurve(2,3,2,1)],440),KC.fr
 }
 console.log('Crowded crossing escape, grid-boundary translations, adaptive steps, sampling-independent relaxation, smoothness and invariants: PASS');
 
+// Auto-relax must respect the same default crossing clearance as dragging:
+// repeated relaxation must never let crossings drift closer together than
+// the floor, even though it is free to do so without one.
+{
+ const clearance=16;
+ const withoutFloor=KC.fromCurves3D([KC.figureEightCurve()],440);
+ for(let i=0;i<300;i++){const r=KC.relaxStep(withoutFloor);if(!r.ok)break;}
+ const pairDist=s=>{const d=[];for(let i=0;i<s.crossings.length;i++)for(let j=i+1;j<s.crossings.length;j++){
+   const a=s.crossings[i],b=s.crossings[j];d.push(Math.hypot(a.x-b.x,a.y-b.y));}return Math.min(...d);};
+ assert(pairDist(withoutFloor)<clearance,'Sanity check: unprotected relax can let crossings drift close');
+
+ const withFloor=KC.fromCurves3D([KC.figureEightCurve()],440);
+ for(let i=0;i<300;i++){const r=KC.relaxStep(withFloor,clearance);if(!r.ok)break;}
+ assert(pairDist(withFloor)>=clearance-1e-6,'Auto-relax must never collapse crossings below the clearance floor');
+}
+console.log('Auto-relax respects the default crossing clearance floor: PASS');
+
 // A curve vertex landing exactly on another strand without crossing to the
 // other side (a tangential touch) must not register a false crossing; a
 // genuine transversal dip through the same point still must.
