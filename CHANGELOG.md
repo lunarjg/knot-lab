@@ -1,5 +1,13 @@
 # Release history
 
+## v18 — Gentle auto-relax and crossing clearance
+
+- Restore auto-relax to a plain step that stops cleanly the moment it would violate topology, as in the original relaxation, instead of creeping through blocked configurations via ever-smaller adaptive steps; that retry now belongs only to interactive crowded-crossing dragging.
+- Add a default, always-on crossing clearance floor beneath the optional bigon/kink size protection: no two crossings may collapse toward the same point — including three or more arcs converging near one spot — unless they form a genuine R2-removable bigon, which stays free to shrink. The exact triple-point frame inside a valid R3 slide is exempt, so valid R1/R2/R3 moves stay unrestricted. A blocked drag can always be reversed by dragging away.
+- On release, a tiny genuine bigon this drag tightened is kept, not deleted, and gently nudged back out to the clearance distance rather than left pinned near-coincident; the correction is part of the drag's own undo step.
+- Fix a tangential curve touch landing exactly on another strand's vertex (without crossing to the other side) being miscounted as a crossing; a genuine transversal dip through the same point is unaffected.
+- Cover the relaxation change, non-resolvable crossing clusters, R2-birth and R3 exemptions, tangential touches, and pointer-driven release separation with undo/redo.
+
 ## v17 — Strand eraser
 
 - Replace whole-curve Erase stroke with Erase strand: delete only between crossings or open endpoints, with a matching hover preview.

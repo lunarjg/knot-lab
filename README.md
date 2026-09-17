@@ -117,6 +117,12 @@ Regression cases cover fixed crossing positions with a collapsing bigon, a singl
 
 Additional cases compare identical geometry with the two possible over/under patterns, R2 shrink/disappear/reappear and move counts, one-component bigons, mirrored height order, reversed occurrences, and pointer dragging with protection enabled.
 
+## Default crossing clearance
+
+Independent of the optional bigon/kink size protection above, a small clearance floor (16 screen px, scaled by zoom) is always active while dragging. It stops any two crossings from collapsing toward the same point — including three or more arcs converging near one spot — unless they form a genuine R2-removable bigon (the same strand over at both crossings), which stays free to shrink toward release as before. A blocked drag shows “These crossings cannot pass each other. Drag away to separate them.” and can always be reversed by dragging back; valid R1/R2/R3 moves, including the exact triple-point frame inside an R3 slide, are never blocked by this floor.
+
+On release, a tiny genuine bigon that this drag tightened (newly formed, or shrunk from where it started) is kept — its crossings are not deleted — but gently nudged back out to the clearance distance so it stays visible and distinguishable rather than pinned near-coincident. This correction is part of the same undo step as the drag, so one undo reverts both together. A tangential touch that never actually crosses to the other side does not register as a crossing at all.
+
 ## Make an alternating diagram
 
 Use **Make alternating** under **Diagram actions** on the inspector’s **Diagram** page. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
