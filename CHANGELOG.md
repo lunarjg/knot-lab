@@ -1,5 +1,10 @@
 # Release history
 
+## v15 — Bigon protection off by default
+
+- Default non-R2 bigon protection to off and initially disable its area slider. Enabling protection restores the slider.
+- Refresh the offline cache.
+
 ## v14 — R1 protection off by default
 
 - Default existing R1 loop protection to off and initially disable its area slider. Enabling protection restores the slider.

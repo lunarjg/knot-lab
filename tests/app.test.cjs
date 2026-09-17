@@ -178,6 +178,10 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  assert(!p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
  p.ids.get('protectKinks').checked=true;
  p.ids.get('protectKinks').onchange({target:{checked:true}});
+ // Keep this fixture focused on one R1 birth by explicitly enabling bigon protection.
+ assert(!p.ids.get('protectBigons').checked);
+ p.ids.get('protectBigons').checked=true;
+ p.ids.get('protectBigons').onchange({target:{checked:true}});
  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
  for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
