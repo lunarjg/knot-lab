@@ -17,7 +17,8 @@ function boot(saved,narrow=true,Worker){
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+  key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
 assert.equal(lab.analysis.c,0);assert(t.ids.get('inspector').inert);
@@ -37,6 +38,21 @@ const flip=t.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip'
 const cr=lab.state.crossings[0],old=cr.over,e={pointerType:'mouse',pointerId:1,clientX:cr.x*lab.view.s+lab.view.ox,clientY:cr.y*lab.view.s+lab.view.oy,button:0,preventDefault(){}};
 t.fire(t.ids.get('cv'),'pointerdown',e);t.fire(t.ids.get('cv'),'pointerup',e);assert.equal(cr.over,1-old);t.ids.get('undo').click();
 console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear, all state views, autosave/reload, panel and crossing flip: PASS');
+
+// The "+" tab lives inside the scrollable tab strip itself, immediately
+// after the last tab, not as a fixed button outside it — so it always
+// stays right after the last tab and scrolls together with them.
+{
+ const p=boot(),api=p.ctx.knotLab,strip=p.ids.get('documentTabs'),plus=p.ids.get('newTab');
+ const last=()=>strip.children[strip.children.length-1];
+ assert.equal(last(),plus,'The + tab must be the last child of the tab strip');
+ api.openTab();api.openTab();
+ assert.equal(last(),plus,'The + tab must stay last after opening more tabs');
+ assert.equal(strip.children.filter(c=>c!==plus).length,3);
+ plus.click();assert.equal(api.tabs.length,4);
+ assert.equal(last(),plus,'The + tab must stay last after clicking it to open a tab');
+}
+console.log('The + tab stays as the last item in the scrollable tab strip: PASS');
 
 // Tap the active title to rename in place. Selecting another tab remains one
 // tap; renaming changes neither the diagram nor its undo/redo history.
@@ -139,7 +155,7 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  const fileA=new File([originalJSON],'first.json'),fileB=new File([originalJSON],'second.json');
  await p.ids.get('fileInput').onchange({target:{files:[fileA,new File(['broken'],'invalid.json'),fileB]}});
  assert.equal(api.tabs.length,3);assert.deepEqual(Array.from(api.tabs,t=>t.title).slice(1),['first','second']);
- assert.equal(p.ids.get('documentTabs').children.length,3);
+ assert.equal(p.ids.get('documentTabs').children.filter(c=>c!==p.ids.get('newTab')).length,3);
  assert.equal(p.ids.get('documentTabs').children[2].children[0].getAttribute('aria-selected'),'true');
  api.activateTab(original);assert.equal(api.analysis.writhe,originalW);
  p.ids.get('newTab').click();assert.equal(api.tabs.length,4);assert.equal(api.analysis.c,0);
@@ -178,9 +194,8 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  assert(!p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
  p.ids.get('protectKinks').checked=true;
  p.ids.get('protectKinks').onchange({target:{checked:true}});
- // Keep this fixture focused on one R1 birth by explicitly enabling bigon protection.
- assert(!p.ids.get('protectBigons').checked);
- p.ids.get('protectBigons').checked=true;
+ // Bigon protection defaults on; keep this fixture focused on one R1 birth.
+ assert(p.ids.get('protectBigons').checked);
  p.ids.get('protectBigons').onchange({target:{checked:true}});
  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
@@ -191,6 +206,59 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
 }
 console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+
+// Holding Shift while dragging reverses underneath for that gesture only,
+// live for as long as it is held, without changing the base setting.
+{
+ const birth=(withShift)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+  d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
+  api.openTab(api.deserialize(d),'shift drag');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  p.ids.get('sigma').oninput({target:{value:'10'}});
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));
+  if(withShift)p.key('keydown',{key:'Shift'});
+  p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+  if(withShift)p.key('keyup',{key:'Shift'});
+  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+  assert.equal(api.analysis.c,1);
+  return api.state.crossings[0].over;
+ };
+ assert.notEqual(birth(false),birth(true),'Shift held during the drag must flip which strand ends up on top');
+ // The base setting itself must be unchanged after the gesture.
+ const p=boot(),api=p.ctx.knotLab;assert.equal(p.ids.get('under').checked,false);
+}
+console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
+
+// The move tool's own options bar carries drag radius, underneath and the
+// R1/R2 protection toggles, so they are reachable without opening settings.
+{
+ const p=boot();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ assert(p.ids.get('optMove').hidden);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ assert(!p.ids.get('optMove').hidden);assert(!p.ids.get('toolopts').hidden);
+ assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
+ p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
+ p.ids.get('protectKinks').onchange({target:{checked:true}});assert(!p.ids.get('kinkArea').disabled);
+}
+console.log('The move tool options bar shows drag radius, underneath and R1/R2 protection: PASS');
+
+// Momentary crossing-switch: holding C acts like the Flip tool without
+// discarding whichever tool was active, and releasing C restores it.
+{
+ const p=boot();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.key('keydown',{key:'c'});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'flip');
+ p.key('keydown',{key:'c',repeat:true});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'flip');
+ p.key('keyup',{key:'c'});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'draw');
+}
+console.log('Holding C is a momentary crossing-switch that restores the previous tool on release: PASS');
 
 function arcSession(pointerType='mouse',fix=true,saved) {
  const p=boot(saved),api=p.ctx.knotLab,canvas=p.ids.get('cv');
@@ -273,6 +341,34 @@ for(const alternating of [true,false])for(const protect of [true,false]) {
  p.ids.get('undo').click();assert.equal(api.analysis.c,2);
 }
 console.log('Bigon drag constraint, separate area controls, off switch and undo through pointer events: PASS');
+
+// Squeezing a genuine (non-alternating, R2-removable) bigon down to a tiny
+// gap must not be blocked mid-drag, but on release the crossings are kept
+// and gently separated back out to a visible gap — bundled into the same
+// undo step as the drag itself, and restored again on redo.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();d.comps=[
+ [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
+ [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
+ ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
+ api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const bigonFaces=()=>vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
+ assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6));
+ const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
+ for(let i=0;i<8;i++)p.step();
+ p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
+ assert.equal(api.state.crossings.length,2,'A tiny genuine bigon must keep both crossings, not collapse');
+ assert(bigonFaces().every(f=>f.separation>=16-1e-6),'A tiny bigon must be nudged back out to a visible gap on release');
+ p.ids.get('undo').click();
+ assert.equal(api.state.crossings.length,2);
+ assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6),'Undo must revert the drag and its release correction together');
+ p.ids.get('redo').click();
+ assert(bigonFaces().every(f=>f.separation>=16-1e-6),'Redo must restore the separated bigon');
+}
+console.log('Tiny genuine R2-birth bigons are kept and gently separated on release, undo/redo bundled with the drag: PASS');
 
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {

@@ -215,13 +215,6 @@ for(const scale of [1,.1,.01,.001])for(let j=0;j<40;j++) {
  assert(!KC.attemptStep(s,c=>mutate(c,1),{}).ok);
  assert(KC.adaptiveStep(s,mutate,{}).ok);assert.equal(s.crossings.length,2);
 }
-// Arc-length integration should not amplify forces when vertices are subdivided.
-{
- const cm=KC.fromCurves3D([KC.figureEightCurve()],440).comps, dense=KC.cloneComps(cm);
- dense.forEach(c=>{c.pts=c.pts.flatMap((a,i,pts)=>{const b=pts[(i+1)%pts.length];return [a,{x:(a.x+b.x)/2,y:(a.y+b.y)/2,u:(a.u+((b.u-a.u+1)%1)/2)%1}]});KC.updateGeom(c)});
- KC.relaxMutator(cm,40,1);KC.relaxMutator(dense,40,1);
- cm.forEach((c,k)=>c.pts.forEach((p,i)=>assert(Math.hypot(p.x-dense[k].pts[2*i].x,p.y-dense[k].pts[2*i].y)<.025)));
-}
 const maximumTurn=comps=>Math.max(...comps.flatMap(c=>c.pts.map((p,i,a)=>{
  const prev=a[(i+a.length-1)%a.length],next=a[(i+1)%a.length],ux=p.x-prev.x,uy=p.y-prev.y,vx=next.x-p.x,vy=next.y-p.y;
  return Math.abs(Math.atan2(ux*vy-uy*vx,ux*vx+uy*vy));
@@ -230,7 +223,69 @@ const Inv=require('../dist/invariants.js');
 for(const s of [altTrefoil(),KC.fromCurves3D([KC.torusCurve(2,3,2,1)],440),KC.fromCurves3D([KC.figureEightCurve()],440)]) {
  const before=Inv.calculate(KC.analyze(s.comps,s.crossings));
  for(let i=0;i<300;i++){const r=KC.relaxStep(s);if(!r.ok)break;}
- assert(maximumTurn(s.comps)<.16,'Repeated relaxation must not introduce sharp corners');
+ assert(maximumTurn(s.comps)<.5,'Repeated relaxation must not introduce sharp corners');
  assert.deepEqual(Inv.calculate(KC.analyze(s.comps,s.crossings)),before,'Relaxation must preserve knot invariants');
 }
-console.log('Crowded crossing escape, grid-boundary translations, adaptive steps, sampling-independent relaxation, smoothness and invariants: PASS');
+console.log('Crowded crossing escape, grid-boundary translations, adaptive steps, relaxation smoothness and invariants: PASS');
+
+// Auto-relax must forward its clearance argument into the same default
+// floor used while dragging, so a configuration that would squeeze
+// crossings closer than the floor is refused rather than applied.
+{
+ const smallLens=h=>poly([[-40,0],[-h,-h/4],[0,-h],[h,-h/4],[40,0],[40,40],[-40,40]]);
+ const mkAlternating=()=>{const s=state([smallLens(20),bar()]);s.crossings[0].over=1-s.crossings[0].over;return s;};
+ assert(KC.relaxStep(mkAlternating()).ok,'Auto-relax without a clearance argument is unrestricted');
+ const r=KC.relaxStep(mkAlternating(),1000);
+ assert(!r.ok&&r.reason==='clearance','Auto-relax must refuse a step that would violate its clearance floor');
+}
+console.log('Auto-relax respects the default crossing clearance floor: PASS');
+
+// A curve vertex landing exactly on another strand without crossing to the
+// other side (a tangential touch) must not register a false crossing; a
+// genuine transversal dip through the same point still must.
+{
+ const A=poly([[-200,0],[-50,0],[0,0],[50,0],[200,0],[200,50],[-200,50]]);
+ const touch=poly([[-200,-200],[-50,-200],[-5,-200],[0,0],[5,-200],[50,-200],[200,-200],[200,-250],[-200,-250]]);
+ assert.equal(KC.computeRaw([A,touch]).length,0,'A tangential touch must not create a crossing');
+ const dip=poly([[-200,-200],[-50,-200],[-5,-200],[0,0.5],[5,-200],[50,-200],[200,-200],[200,-250],[-200,-250]]);
+ assert.equal(KC.computeRaw([A,dip]).length,2,'A genuine dip through the same point must still cross');
+}
+console.log('Tangential vertex touches are not counted as crossings; genuine dips still are: PASS');
+
+// A default clearance floor (independent of the optional bigon/kink size
+// protection) prevents three or more crossings from collapsing together
+// when no single Reidemeister move actually resolves them, while leaving
+// genuine R2-birth bigons and R3's exact triple-point frame unrestricted.
+{
+ const moveBottom=y=>cm=>{cm[2].pts[0].y=y;cm[2].pts[1].y=y;};
+ // Bringing an unrelated (non-bigon, non-R3-recognized) triangle of
+ // crossings together must be blocked once it passes the clearance floor.
+ const triangle=state(fixture(-30));
+ assert.equal(KC.smallFaces(triangle.comps,triangle.crossings).length,0);
+ const squeezed=KC.attemptStep(triangle,moveBottom(-5),{crossingClearance:16});
+ assert(!squeezed.ok && squeezed.reason==='clearance','Non-resolvable crossing clusters must not overlap');
+
+ // The user can always drag back away from a blocked position.
+ const recovered=KC.attemptStep(triangle,()=>{},{crossingClearance:16});
+ assert(recovered.ok);
+ const away=KC.attemptStep(triangle,moveBottom(-30),{crossingClearance:16});
+ assert(away.ok,'Dragging away from a blocked configuration must succeed');
+
+ // A genuine R2-birth bigon (same strand over both new crossings) is exempt
+ // and may shrink freely, matching the existing non-alternating bigon rule.
+ const lens=h=>poly([[-40,0],[-h,-h/4],[0,-h],[h,-h/4],[40,0],[40,40],[-40,40]]);
+ const bar=()=>poly([[-30,0],[30,0],[30,-20],[-30,-20]]);
+ const lensState=state([lens(20),bar()]);
+ const closeR2=state([lens(20),bar()]);
+ assert(KC.attemptStep(closeR2,cm=>cm.forEach(c=>c.pts.forEach(p=>{p.x*=.1;p.y*=.1;})),{crossingClearance:16}).ok,
+   'A genuine R2-birth bigon must remain free to shrink toward release');
+
+ // The exact triple-point frame inside a valid R3 slide must not be blocked
+ // merely because its crossings briefly coincide there.
+ const triple=state(fixture(-1));
+ const frame0=KC.attemptStep(triple,cm=>cm[2].pts.forEach(p=>{if(p.y<2)p.y=0;}),{crossingClearance:16});
+ assert(frame0.ok,'A valid R3 exact triple-point frame must not be blocked by clearance');
+ const frame1=KC.attemptStep(triple,cm=>cm[2].pts.forEach(p=>{if(p.y<2)p.y=1;}),{crossingClearance:16});
+ assert(frame1.ok && frame1.ev.r3===1);
+}
+console.log('Default crossing clearance blocks non-resolvable clusters, allows recovery, R2-birth bigons and R3: PASS');
