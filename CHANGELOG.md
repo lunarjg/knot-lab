@@ -1,5 +1,10 @@
 # Release history
 
+## v14 — R1 protection off by default
+
+- Default existing R1 loop protection to off and initially disable its area slider. Enabling protection restores the slider.
+- Refresh the offline cache.
+
 ## v13 — Start with open arcs
 
 - Default Auto-close on release to off in both the checkbox and drawing state. Users can still enable it manually or join endpoints to close a loop.

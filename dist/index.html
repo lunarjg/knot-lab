@@ -401,8 +401,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="under"><span>Pass underneath<small>Hold Shift to reverse while dragging.</small></span></label>
       <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect non-R2 bigons<small>Alternating over/under only. R2-removable bigons can shrink freely.</small></span></label>
       <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect existing R1 loops<small>New self-crossings may start small.</small></span></label>
-      <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
+      <label class="chk"><input type="checkbox" id="protectKinks"><span>Protect existing R1 loops<small>New self-crossings may start small.</small></span></label>
+      <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" disabled min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
       <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
       <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Remove small R1 loops while dragging<small>Only empty loops present before the drag.</small></span></label>
     </section>
@@ -1234,7 +1234,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: true, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'stroke', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
