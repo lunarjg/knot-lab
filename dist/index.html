@@ -222,7 +222,9 @@ h2{font-size:15px}
 .document-tab .tab-rename{width:160px;max-width:190px;min-width:0;flex:1;border:0;border-radius:0;padding:8px 10px;font:inherit;font-size:16px;min-height:44px;background:var(--paper);color:var(--ink)}
 .document-tab .tab-close{width:36px;flex-shrink:0;font-size:19px;color:var(--muted)}
 .document-tab .tab-close:hover{background:var(--warn-soft);color:var(--warn)}
-.new-tab{flex-shrink:0;padding:6px 10px;font-size:14px;white-space:nowrap}
+.new-tab{flex:0 0 auto;width:44px;min-height:44px;padding:0;font-size:20px;line-height:1;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.new-tab:hover{background:var(--bg);color:var(--ink);border-color:var(--rule)}
+.new-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .document-tabs>.iconbtn{flex-shrink:0}
 @media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
 /* Compact inspector pages keep common controls close and details optional. */
@@ -256,7 +258,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <header class="apphead"><strong>Knot Diagram Lab</strong><span class="save-status" id="saveStatus" role="status">Autosaved on this device</span></header>
     <div class="document-tabs">
       <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
-      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
+      <button id="newTab" class="new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
       <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
     </div>
     <div class="bar">
@@ -280,7 +282,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           <button data-tool="lasso" aria-pressed="false" title="Lasso (L)" aria-label="Lasso"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.2 15.4C5.2 14.6 3 12.6 3 10.2 3 6.8 7 4 12 4s9 2.8 9 6.2-4 6.2-9 6.2" stroke-dasharray="2.6 2.4"/><path d="M8.5 15.2c-1.3.6-1.6 2-.8 3 .9 1.1 2.6.9 3.1-.4.4-1.1-.3-2.3-1.6-2.6"/><path d="M8.2 18.5L6.5 21"/></svg></button>
           <span class="sep" aria-hidden="true"></span>
           <button data-tool="move" aria-pressed="false" title="Drag strand (V)" aria-label="Drag strand"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12.5V6.5a1.5 1.5 0 0 1 3 0v5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v6.5"/><path d="M17 9.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-1.2a6 6 0 0 1-4.6-2.2L4 15.2a1.6 1.6 0 0 1 2.3-2.2L8 14.5"/></svg></button>
-          <button data-tool="flip" aria-pressed="false" title="Switch crossing (X)" aria-label="Switch crossing"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4"/><path d="M4 4l6 6"/><path d="M14 14l6 6"/></svg></button>
+          <button data-tool="flip" aria-pressed="false" title="Switch crossing (X, or hold C)" aria-label="Switch crossing"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4"/><path d="M4 4l6 6"/><path d="M14 14l6 6"/></svg></button>
           <span class="sep" aria-hidden="true"></span>
           <button id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
           <button id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
@@ -302,6 +304,12 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
               <button data-lasso="curve" aria-pressed="true">Whole curves</button>
               <button data-lasso="region" aria-pressed="false">Region</button>
             </div>
+          </div>
+          <div class="toolopt" id="optMove" hidden>
+            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></label>
+            <label class="inline"><input type="checkbox" id="under"> Pass underneath</label>
+            <label class="inline"><input type="checkbox" id="protectBigons" checked> Protect R2</label>
+            <label class="inline"><input type="checkbox" id="protectKinks"> Protect R1</label>
           </div>
         </div>
       </div>
@@ -397,11 +405,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div id="pageSettings" hidden>
     <section>
       <h2>Dragging</h2>
-      <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></div>
-      <label class="chk"><input type="checkbox" id="under"><span>Pass underneath<small>Hold Shift to reverse while dragging.</small></span></label>
-      <label class="chk"><input type="checkbox" id="protectBigons"><span>Protect non-R2 bigons<small>Alternating over/under only. R2-removable bigons can shrink freely.</small></span></label>
-      <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" disabled min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <label class="chk"><input type="checkbox" id="protectKinks"><span>Protect existing R1 loops<small>New self-crossings may start small.</small></span></label>
+      <p class="small">Drag radius, Pass underneath, Protect R2 and Protect R1 are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture.</p>
+      <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
       <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" disabled min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
       <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
       <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Remove small R1 loops while dragging<small>Only empty loops present before the drag.</small></span></label>
@@ -1343,12 +1348,16 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, protectBigons: false, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
   let prevTool = 'draw', redoStack = [], sel = null, lasso = null, clip = null, penTap = null, lastPenTap = null, pasteAt = null;
   const SNAP = 16;
+  // Minimum on-screen gap kept between protected crossings (drag, release
+  // correction, auto-relax). Comfortably larger than the ~16px double gap
+  // drawn at each crossing so separated crossings read as clearly apart.
+  const CROSSING_CLEARANCE = 32;
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
   let invariantKey=null,invariantWorker=null,invariantJob=0;
@@ -1357,6 +1366,9 @@ const KC = (function () {
 
   const $ = id => document.getElementById(id);
   const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  // Captured once: renderTabs() re-parents this into the tab strip on every
+  // render, and a detached element can no longer be found by getElementById.
+  const newTabBtn = $('newTab');
 
   // ---------- canvas & view ----------
   function resize() {
@@ -1565,7 +1577,7 @@ const KC = (function () {
     });
     // Keep the "+" tab as the last item in the scrollable strip, not a
     // fixed button outside it, so it stays right after the last tab.
-    $('documentTabs').appendChild($('newTab'));
+    $('documentTabs').appendChild(newTabBtn);
     $('wrap').setAttribute('aria-labelledby','document-tab-'+activeTabId);
   }
   function finishTabInteraction() {
@@ -1621,11 +1633,11 @@ const KC = (function () {
     }
     renderTabs();scheduleAutosave();
   }
-  $('newTab').onclick=()=>openTab();
+  newTabBtn.onclick=()=>openTab();
   $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
-  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj, 16); if (!r.ok) break; } return obj; }
+  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj, CROSSING_CLEARANCE); if (!r.ok) break; } return obj; }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
     if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
@@ -1775,7 +1787,7 @@ const KC = (function () {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S, 16/view.s);
+        const r = KC.relaxStep(S, CROSSING_CLEARANCE/view.s);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
         addEvents(r.ev);
       }
@@ -1815,8 +1827,8 @@ const KC = (function () {
     if (t !== 'lasso') clearSel();
     tool = t; document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t));
     hoverX = hoverPt = hoverErase = hoverSnap = null;
-    $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso';
-    $('toolopts').hidden = !['draw', 'erase', 'lasso'].includes(t);
+    $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso'; $('optMove').hidden = t !== 'move';
+    $('toolopts').hidden = !['draw', 'erase', 'lasso', 'move'].includes(t);
     updateHint(); render();
   }
   function toggleEraser() {
@@ -1849,6 +1861,7 @@ const KC = (function () {
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
 
+  let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
     if (e.key === 'Shift') { shiftDown = true; if (drag) drag.under = !opts.under; }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -1864,11 +1877,17 @@ const KC = (function () {
     if (e.key === 'Escape') { clearSel(); render(); return; }
     if (mod) return;
     const k = kk;
+    // Momentary crossing-switch: held C acts like the Flip tool without
+    // replacing whichever tool was active, and releasing C restores it.
+    if (k === 'c') { if (!e.repeat && momentaryFlipTool === null) { momentaryFlipTool = tool; setTool('flip'); } return; }
     if (k === 'v') setTool('move'); else if (k === 'd') setTool('draw'); else if (k === 'x') setTool('flip'); else if (k === 'l') setTool('lasso');
     else if (k === 'e') { if (tool === 'erase') setEraseMode(opts.eraseMode === 'strand' ? 'precise' : 'strand'); else setTool('erase'); }
     else if (k === '1') setView('diagram'); else if (k === '2') setView('A'); else if (k === '3') setView('B'); else if (k === '4') setView('S');
   });
-  window.addEventListener('keyup', e => { if (e.key === 'Shift') { shiftDown = false; if (drag) drag.under = opts.under; } });
+  window.addEventListener('keyup', e => {
+    if (e.key === 'Shift') { shiftDown = false; if (drag) drag.under = opts.under; }
+    if (e.key.toLowerCase() === 'c' && momentaryFlipTool !== null) { setTool(momentaryFlipTool); momentaryFlipTool = null; }
+  });
 
   // ---------- hit testing ----------
   function nearestPoint(w, tol) {
@@ -2021,7 +2040,7 @@ const KC = (function () {
         // started) is kept but nudged apart on release so it is not left
         // pinned near-coincident. Bundled into the drag's own undo step, not
         // a separate one.
-        const sep = KC.separateTinyBigons(S, { clearance: 16 / view.s, before: drag.initialBigonSeparations });
+        const sep = KC.separateTinyBigons(S, { clearance: CROSSING_CLEARANCE / view.s, before: drag.initialBigonSeparations });
         if (sep) addEvents(sep.ev);
       }
       if (!drag.changed) undoStack.pop(); drag = null; cv.style.cursor = 'grab'; changed();
@@ -2172,7 +2191,7 @@ const KC = (function () {
           bigon: opts.protectBigons ? {area:opts.bigonArea/(view.s*view.s),thickness:8/view.s,separation:16/view.s} : null,
           kink: opts.protectKinks ? {area:opts.kinkArea/(view.s*view.s),thickness:6/view.s} : null
         },
-        crossingClearance: 16/view.s,
+        crossingClearance: CROSSING_CLEARANCE/view.s,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
       if (!r.ok) { blocked = r.reason; break; }

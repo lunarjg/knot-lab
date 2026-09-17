@@ -17,7 +17,8 @@ function boot(saved,narrow=true,Worker){
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)}};
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+  key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
 assert.equal(lab.analysis.c,0);assert(t.ids.get('inspector').inert);
@@ -193,9 +194,8 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  assert(!p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
  p.ids.get('protectKinks').checked=true;
  p.ids.get('protectKinks').onchange({target:{checked:true}});
- // Keep this fixture focused on one R1 birth by explicitly enabling bigon protection.
- assert(!p.ids.get('protectBigons').checked);
- p.ids.get('protectBigons').checked=true;
+ // Bigon protection defaults on; keep this fixture focused on one R1 birth.
+ assert(p.ids.get('protectBigons').checked);
  p.ids.get('protectBigons').onchange({target:{checked:true}});
  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
@@ -206,6 +206,59 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
 }
 console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+
+// Holding Shift while dragging reverses underneath for that gesture only,
+// live for as long as it is held, without changing the base setting.
+{
+ const birth=(withShift)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+  d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
+  api.openTab(api.deserialize(d),'shift drag');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  p.ids.get('sigma').oninput({target:{value:'10'}});
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));
+  if(withShift)p.key('keydown',{key:'Shift'});
+  p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+  if(withShift)p.key('keyup',{key:'Shift'});
+  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+  assert.equal(api.analysis.c,1);
+  return api.state.crossings[0].over;
+ };
+ assert.notEqual(birth(false),birth(true),'Shift held during the drag must flip which strand ends up on top');
+ // The base setting itself must be unchanged after the gesture.
+ const p=boot(),api=p.ctx.knotLab;assert.equal(p.ids.get('under').checked,false);
+}
+console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
+
+// The move tool's own options bar carries drag radius, underneath and the
+// R1/R2 protection toggles, so they are reachable without opening settings.
+{
+ const p=boot();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ assert(p.ids.get('optMove').hidden);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ assert(!p.ids.get('optMove').hidden);assert(!p.ids.get('toolopts').hidden);
+ assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
+ p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
+ p.ids.get('protectKinks').onchange({target:{checked:true}});assert(!p.ids.get('kinkArea').disabled);
+}
+console.log('The move tool options bar shows drag radius, underneath and R1/R2 protection: PASS');
+
+// Momentary crossing-switch: holding C acts like the Flip tool without
+// discarding whichever tool was active, and releasing C restores it.
+{
+ const p=boot();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.key('keydown',{key:'c'});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'flip');
+ p.key('keydown',{key:'c',repeat:true});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'flip');
+ p.key('keyup',{key:'c'});
+ assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'draw');
+}
+console.log('Holding C is a momentary crossing-switch that restores the previous tool on release: PASS');
 
 function arcSession(pointerType='mouse',fix=true,saved) {
  const p=boot(saved),api=p.ctx.knotLab,canvas=p.ids.get('cv');
