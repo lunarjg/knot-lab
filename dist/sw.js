@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v17-bigon-protection-default-off';
+const CACHE='knot-lab-v18-crossing-and-relax-fixes';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

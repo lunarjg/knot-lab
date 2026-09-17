@@ -191,3 +191,46 @@ for(let rotation=0;rotation<twoCurls.length;rotation++) {
  assert(KC.circD(s.crossings[0].occ[s.crossings[0].over].u,originalOver)<1e-6);
 }
 console.log('Local R1 preserves other crossings on the same component across cyclic seams: PASS');
+
+// Subpixel crossings on grid boundaries must survive resampling and movement.
+for(const h of [.001,1e-7])for(const offset of [0,24,-24,.37]) {
+ const cm=[kink(-h),bar()];cm.forEach(c=>{c.pts.forEach(p=>{p.x+=offset;p.y+=offset});KC.updateGeom(c)});
+ const s=state(cm);assert.equal(s.crossings.length,2);s.crossings[0].over=1-s.crossings[0].over;
+ const ids=s.crossings.map(x=>[x.id,x.over]);
+ assert(KC.attemptStep(s,()=>{},{}).ok);
+ const r=KC.attemptStep(s,c=>KC.moveWeighted(c[0],KC.indexOfU(c[0],2/7),0,-2.5,40),{});
+ assert(r.ok,'A crowded non-R2 bigon must be able to open');assert.equal(s.crossings.length,2);
+ assert.deepEqual(s.crossings.map(x=>[x.id,x.over]).sort(),ids.sort());assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});
+}
+for(const scale of [1,.1,.01,.001])for(let j=0;j<40;j++) {
+ const cm=[kink(-.01),bar()];cm.forEach(c=>{c.pts.forEach(p=>{p.x=p.x*scale+j*.37;p.y=p.y*scale+j*.37});KC.updateGeom(c)});
+ const s=state(cm);assert.equal(s.crossings.length,2);
+ const r=KC.attemptStep(s,c=>c.forEach(c=>c.pts.forEach(p=>{p.x+=1.4;p.y+=.37})),{});
+ assert(r.ok);assert.equal(s.crossings.length,2);assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});
+}
+// A coarse step can overshoot a narrow valid region; take its valid prefix.
+{
+ const s=state([kink(-.1),bar()]);s.crossings[0].over=1-s.crossings[0].over;
+ const mutate=(cm,scale)=>KC.moveWeighted(cm[0],KC.indexOfU(cm[0],2/7),0,2.5*scale,40);
+ assert(!KC.attemptStep(s,c=>mutate(c,1),{}).ok);
+ assert(KC.adaptiveStep(s,mutate,{}).ok);assert.equal(s.crossings.length,2);
+}
+// Arc-length integration should not amplify forces when vertices are subdivided.
+{
+ const cm=KC.fromCurves3D([KC.figureEightCurve()],440).comps, dense=KC.cloneComps(cm);
+ dense.forEach(c=>{c.pts=c.pts.flatMap((a,i,pts)=>{const b=pts[(i+1)%pts.length];return [a,{x:(a.x+b.x)/2,y:(a.y+b.y)/2,u:(a.u+((b.u-a.u+1)%1)/2)%1}]});KC.updateGeom(c)});
+ KC.relaxMutator(cm,40,1);KC.relaxMutator(dense,40,1);
+ cm.forEach((c,k)=>c.pts.forEach((p,i)=>assert(Math.hypot(p.x-dense[k].pts[2*i].x,p.y-dense[k].pts[2*i].y)<.025)));
+}
+const maximumTurn=comps=>Math.max(...comps.flatMap(c=>c.pts.map((p,i,a)=>{
+ const prev=a[(i+a.length-1)%a.length],next=a[(i+1)%a.length],ux=p.x-prev.x,uy=p.y-prev.y,vx=next.x-p.x,vy=next.y-p.y;
+ return Math.abs(Math.atan2(ux*vy-uy*vx,ux*vx+uy*vy));
+})));
+const Inv=require('../dist/invariants.js');
+for(const s of [altTrefoil(),KC.fromCurves3D([KC.torusCurve(2,3,2,1)],440),KC.fromCurves3D([KC.figureEightCurve()],440)]) {
+ const before=Inv.calculate(KC.analyze(s.comps,s.crossings));
+ for(let i=0;i<300;i++){const r=KC.relaxStep(s);if(!r.ok)break;}
+ assert(maximumTurn(s.comps)<.16,'Repeated relaxation must not introduce sharp corners');
+ assert.deepEqual(Inv.calculate(KC.analyze(s.comps,s.crossings)),before,'Relaxation must preserve knot invariants');
+}
+console.log('Crowded crossing escape, grid-boundary translations, adaptive steps, sampling-independent relaxation, smoothness and invariants: PASS');

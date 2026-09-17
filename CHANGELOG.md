@@ -1,5 +1,14 @@
 # Release history
 
+## v16 — Crowded crossing and relaxation fixes
+
+- Stabilize crossing ownership at spatial-grid boundaries and segment endpoints, preventing floating-point noise from dropping closely spaced crossings and blocking valid drags.
+- Hit-test complete strand segments at any zoom; apply drag weights around the entire curve and retry blocked steps with smaller displacements.
+- Normalize relaxation repulsion by arc length, use a continuous force near intersections, and smooth over a fixed arc-length neighborhood to avoid density-dependent corners.
+- Add Stop relaxing and cancel pending frames on undo, edits and tab changes; isolate restarted runs.
+- Cover crowded pairs, translated/scaled fixtures, mouse/pen/touch drags, high-zoom segment hits, repeated relaxation, sample subdivision, invariant preservation and animation cancellation. Verify a real browser trefoil relaxation and calculation.
+- Keep Auto-close, R1 protection and non-R2 bigon protection off by default; refresh the offline cache.
+
 ## v15 — Bigon protection off by default
 
 - Default non-R2 bigon protection to off and initially disable its area slider. Enabling protection restores the slider.

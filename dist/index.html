@@ -570,12 +570,18 @@ const KC = (function () {
   // All transverse self/mutual intersections of the closed polylines
   function computeRaw(comps) {
     const CELL = 24, grid = new Map();
+    // The same intersection can round to opposite sides of a grid boundary.
+    // Use one canonical cell for both segment bounds and intersection ownership.
+    const cellOf = v => {
+      const q=v/CELL, nearest=Math.round(q);
+      return Math.abs(q-nearest)<1e-12 ? nearest : Math.floor(q);
+    };
     comps.forEach((cm, c) => {
       const p = cm.pts, n = p.length;
       for (let i = 0; i < n; i++) {
         const a = p[i], b = p[(i + 1) % n];
-        const x0 = Math.floor(Math.min(a.x, b.x) / CELL), x1 = Math.floor(Math.max(a.x, b.x) / CELL);
-        const y0 = Math.floor(Math.min(a.y, b.y) / CELL), y1 = Math.floor(Math.max(a.y, b.y) / CELL);
+        const x0 = cellOf(Math.min(a.x, b.x)), x1 = cellOf(Math.max(a.x, b.x));
+        const y0 = cellOf(Math.min(a.y, b.y)), y1 = cellOf(Math.max(a.y, b.y));
         for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
           const key = (cx + 32768) * 65536 + (cy + 32768);
           let l = grid.get(key); if (!l) { l = []; grid.set(key, l); }
@@ -597,10 +603,11 @@ const KC = (function () {
           const den = rx * sy - ry * sx;
           if (Math.abs(den) < 1e-12) continue;
           const qx = b1.x - a1.x, qy = b1.y - a1.y;
-          const t = (qx * sy - qy * sx) / den, w = (qx * ry - qy * rx) / den;
+          const endpoint = t => Math.abs(t)<1e-12 ? 0 : Math.abs(t-1)<1e-12 ? 1 : t;
+          const t = endpoint((qx * sy - qy * sx) / den), w = endpoint((qx * ry - qy * rx) / den);
           if (t < 0 || t >= 1 || w < 0 || w >= 1) continue;
           const x = a1.x + t * rx, y = a1.y + t * ry;
-          if (Math.floor(x / CELL) !== cx || Math.floor(y / CELL) !== cy) continue;
+          if (cellOf(x) !== cx || cellOf(y) !== cy) continue;
           res.push({ x, y, id: 0, over: 0, occ: [mkOcc(comps, c1, i, t), mkOcc(comps, c2, j, w)] });
         }
       }
@@ -879,20 +886,26 @@ const KC = (function () {
     return r;
   }
 
-  function moveWeighted(comp, gi, ux, uy, sigma) {
-    const p = comp.pts, n = p.length, cum = comp.cum, L = comp.len, lim = 3 * sigma, half = Math.floor(n / 2);
-    const g2 = 2 * sigma * sigma;
-    p[gi].x += ux; p[gi].y += uy;
-    for (let k = 1; k < half; k++) {
-      const i = (gi + k) % n, d = mod(cum[i] - cum[gi], L);
-      if (d > lim) break;
-      const w = Math.exp(-d * d / g2); p[i].x += w * ux; p[i].y += w * uy;
+  function adaptiveStep(S, mutate, opt) {
+    let result;
+    for(let scale=1;scale>=1/64;scale/=2) {
+      result=attemptStep(S,comps=>mutate(comps,scale),opt);
+      if(result.ok)return result;
     }
-    for (let k = 1; k < half; k++) {
-      const i = mod(gi - k, n), d = mod(cum[gi] - cum[i], L);
-      if (d > lim) break;
-      const w = Math.exp(-d * d / g2); p[i].x += w * ux; p[i].y += w * uy;
-    }
+    return result;
+  }
+  function relaxStep(S) {
+    return adaptiveStep(S,(comps,scale)=>relaxMutator(comps,40,scale),{});
+  }
+
+  function moveWeighted(comp, gi, ux, uy, sigma, u=comp.pts[gi].u) {
+    const center=arcPosOfU(comp,u), g2=2*sigma*sigma;
+    // Include every vertex, including the opposite vertex on short loops.
+    comp.pts.forEach((p,i)=>{
+      const d=sDist(comp,comp.cum[i],center);
+      if(d>3*sigma)return;
+      const w=Math.exp(-d*d/g2);p.x+=w*ux;p.y+=w*uy;
+    });
   }
   function indexOfU(comp, u) {
     let best = 0, bd = 2;
@@ -981,10 +994,10 @@ const KC = (function () {
 
   // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing
   function relaxMutator(comps, R, strength) {
-    const CELL = R, grid = new Map(), all = [];
+    const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
       const cx = Math.floor(q.x / CELL), cy = Math.floor(q.y / CELL), key = (cx + 32768) * 65536 + (cy + 32768);
-      let l = grid.get(key); if (!l) { l = []; grid.set(key, l); } l.push(c, i); all.push([c, i]);
+      let l = grid.get(key); if (!l) { l = []; grid.set(key, l); } l.push(c, i);
     }));
     const disp = comps.map(cm => cm.pts.map(() => ({ x: 0, y: 0 })));
     comps.forEach((cm, c) => {
@@ -999,15 +1012,24 @@ const KC = (function () {
             if (c2 === c && sDist(cm, cm.cum[i], cm.cum[j]) < 2.5 * R) continue;
             const o = comps[c2].pts[j], dx = q.x - o.x, dy = q.y - o.y, d = Math.hypot(dx, dy);
             if (d >= R || d < 1e-6) continue;
-            const w = (R - d) / R; fx += w * w * dx / d; fy += w * w * dy / d;
+            // Integrate over arc length, so inserting sample points cannot
+            // amplify repulsion. The force vanishes smoothly at intersections.
+            const other=comps[c2], count=other.pts.length;
+            const mass=(Math.hypot(o.x-other.pts[(j+count-1)%count].x,o.y-other.pts[(j+count-1)%count].y)+
+              Math.hypot(o.x-other.pts[(j+1)%count].x,o.y-other.pts[(j+1)%count].y))/(2*SEG);
+            const w=1-d*d/(R*R), f=w*w*mass;
+            fx += f*dx/R; fy += f*dy/R;
           }
         }
-        const a = p[(i - 1 + n) % n], b = p[(i + 1) % n];
-        disp[c][i].x = strength * fx + 0.3 * ((a.x + b.x) / 2 - q.x);
-        disp[c][i].y = strength * fy + 0.3 * ((a.y + b.y) / 2 - q.y);
+        // Smooth over a fixed arc-length neighborhood, including curves
+        // with uneven sampling left by dragging and topology-safe resampling.
+        const reach=Math.min(2*SEG,cm.len/8);
+        const a=pointAtS(cm,cm.cum[i]-reach), b=pointAtS(cm,cm.cum[i]+reach);
+        disp[c][i].x = strength * (0.3*fx + 0.35*((a.x+b.x)/2-q.x));
+        disp[c][i].y = strength * (0.3*fy + 0.35*((a.y+b.y)/2-q.y));
       }
     });
-    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2) { x *= 1.2 / m; y *= 1.2 / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
+    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
   }
 
 
@@ -1219,7 +1241,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, smallFaces, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, adaptiveStep, relaxStep, smallFaces, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1278,14 +1300,16 @@ const KC = (function () {
       moveCheckpoint:S.moveCheckpoint ? {comps:KC.cloneComps(S.moveCheckpoint.comps),crossings:KC.cloneCrossings(S.moveCheckpoint.crossings)} : null };
   }
   function restore(s) { S.comps = s.comps; S.crossings = s.crossings; S.nextId = s.nextId; S.open = s.open || []; S.memory = s.memory || []; S.moveCheckpoint=s.moveCheckpoint || null; Object.assign(stats,cleanStats(s.stats)); }
-  function pushUndo() { undoStack.push(snapshot()); if (undoStack.length > 60) undoStack.shift(); redoStack = []; }
+  function pushUndo() { stopRelax(); undoStack.push(snapshot()); if (undoStack.length > 60) undoStack.shift(); redoStack = []; }
   function undo() {
     if (active) return;
+    stopRelax();
     const s = undoStack.pop(); if (!s) { toast('Nothing to undo', true); return; }
     redoStack.push(snapshot()); restore(s); clearSel(); changed();
   }
   function redo() {
     if (active) return;
+    stopRelax();
     const s = redoStack.pop(); if (!s) { toast('Nothing to redo', true); return; }
     undoStack.push(snapshot()); restore(s); clearSel(); changed();
   }
@@ -1455,7 +1479,7 @@ const KC = (function () {
     $('wrap').setAttribute('aria-labelledby','document-tab-'+activeTabId);
   }
   function finishTabInteraction() {
-    relaxing=0;
+    stopRelax();
     if(active)endAction();
     if(sel?.floating)dropSelection();
     drag=null;pan=null;stroke=null;erasing=null;lasso=null;hoverX=null;hoverPt=null;hoverErase=null;hoverSnap=null;
@@ -1511,7 +1535,7 @@ const KC = (function () {
   $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
-  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.attemptStep(obj, c => KC.relaxMutator(c, 40, 1.0), {}); if (!r.ok) break; } return obj; }
+  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj); if (!r.ok) break; } return obj; }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
     if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
@@ -1643,24 +1667,30 @@ const KC = (function () {
     const result=KC.alternatingAssignment(S.comps,S.crossings);
     if(!result.ok){toast('Could not make this crossing order alternating. Check for overlapping or degenerate crossings.',true);return;}
     if(!result.flips){toast(S.crossings.length?'The closed diagram is already alternating':'No closed crossings to change');return;}
-    relaxing=0;pushUndo();S.moveCheckpoint=null;
+    stopRelax();pushUndo();S.moveCheckpoint=null;
     S.crossings.forEach((X,i)=>X.over=result.over[i]);stats.flips+=result.flips;
     changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
   };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
   $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); stats.r1 = stats.r2 = stats.r3 = stats.flips = 0; changed(); setTool('draw'); };
-  let relaxing = 0;
+  let relaxing = 0, relaxEpoch = 0;
+  function stopRelax() {
+    relaxing=0;relaxEpoch++;
+    $('smoothBtn').textContent='Auto-relax';
+  }
   function relaxFrames(total) {
-    relaxing = total; let blockedOnce = false; const ownerTab=activeTabId;
+    relaxing = total; let blockedOnce = false; const ownerTab=activeTabId, epoch=++relaxEpoch;
+    $('smoothBtn').textContent='Stop relaxing';
     const frame = () => {
-      if (ownerTab!==activeTabId || relaxing <= 0 || drag) { relaxing = 0; return; }
+      if(epoch!==relaxEpoch)return;
+      if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.attemptStep(S, comps => KC.relaxMutator(comps, 40, 1.0), {});
+        const r = KC.relaxStep(S);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
         addEvents(r.ev);
       }
       changed();
-      if (relaxing > 0) requestAnimationFrame(frame); else if (blockedOnce) toast('Auto-relax stopped at a blocked move', true);
+      if (relaxing > 0) requestAnimationFrame(frame); else {stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');}
     };
     requestAnimationFrame(frame);
   }
@@ -1679,7 +1709,7 @@ const KC = (function () {
     toast(blocked ? 'Some corners were smoothed; further smoothing would require a blocked move' : moved ? 'Sharp corners smoothed' : 'No sharp corners to smooth', blocked);
   };
   $('cornerFix').onchange = e => { opts.cornerFix = e.target.checked; };
-  $('smoothBtn').onclick = () => { if (!S.comps.length || relaxing) return; pushUndo(); relaxFrames(150); };
+  $('smoothBtn').onclick = () => { if(relaxing){stopRelax();return;} if (!S.comps.length) return; pushUndo(); relaxFrames(150); };
   $('undo').onclick = undo;
   $('redo').onclick = redo;
   $('fit').onclick = fitView;
@@ -1753,7 +1783,15 @@ const KC = (function () {
   // ---------- hit testing ----------
   function nearestPoint(w, tol) {
     let best = null;
-    S.comps.forEach((cm, c) => cm.pts.forEach(q => { const d = Math.hypot(q.x - w.x, q.y - w.y); if (d < tol && (!best || d < best.d)) best = { c, u: q.u, d, x: q.x, y: q.y }; }));
+    S.comps.forEach((cm,c)=>cm.pts.forEach((a,i)=>{
+      const b=cm.pts[(i+1)%cm.pts.length], dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;
+      const t=len2?Math.max(0,Math.min(1,((w.x-a.x)*dx+(w.y-a.y)*dy)/len2)):0;
+      const x=a.x+t*dx,y=a.y+t*dy,d=Math.hypot(x-w.x,y-w.y);
+      if(d<tol&&(!best||d<best.d)) {
+        const du=(b.u-a.u+1)%1;
+        best={c,u:(a.u+t*du)%1,d,x,y};
+      }
+    }));
     return best;
   }
   function nearestCrossing(w, tol) {
@@ -2025,13 +2063,13 @@ const KC = (function () {
     let steps = 0, blocked = null;
     const sig = opts.sigma;
     while (steps < 18) {
-      const cm = S.comps[drag.c], gi = KC.indexOfU(cm, drag.u), g = cm.pts[gi];
+      const cm = S.comps[drag.c], g = KC.pointAtS(cm,KC.arcPosOfU(cm,drag.u));
       const dx = drag.mx - g.x, dy = drag.my - g.y, d = Math.hypot(dx, dy);
       if (d < 0.8) break;
       const st = Math.min(2.5, d), c = drag.c, u = drag.u;
-      const r = KC.attemptStep(S, comps => {
+      const r = KC.adaptiveStep(S, (comps,scale) => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
-        KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
+        KC.moveWeighted(cm, gi, dx / d * st * scale, dy / d * st * scale, sig, u);
       }, {
         under: drag.under,
         faceLimits: {

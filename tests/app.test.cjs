@@ -341,3 +341,49 @@ console.log('Bigon drag constraint, separate area controls, off switch and undo 
  api.activateTab(id);assert.equal(p.ids.get('fileName').value,'Renamed during export');
  console.log('Inspector navigation, disabled protections, duplicate actions removed and async export rename/edit race: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
+
+// Hit the actual strand between vertices at high zoom, not just vertex disks.
+{
+ const p=boot(),api=p.ctx.knotLab,d=api.serialize();
+ d.comps=[[[0,0],[100,0],[100,100],[0,100]]];api.openTab(api.deserialize(d),'segment hit');
+ api.view.s=6;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const ev=y=>({pointerType:'mouse',pointerId:53,clientX:300,clientY:y,button:0,preventDefault(){}});
+ p.fire(p.ids.get('cv'),'pointerdown',ev(0));p.fire(p.ids.get('cv'),'pointermove',ev(-30));
+ for(let i=0;i<4;i++)p.step();
+ p.fire(p.ids.get('cv'),'pointerup',ev(-30));p.flush();
+ assert.equal(api.view.oy,0,'Dragging a segment must not pan the canvas');assert(api.state.comps[0].pts.some(q=>q.y<-.1));
+ p.ids.get('undo').click();assert(api.state.comps[0].pts.every(q=>q.y>=0));
+}
+// Queued relaxation frames cannot modify an undo, a new run or another tab.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ const geometry=()=>JSON.stringify(api.serialize().comps),before=geometry();
+ p.ids.get('smoothBtn').click();p.step();assert.notEqual(geometry(),before);
+ p.ids.get('undo').click();p.flush();assert.equal(geometry(),before);
+ p.ids.get('redo').click();const partial=geometry();p.flush();assert.equal(geometry(),partial);
+ p.ids.get('smoothBtn').click();p.ids.get('smoothBtn').click();p.flush();assert.equal(geometry(),partial);
+ p.ids.get('smoothBtn').click();p.ids.get('undo').click();p.ids.get('smoothBtn').click();p.flush();
+ assert.equal(p.ids.get('smoothBtn').textContent,'Auto-relax');
+ p.ids.get('smoothBtn').click();p.ids.get('newTab').click();p.flush();assert.equal(api.analysis.c,0);
+}
+console.log('Segment dragging at high zoom and relaxation cancel/undo/redo/restart/tab isolation: PASS');
+
+// The near-coincident pair previously lost one crossing and blocked every drag.
+for(const pointerType of ['mouse','pen','touch']) {
+ const p=boot(),api=p.ctx.knotLab,d=api.serialize();
+ d.comps=[[[380,210],[399,201],[400,199.999],[401,201],[420,210],[420,220],[380,220]],[[370,200],[430,200],[430,180],[370,180]]];
+ api.openTab(api.deserialize(d),'crowded crossings');assert.equal(api.analysis.c,2);
+ // Make the pair non-R2 by setting opposite overstrands.
+ api.state.crossings[0].over=0;api.state.crossings[1].over=1;
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.ids.get('loosenR1').onchange({target:{checked:false}});
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const ev=y=>({pointerType,pointerId:54,clientX:400,clientY:y,button:0,width:1,height:1,preventDefault(){}});
+ p.fire(p.ids.get('cv'),'pointerdown',ev(199.999));p.fire(p.ids.get('cv'),'pointermove',ev(185));
+ for(let i=0;i<5;i++)p.step();p.fire(p.ids.get('cv'),'pointerup',ev(185));p.flush();
+ assert.equal(api.analysis.c,2);assert(api.state.comps[0].pts.some(q=>q.y<195));
+ p.ids.get('undo').click();assert.equal(api.analysis.c,2);assert(api.state.comps[0].pts.every(q=>q.y>=199.999));
+ p.ids.get('redo').click();assert.equal(api.analysis.c,2);assert(api.state.comps[0].pts.some(q=>q.y<195));
+}
+console.log('Crowded crossing escape through mouse/pen/touch, undo and redo: PASS');
