@@ -566,6 +566,32 @@ const KC = (function () {
     updateGeom(comp);
   }
 
+  // resampleComp only ever splits segments that grew too long; a point is
+  // dropped only when it sits (to within floating-point noise) exactly on
+  // the straight chord between its neighbors, so that removing it can never
+  // change which crossings exist. That guarantee makes it effectively
+  // one-directional once every point is nudged by a force each step (as
+  // relaxation does): points accumulate every step and are almost never
+  // removed, so the curve grows without bound over repeated relaxation.
+  // Rebuild the point list at even arc-length spacing instead, preserving
+  // material (u) coordinates by interpolation exactly as resampleComp does;
+  // the caller is expected to verify this did not change the topology
+  // (see compactStep) before keeping it, since unlike resampleComp this can
+  // shift a vertex that happens to sit at a crossing.
+  function compactPts(pts, spacing) {
+    const n = pts.length, cum = [0];
+    for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; cum.push(cum[i] + Math.hypot(b.x - a.x, b.y - a.y)); }
+    const L = cum[n], m = Math.max(16, Math.round(L / spacing)), out = [];
+    let j = 0;
+    for (let k = 0; k < m; k++) {
+      const s = k * L / m;
+      while (j < n - 1 && cum[j + 1] < s) j++;
+      const a = pts[j], b = pts[(j + 1) % n], f = (s - cum[j]) / ((cum[j + 1] - cum[j]) || 1), du = circSigned(a.u, b.u);
+      out.push({ x: a.x + f * (b.x - a.x), y: a.y + f * (b.y - a.y), u: mod(a.u + f * du, 1) });
+    }
+    return out;
+  }
+
   function mkOcc(comps, c, i, t) {
     const cm = comps[c], p = cm.pts, n = p.length, a = p[i], b = p[(i + 1) % n];
     const sl = (cm.cum[i + 1] - cm.cum[i]) || 1;
@@ -963,6 +989,15 @@ const KC = (function () {
   function relaxStep(S, clearance) {
     return attemptStep(S,comps=>relaxMutator(comps,40,1.0),{crossingClearance:clearance});
   }
+  // Rebuild every component at even spacing to undo the one-directional
+  // point growth from repeated relaxation (see compactPts). Routed through
+  // attemptStep so the usual topology check rejects (and rolls back) the
+  // rare case where compaction would itself shift a crossing's parameter
+  // enough to look like a move; skipping is always safe, just leaves the
+  // extra points until the next attempt.
+  function compactStep(S) {
+    return attemptStep(S, comps => comps.forEach(cm => { cm.pts = compactPts(cm.pts, SEG); }), {});
+  }
 
   function moveWeighted(comp, gi, ux, uy, sigma, u=comp.pts[gi].u) {
     const center=arcPosOfU(comp,u), g2=2*sigma*sigma;
@@ -1092,8 +1127,14 @@ const KC = (function () {
   }
 
   // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing.
-  // This is the original relaxation exactly (raw point repulsion, immediate-neighbor
-  // corner smoothing) — restored as-is rather than the later, more aggressive rework.
+  // Repulsion is integrated over arc length (a "mass" per sample) so that
+  // inserting sample points cannot amplify the force — the raw per-point
+  // version feeds back into resampling and both the curve and its point
+  // count grow without bound over repeated relaxation. Smoothing pulls each
+  // point toward the arc-length midpoint of a small neighborhood rather than
+  // its immediate polyline neighbors, which stays correct when sampling is
+  // uneven (after dragging) and produces smooth, round corners instead of
+  // faceted ones.
   function relaxMutator(comps, R, strength) {
     const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
@@ -1113,12 +1154,17 @@ const KC = (function () {
             if (c2 === c && sDist(cm, cm.cum[i], cm.cum[j]) < 2.5 * R) continue;
             const o = comps[c2].pts[j], dx = q.x - o.x, dy = q.y - o.y, d = Math.hypot(dx, dy);
             if (d >= R || d < 1e-6) continue;
-            const w = (R - d) / R; fx += w * w * dx / d; fy += w * w * dy / d;
+            const other=comps[c2], count=other.pts.length;
+            const mass=(Math.hypot(o.x-other.pts[(j+count-1)%count].x,o.y-other.pts[(j+count-1)%count].y)+
+              Math.hypot(o.x-other.pts[(j+1)%count].x,o.y-other.pts[(j+1)%count].y))/(2*SEG);
+            const w=1-d*d/(R*R), f=w*w*mass;
+            fx += f*dx/R; fy += f*dy/R;
           }
         }
-        const a = p[(i - 1 + n) % n], b = p[(i + 1) % n];
-        disp[c][i].x = strength * fx + 0.3 * ((a.x + b.x) / 2 - q.x);
-        disp[c][i].y = strength * fy + 0.3 * ((a.y + b.y) / 2 - q.y);
+        const reach=Math.min(2*SEG,cm.len/8);
+        const a=pointAtS(cm,cm.cum[i]-reach), b=pointAtS(cm,cm.cum[i]+reach);
+        disp[c][i].x = strength * (0.3*fx + 0.35*((a.x+b.x)/2-q.x));
+        disp[c][i].y = strength * (0.3*fy + 0.35*((a.y+b.y)/2-q.y));
       }
     });
     comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
@@ -1333,7 +1379,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, adaptiveStep, relaxStep, smallFaces, faceSizeViolation, crossingClearanceViolation, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, separateTinyBigons, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, adaptiveStep, relaxStep, compactStep, compactPts, smallFaces, faceSizeViolation, crossingClearanceViolation, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, separateTinyBigons, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1637,7 +1683,14 @@ const KC = (function () {
   $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
-  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj, CROSSING_CLEARANCE); if (!r.ok) break; } return obj; }
+  function relaxed(obj, iters) {
+    for (let i = 0; i < iters; i++) {
+      const r = KC.relaxStep(obj, CROSSING_CLEARANCE); if (!r.ok) break;
+      if ((i+1) % 30 === 0) KC.compactStep(obj);
+    }
+    KC.compactStep(obj);
+    return obj;
+  }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
     if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
@@ -1781,7 +1834,7 @@ const KC = (function () {
     $('smoothBtn').textContent='Auto-relax';
   }
   function relaxFrames(total) {
-    relaxing = total; let blockedOnce = false; const ownerTab=activeTabId, epoch=++relaxEpoch;
+    relaxing = total; let blockedOnce = false, sinceCompact = 0; const ownerTab=activeTabId, epoch=++relaxEpoch;
     $('smoothBtn').textContent='Stop relaxing';
     const frame = () => {
       if(epoch!==relaxEpoch)return;
@@ -1789,10 +1842,19 @@ const KC = (function () {
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
         const r = KC.relaxStep(S, CROSSING_CLEARANCE/view.s);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
-        addEvents(r.ev);
+        addEvents(r.ev); sinceCompact++;
       }
+      // Relaxation nudges every point each step, and resampling can only
+      // split segments that grew too long, not merge ones that stayed
+      // short — left alone, the point count (and eventually drag/render
+      // speed) grows without bound over a long or repeated relax. Rebuild
+      // each component's sampling back to even spacing periodically.
+      if (sinceCompact >= 30) { KC.compactStep(S); sinceCompact = 0; }
       changed();
-      if (relaxing > 0) requestAnimationFrame(frame); else {stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');}
+      if (relaxing > 0) requestAnimationFrame(frame); else {
+        if (sinceCompact > 0) KC.compactStep(S);
+        stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
+      }
     };
     requestAnimationFrame(frame);
   }
@@ -1827,6 +1889,12 @@ const KC = (function () {
     if (t !== 'lasso') clearSel();
     tool = t; document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t));
     hoverX = hoverPt = hoverErase = hoverSnap = null;
+    // Hover state otherwise only updates on pointermove: switching to the
+    // Flip tool by keyboard while the cursor sits over a crossing (holding
+    // C, or pressing X) would show no highlight at all until the pointer
+    // physically moves. Recompute it immediately from the last known
+    // cursor position instead of waiting for that next move.
+    if (t === 'flip' && cursor) hoverX = nearestCrossing(cursor, 13 / view.s * 1.4);
     $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso'; $('optMove').hidden = t !== 'move';
     $('toolopts').hidden = !['draw', 'erase', 'lasso', 'move'].includes(t);
     updateHint(); render();
@@ -2070,6 +2138,12 @@ const KC = (function () {
   const localXY = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 
   cv.addEventListener('pointerdown', e => {
+    // The canvas itself isn't focusable, so a lingering focus left on a
+    // text field (PD code, braid word, a tab rename, ...) would otherwise
+    // keep receiving key events after the user has moved on to the
+    // diagram — silently swallowing every single-letter shortcut, since
+    // they're deliberately suppressed while a text field looks focused.
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
     if (e.pointerType === 'pen') {
       if (!input.penSeen) {
         input.penSeen = true; $('penStatus').textContent = 'Pen detected';

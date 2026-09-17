@@ -9,7 +9,7 @@ function boot(saved,narrow=true,Worker){
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
   getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
-  focus(){doc.activeElement=this} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
+  focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
@@ -259,6 +259,27 @@ console.log('The move tool options bar shows drag radius, underneath and R1/R2 p
  assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'draw');
 }
 console.log('Holding C is a momentary crossing-switch that restores the previous tool on release: PASS');
+
+// The canvas itself isn't focusable, so focus left on a text field (PD
+// code, braid word, a rename, ...) would otherwise keep swallowing every
+// single-letter shortcut even after the user moved on to the diagram.
+// A pointerdown on the canvas must reclaim focus so shortcuts work again.
+{
+ const p=boot(),canvas=p.ids.get('cv'),pressedTool=()=>p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.ids.get('pdInput').focus();
+ assert.equal(p.doc.activeElement, p.ids.get('pdInput'));
+ p.key('keydown',{key:'c',target:p.ids.get('pdInput')});
+ assert.equal(pressedTool(),'draw','A shortcut must stay suppressed while a text field looks focused');
+ p.key('keyup',{key:'c'});
+ const ev={pointerType:'mouse',pointerId:1,clientX:100,clientY:100,button:0,buttons:1,preventDefault(){}};
+ p.fire(canvas,'pointerdown',ev);p.fire(canvas,'pointerup',{...ev,buttons:0});
+ assert.equal(p.doc.activeElement, p.doc.body,'A canvas interaction must reclaim focus from a stale text field');
+ p.key('keydown',{key:'c'});
+ assert.equal(pressedTool(),'flip','The shortcut must work again once focus has moved off the text field');
+ p.key('keyup',{key:'c'});
+}
+console.log('A canvas interaction reclaims focus so shortcuts are not silently swallowed by a stale text field: PASS');
 
 function arcSession(pointerType='mouse',fix=true,saved) {
  const p=boot(saved),api=p.ctx.knotLab,canvas=p.ids.get('cv');
