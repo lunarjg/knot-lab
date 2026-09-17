@@ -225,6 +225,29 @@ h2{font-size:15px}
 .new-tab{flex-shrink:0;padding:6px 10px;font-size:14px;white-space:nowrap}
 .document-tabs>.iconbtn{flex-shrink:0}
 @media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
+/* Compact inspector pages keep common controls close and details optional. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.panelhead{margin:0;padding:0 0 12px;position:static}
+.panelhead h1{font-size:18px}
+.panel-top{position:sticky;top:-14px;z-index:2;padding-top:14px;background:var(--panel)}
+.panel-nav{display:flex;gap:4px;padding:8px 0 12px;background:var(--panel);border-bottom:1px solid var(--rule)}
+.panel-nav button{flex:1;min-width:0;border:0;border-radius:9px;background:transparent;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer}
+.panel-nav button[aria-pressed="true"]{background:var(--accent);color:var(--paper)}
+.inspector-scroll section{padding:18px 0}
+.inspector-scroll section:first-child{border-top:0}
+.inspector-scroll .chk{margin:0;padding:10px 0;align-items:flex-start;line-height:1.4}
+.chk input{margin-top:2px}
+.chk small{margin-top:4px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;margin:10px 0 16px}
+.row label{grid-column:1}
+.row output{grid-column:2;grid-row:1;min-width:70px;font-variant-numeric:tabular-nums;color:var(--accent)}
+.row input[type=range]{grid-column:1/-1;width:100%;min-height:28px;margin:0}
+.row:has(input:disabled){opacity:.5}
+summary{min-height:44px;padding:10px 0;font-weight:600;cursor:pointer;color:var(--ink)}
+summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.inspector-scroll .btns{gap:8px}
+.inspector-scroll h2{margin-bottom:12px}
+#clearBtn{color:var(--warn)}
 </style>
 </head>
 <body>
@@ -294,11 +317,18 @@ h2{font-size:15px}
 
   <aside id="inspector" aria-label="Calculations &amp; settings">
     <div id="panelResize" class="panel-resize" role="separator" tabindex="0" aria-label="Resize calculations and settings" aria-orientation="vertical" aria-controls="inspector" aria-valuemin="280" aria-valuemax="640" aria-valuenow="360" aria-describedby="panelResizeHelp" title="Drag to resize; drag to the right edge to hide"></div>
-    <div class="inspector-scroll">
-    <div class="panelhead"><h1>Calculations &amp; settings</h1><button class="iconbtn" id="panelClose" aria-label="Close calculations and settings">Close</button></div>
-    <p id="panelResizeHelp" class="panel-resize-note">Drag the left handle to resize. Drag it to the right edge and release to hide the panel.</p>
-    <p class="lede">Dragging allows only Reidemeister moves. Moves that require a crossing change are blocked.</p>
+    <div class="inspector-scroll" id="panelScroll">
+    <div class="panel-top">
+    <div class="panelhead"><h1>Inspector</h1><button class="iconbtn" id="panelClose" aria-label="Close calculations and settings">Close</button></div>
+    <p id="panelResizeHelp" class="sr-only">Drag the left handle to resize. Drag it to the right edge and release to hide the panel.</p>
 
+    <nav class="panel-nav" aria-label="Inspector pages">
+      <button id="navDiagram" aria-pressed="true" aria-controls="pageDiagram">Diagram</button>
+      <button id="navSettings" aria-pressed="false" aria-controls="pageSettings">Settings</button>
+      <button id="navFiles" aria-pressed="false" aria-controls="pageFiles">Files</button>
+    </nav>
+    </div>
+    <div id="pageDiagram">
     <section>
       <div class="formula">
         <div class="lhs">Turaev genus of D</div>
@@ -307,7 +337,6 @@ h2{font-size:15px}
         <div class="note">g<sub>T</sub>(D) is the value for this diagram and an upper bound for g<sub>T</sub>(K).</div>
       </div>
       <h2>Diagram quantities</h2>
-      <p class="small">These values describe the current diagram; crossing count, writhe, state counts, and surface genera can change under Reidemeister moves.</p>
       <dl class="inv">
         <dt>Crossings c(D)</dt><dd id="vc">0</dd>
         <dt>All-A state circles s<sub>A</sub>(D)</dt><dd id="vsA">0</dd>
@@ -318,7 +347,17 @@ h2{font-size:15px}
       </dl>
       <div class="flags" id="flags"></div>
     </section>
-
+    <section>
+      <h2>Diagram actions</h2>
+      <div class="btns">
+        <button id="makeAlternating">Make alternating</button>
+        <button id="mirrorBtn">Mirror</button>
+        <button id="cornerBtn">Smooth sharp corners</button>
+        <button id="smoothBtn">Auto-relax</button>
+        <button id="clearBtn">Clear all</button>
+      </div>
+      <p class="small">Make alternating switches the fewest crossings on closed components; it can change the knot type.</p>
+    </section>
     <section aria-labelledby="invariantHeading">
       <h2 id="invariantHeading">Knot &amp; link invariants</h2>
       <dl class="inv"><dt>Closed components</dt><dd id="vmu">0</dd></dl>
@@ -333,19 +372,18 @@ h2{font-size:15px}
         <p class="small" id="coloringNote"></p>
         <h3>Pairwise linking numbers</h3>
         <p class="invariant-value" id="linkingNumbers">—</p>
-        <p class="small">Component numbers follow drawing/import order. Signs use the displayed orientations. A zero linking number does not prove that a link is split.</p>
+        <p class="small">Signs follow component orientations; zero does not imply a split link.</p>
         <h3>Jones polynomial V(t)</h3>
         <p class="invariant-value" id="jonesPolynomial">—</p>
         <p class="small" id="jonesNote"></p>
       </div>
-      <p class="small">Closed components only; open strokes are excluded. Press Calculate again after changes. Matching invariants alone do not prove two knots equivalent.</p>
+      <p class="small">Closed components only. Recalculate after edits.</p>
       <details class="small"><summary>Definitions &amp; limits</summary>
-        <p>The determinant is shown for a single-component knot. Fox colorings include the three constant colorings; “nonconstant” means at least two colors are used. Coloring and determinant calculations support up to 200 crossings.</p>
+        <p>Matching invariants do not prove equivalence. The determinant is shown for a single-component knot. Fox colorings include the three constant colorings; “nonconstant” means at least two colors are used. Coloring and determinant calculations support up to 200 crossings.</p>
         <p>Jones uses V(unknot) = 1 and V(t) = (−A³)<sup>−w(D)</sup>⟨D⟩ with A = t<sup>−1/4</sup>. Exact state expansion supports up to 18 crossings. Link polynomials may have half-integer powers.</p>
         <p>Methods: <a href="https://arxiv.org/html/2204.12104v2" target="_blank" rel="noopener noreferrer">Kauffman: Jones polynomial</a>; <a href="https://arxiv.org/abs/1910.08044" target="_blank" rel="noopener noreferrer">Kolay: coloring matrices</a>; <a href="https://homepages.math.uic.edu/~kauffman/KFI.pdf" target="_blank" rel="noopener noreferrer">linking numbers</a>.</p>
       </details>
     </section>
-
     <section>
       <h2>Reidemeister move counts</h2>
       <div class="moves">
@@ -354,95 +392,82 @@ h2{font-size:15px}
         <div class="move" id="mR3"><div class="n">0</div><div class="l">R3</div></div>
       </div>
       <p class="small">Crossing changes: <span id="nflip">0</span> (may change the knot type)</p>
-      <div class="btns"><button id="makeAlternating">Make alternating</button></div>
-      <p class="small">Alternates over/under along each closed component, using the fewest crossing changes for this projection. Geometry stays fixed; the knot or link type may change. Open arcs are excluded.</p>
     </section>
-
+    </div>
+    <div id="pageSettings" hidden>
     <section>
-      <h2>Drag &amp; view settings</h2>
-      <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><span id="sigmaV" style="width:30px;text-align:right">40</span></div>
-      <label class="chk"><input type="checkbox" id="under"><span>Drag strand underneath<small>The dragged strand passes under at new crossings. You can also hold <kbd>Shift</kbd> while dragging.</small></span></label>
-      <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect non-R2 bigons<small>Protects area, thickness, and crossing spacing only when each boundary strand switches from over to under. Bigons with the same strand on top at both crossings can shrink freely for R2 removal.</small></span></label>
+      <h2>Dragging</h2>
+      <div class="row"><label for="sigma">Drag radius</label><input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></div>
+      <label class="chk"><input type="checkbox" id="under"><span>Pass underneath<small>Hold Shift to reverse while dragging.</small></span></label>
+      <label class="chk"><input type="checkbox" id="protectBigons" checked><span>Protect non-R2 bigons<small>Alternating over/under only. R2-removable bigons can shrink freely.</small></span></label>
       <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect R1 kinks<small>Keeps existing one-crossing loops from being squeezed flat. New R1 loops may start small and grow. R1 assistance only loosens loops present when the drag started.</small></span></label>
-      <div class="row"><label for="kinkArea">Minimum kink area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
-      <p class="small">Sizes use screen pixels at the current zoom. Already small regions can expand. Other crossing pairs are not held apart. Turn a protection off to deliberately collapse that type of region.</p>
-      <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Loosen small R1 loops while dragging<small>Straightens small empty loops near the strand you drag. Other crossings keep their over/under order. Turn off to keep these curls.</small></span></label>
+      <label class="chk"><input type="checkbox" id="protectKinks" checked><span>Protect existing R1 loops<small>New self-crossings may start small.</small></span></label>
+      <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
+      <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
+      <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Remove small R1 loops while dragging<small>Only empty loops present before the drag.</small></span></label>
+    </section>
+    <section>
+      <h2>Display</h2>
       <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
-      <label class="chk"><input type="checkbox" id="signs"><span>Show crossing signs</span></label>
+      <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
     </section>
-
-    <section>
-      <h2>Files</h2>
-      <div class="braid">
-        <input id="fileName" placeholder="Filename (defaults to date)" aria-label="Filename">
-        <button id="saveBtn2">Save</button>
-      </div>
-      <div class="btns" style="margin-top:6px"><button id="openBtn2">Open files in new tabs</button></div>
-      <p class="small">Each file opens in its own tab with separate undo history. Select multiple JSON files to open them together.</p>
-      <label class="chk"><input type="checkbox" id="autosave" checked><span>Autosave in this browser<small>Restores open tabs, diagrams, and move counts on this device. Use Save to export a JSON file for backup or transfer to another device.</small></span></label>
-    </section>
-
     <section>
       <h2>Pen &amp; touch</h2>
-      <label class="chk"><input type="checkbox" id="penOnly"><span>Pen-only mode<small>Use Apple Pencil or a mouse to draw, erase, select with the lasso, and switch crossings. Pan with one finger and zoom with two.</small></span></label>
-      <label class="chk"><input type="checkbox" id="fingerDrag" checked><span>Allow finger dragging in pen-only mode<small>With the Drag strand tool, drag a strand with your finger to move it, or drag an empty area to pan.</small></span></label>
-      <label class="chk"><input type="checkbox" id="palm" checked><span>Palm rejection<small>Ignores broad touches and touch input while the pen is down or for 0.3 seconds after it lifts. A gesture started by your palm is canceled when the pen touches the screen.</small></span></label>
-      <label class="chk"><input type="checkbox" id="autoPen" checked><span>Enable pen-only mode when a pen is detected</span></label>
-      <label class="chk"><input type="checkbox" id="penDoubleTap" checked><span>Double-tap the canvas with the pen to toggle the eraser<small>Web pages do not receive the Apple Pencil barrel double-tap. Instead, tap the canvas twice quickly with the pen tip. Double-tap again to return to the previous tool.</small></span></label>
+      <label class="chk"><input type="checkbox" id="penOnly"><span>Pen-only editing<small>Fingers pan and zoom; mouse editing stays enabled.</small></span></label>
+      <label class="chk"><input type="checkbox" id="fingerDrag" checked><span>Finger dragging in pen-only mode<small>Use the Drag strand tool.</small></span></label>
+      <label class="chk"><input type="checkbox" id="palm" checked><span>Palm rejection</span></label>
+      <label class="chk"><input type="checkbox" id="autoPen" checked><span>Enable pen-only editing on pen detection</span></label>
+      <label class="chk"><input type="checkbox" id="penDoubleTap" checked><span>Double-tap with pen tip for eraser<small>Tap the canvas, not the Pencil barrel.</small></span></label>
       <p class="small" id="penStatus">No pen input detected yet</p>
     </section>
-
+    <section class="help">
+      <details><summary>Controls &amp; shortcuts</summary>
+      <p><b>Draw</b> Turn Auto-close off for open arcs. Joining an endpoint passes under existing arcs.</p>
+      <p><b>Drag</b> Move strands with Reidemeister moves. Drag empty space to pan; pinch or scroll to zoom.</p>
+      <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
+      <p><b>Smoothing</b> Pen “Smooth corners” applies to new strokes. “Smooth sharp corners” edits existing curves; Auto-relax spreads the diagram.</p>
+      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
+      <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
+      </details>
+    </section>
+    </div>
+    <div id="pageFiles" hidden>
+    <section>
+      <h2>Document</h2>
+      <label for="fileName" class="inputlabel">Name</label>
+      <div class="braid"><input id="fileName" maxlength="120" placeholder="Defaults to date" aria-label="Document name"></div>
+      <p class="small">You can also tap the active tab to rename. Open and Save are in the top bar.</p>
+      <label class="chk"><input type="checkbox" id="autosave" checked><span>Autosave on this device<small>Use Save to export a JSON backup.</small></span></label>
+    </section>
     <section>
       <h2>Import a knot</h2>
       <label for="pdInput" class="inputlabel">PD code</label>
       <textarea class="pd" id="pdInput" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="pdHelp pdError" placeholder="Paste a list of four numbers per crossing"></textarea>
-      <p class="small" id="pdHelp">Use [[a,b,c,d], …] or PD[X[a,b,c,d], …]. Start with the incoming understrand, then list the remaining arcs counterclockwise. Supports up to 80 crossings.</p>
+      <p class="small" id="pdHelp">[[a,b,c,d], …] or PD[X[a,b,c,d], …]. Incoming understrand first, then counterclockwise. Maximum 80 crossings.</p>
       <p class="pd-error" id="pdError" role="alert" hidden></p>
       <button class="primary" id="pdImport">Import PD code</button>
-      <p class="small">Replaces the current diagram. Use Undo to restore your previous work. Arc labels may be renumbered after import.</p>
+      <p class="small">Replaces this diagram; Undo restores it. Labels may be renumbered.</p>
+      <h3>Braid closure</h3>
       <div class="braid">
-        <input id="braidIn" placeholder="Enter a braid word" aria-label="Braid word">
-        <button id="braidGo">Create braid closure</button>
+        <input id="braidIn" placeholder="e.g. 1 1 1" aria-label="Braid word">
+        <button id="braidGo">Create</button>
       </div>
       <p class="small">i means σ<sub>i</sub>; −i means σ<sub>i</sub><sup>−1</sup>. Creates a diagram of the braid closure.</p>
     </section>
-
-    <section>
-      <h2>Diagram actions</h2>
-      <div class="btns">
-        <button id="mirrorBtn">Mirror</button>
-        <button id="cornerBtn">Smooth sharp corners</button>
-        <button id="smoothBtn">Auto-relax</button>
-        <button id="clearBtn">Clear all</button>
-      </div>
-    </section>
-
     <section>
       <h2>PD code</h2>
-      <textarea class="pd" id="pd" readonly></textarea>
+      <textarea class="pd" id="pd" aria-label="Current diagram PD code" readonly></textarea>
       <div class="btns" style="margin-top:6px"><button id="copyPd">Copy PD code</button></div>
-      <p class="small">KnotTheory convention: X[incoming understrand, then counterclockwise]. Compatible with khoca and similar tools.</p>
-    </section>
 
+    </section>
     <section class="installhelp">
-      <h2>Add to Home Screen</h2>
+      <details><summary>Offline &amp; installation</summary>
       <p class="small">Open this page in Safari, then choose Share → Add to Home Screen. Enable “Open as Web App” if shown.</p>
       <p class="small" id="offlineStatus" role="status">Preparing offline access…</p>
+    </details>
     </section>
-    <section class="help">
-      <h2>How to use</h2>
-      <p><b>Move</b> Drag a strand to move it and the surrounding curve. Small empty R1 loops nearby straighten as you drag. Turn off “Loosen small R1 loops while dragging” to keep them. Drag an empty area to pan; use the wheel to zoom.</p>
-      <p><b>Draw</b> Draw a stroke to create a closed curve. With auto-close off, strokes remain open; continue from an endpoint to complete a loop. Self-crossings alternate, and new curves pass over existing strands.</p>
-      <p><b>Smooth corners</b> Continuing from an endpoint joins smoothly in the existing direction. Closing a curve trims any overshoot, and small hooks at the start or end of a stroke are removed. Use “Smooth sharp corners” on an existing diagram.</p>
-      <p><b>Eraser</b> Erase stroke removes an entire curve; Erase segment removes only the part you touch. Rejoining a cut curve preserves the over/under assignments of surviving crossings. Open curves are excluded from calculations.</p>
-      <p><b>Lasso</b> Whole curves selects each curve with more than half its length enclosed. Region cuts out and selects only the enclosed portions. Drag to move the selection or use the round handle above it to rotate, with gentle snapping every 15°; hold Shift for 15° steps. Use the floating menu to copy, cut, delete, or paste. Crossings within the selection keep their over/under assignments; at new crossings with other curves, the moved selection passes over.</p>
-      <p><b>Switch crossing</b> Tap a crossing to swap its over/under strands.</p>
-      <p><b>Auto-relax</b> Strands repel one another to spread out the diagram, using only Reidemeister moves.</p>
-      <p><b>Blocked moves</b> Moves are blocked when an R2 removal has different overstrands at its two crossings, an R3 triangle has cyclic over/under ordering, or one strand would pass through another.</p>
-      <p><kbd>D</kbd> <kbd>E</kbd> <kbd>L</kbd> <kbd>V</kbd> <kbd>X</kbd> Tools, <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy, Cut, Paste, <kbd>Delete</kbd> Delete selection, <kbd>Ctrl</kbd>+<kbd>S</kbd>/<kbd>O</kbd> Save, Open, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>1</kbd>–<kbd>4</kbd> Views, <kbd>Ctrl</kbd>+<kbd>Z</kbd> Undo</p>
-    </section>
+    </div>
     </div>
   </aside>
 </div>
@@ -1324,17 +1349,17 @@ const KC = (function () {
   }
   async function saveFile() {
     if (!S.comps.length && !S.open.length) { toast('No diagram to save', true); return; }
-    const name = fileName(), text = JSON.stringify(serialize()), exportingTab=activeTabId, exportingRevision=currentTab()?.revision || 0;
+    const name = fileName(), text = JSON.stringify(serialize()), exportingTab=activeTabId, exportingRevision=currentTab()?.revision || 0, exportingName={title:currentTab()?.title,fileName:$('fileName').value};
     const file = new File([text], name, { type: 'application/json' });
     if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: 'Knot diagram' }); markExported(exportingTab,name,exportingRevision); toast('Export complete'); }
+      try { await navigator.share({ files: [file], title: 'Knot diagram' }); markExported(exportingTab,name,exportingRevision,exportingName); toast('Export complete'); }
       catch (e) { if (e.name !== 'AbortError') toast('Could not export the file. Please try again', true); }
       return;
     }
     const url = URL.createObjectURL(file), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    markExported(exportingTab,name,exportingRevision);toast('JSON file download started');
+    markExported(exportingTab,name,exportingRevision,exportingName);toast('JSON file download started');
   }
   async function openFile(file) {
     if (!file) return false;
@@ -1368,9 +1393,9 @@ const KC = (function () {
     $('saveStatus').textContent='Saving…'; clearTimeout(autosaveTimer);
     autosaveTimer=setTimeout(saveWorkspace,700);
   }
-  $('saveBtn').onclick = saveFile; $('saveBtn2').onclick = saveFile;
+  $('saveBtn').onclick = saveFile;
   const pick = () => { $('fileInput').value = ''; $('fileInput').click(); };
-  $('openBtn').onclick = pick; $('openBtn2').onclick = pick;
+  $('openBtn').onclick = pick;
   $('fileInput').onchange = e => openFiles(e.target.files);
   $('autosave').onchange = e => { $('saveStatus').textContent = e.target.checked ? 'Autosave on' : 'Autosave off'; try { if (!e.target.checked) { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(WORKSPACE_KEY); } else scheduleAutosave(); } catch (err) { } };
   wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('dropping'); });
@@ -1471,14 +1496,19 @@ const KC = (function () {
     if(wasActive)activateTab(tabs[Math.min(index,tabs.length-1)].id,true,false);
     else {renderTabs();scheduleAutosave();}
   }
-  function markExported(id,name,revision) {
+  function markExported(id,name,revision,originalName) {
     const tab=tabs.find(t=>t.id===id);if(!tab)return;
-    if((tab.revision||0)===revision)tab.dirty=false;tab.fileName=name.replace(/\.json$/i,'');tab.title=tab.fileName;
-    if(id===activeTabId)$('fileName').value=tab.fileName;
+    if((tab.revision||0)===revision)tab.dirty=false;
+    // Sharing may finish after the user renames or switches documents.
+    const currentName=id===activeTabId ? $('fileName').value : tab.fileName;
+    if(tab.title===originalName.title && currentName===originalName.fileName) {
+      tab.fileName=name.replace(/\.json$/i,'');tab.title=tab.fileName;
+      if(id===activeTabId)$('fileName').value=tab.fileName;
+    }
     renderTabs();scheduleAutosave();
   }
   $('newTab').onclick=()=>openTab();
-  $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.title=$('fileName').value.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
+  $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
   function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.attemptStep(obj, c => KC.relaxMutator(c, 40, 1.0), {}); if (!r.ok) break; } return obj; }
@@ -1573,8 +1603,16 @@ const KC = (function () {
   });
   $('panelToggle').onclick = () => setPanel(!panelOpen, true);
   $('panelClose').onclick = $('panelScrim').onclick = () => setPanel(false, true);
+  function showPanelPage(page) {
+    for (const name of ['Diagram','Settings','Files']) {
+      $('page'+name).hidden = name !== page;
+      $('nav'+name).setAttribute('aria-pressed', String(name === page));
+    }
+    $('panelScroll').scrollTop = 0;
+  }
+  for (const name of ['Diagram','Settings','Files']) $('nav'+name).onclick = () => showPanelPage(name);
   $('pdOpen').onclick = () => {
-    setPanel(true); $('pdInput').scrollIntoView({block:'center'}); $('pdInput').focus({preventScroll:true});
+    showPanelPage('Files'); setPanel(true); $('pdInput').scrollIntoView({block:'center'}); $('pdInput').focus({preventScroll:true});
   };
   narrowPanel.addEventListener('change', () => setPanel(!narrowPanel.matches));
   window.addEventListener('resize', () => { stopPanelDrag(true); drawPanelWidth(panelWidth); });
@@ -1683,7 +1721,9 @@ const KC = (function () {
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
-  ['protectBigons','protectKinks'].forEach(id=>$(id).onchange=e=>{opts[id]=e.target.checked;});
+  ['protectBigons','protectKinks'].forEach((id,i)=>$(id).onchange=e=>{
+    opts[id]=e.target.checked; $(['bigonArea','kinkArea'][i]).disabled=!opts[id];
+  });
   ['bigonArea','kinkArea'].forEach(id=>$(id).oninput=e=>{opts[id]=+e.target.value;$(id+'V').textContent=opts[id]+' px²';});
   $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };

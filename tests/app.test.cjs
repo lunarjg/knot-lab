@@ -309,3 +309,29 @@ console.log('Bigon drag constraint, separate area controls, off switch and undo 
  console.log('Make alternating: button state, minimal flips, fixed geometry, open arcs, undo/redo, tabs, autosave and canceled stale invariants: PASS');
  console.log('Invariant UI: exact results, mirror, tab switch, stale messages, cancel and retry after worker error: PASS');
 }
+
+// Inspector page navigation must reveal the PD target even from another page.
+{
+ const p=boot();
+ p.ids.get('navSettings').click();
+ assert(!p.ids.get('pageSettings').hidden);assert(p.ids.get('pageDiagram').hidden);assert(p.ids.get('pageFiles').hidden);
+ p.ids.get('pdOpen').click();assert(!p.ids.get('pageFiles').hidden);assert(p.ids.get('pageSettings').hidden);
+ assert.equal(p.ids.get('navFiles').getAttribute('aria-pressed'),'true');assert.equal(p.doc.activeElement,p.ids.get('pdInput'));
+ for(const [check,range] of [['protectBigons','bigonArea'],['protectKinks','kinkArea']]) {
+  p.ids.get(check).onchange({target:{checked:false}});assert(p.ids.get(range).disabled);
+  p.ids.get(check).onchange({target:{checked:true}});assert(!p.ids.get(range).disabled);
+ }
+ assert(!p.ids.has('saveBtn2'));assert(!p.ids.has('openBtn2'));
+}
+// A pending native share must not replace a newer document name or clear newer edits.
+(async()=>{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ let finish;p.ctx.navigator.canShare=()=>true;p.ctx.navigator.share=()=>new Promise(resolve=>finish=resolve);
+ const saving=p.ids.get('saveBtn').onclick();
+ const item=p.ids.get('documentTabs').children[0];item.children[0].click();const field=item.children[0];
+ field.value='Renamed during export';p.fire(field,'blur',{});p.ids.get('mirrorBtn').click();
+ const id=api.activeTabId;api.openTab();finish();await saving;
+ const tab=api.tabs.find(t=>t.id===id);assert.equal(tab.title,'Renamed during export');assert(tab.dirty);
+ api.activateTab(id);assert.equal(p.ids.get('fileName').value,'Renamed during export');
+ console.log('Inspector navigation, disabled protections, duplicate actions removed and async export rename/edit race: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1});

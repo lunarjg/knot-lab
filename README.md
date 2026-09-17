@@ -167,12 +167,12 @@ git push github --tags
 git ls-remote --heads --tags github
 ```
 
-Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v12 for the next application release), and create an annotated tag:
+Before every future production deployment, run all five tests above, make a tested commit, choose a new unused release tag (for example v13 for the next application release), and create an annotated tag:
 
 ```sh
-git tag -a v12 -m "Describe the tested application release"
+git tag -a v13 -m "Describe the tested application release"
 git push github main
-git push github v12
+git push github v13
 ```
 
 Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.

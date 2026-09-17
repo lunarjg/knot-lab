@@ -1,5 +1,14 @@
 # Release history
 
+## v12 — Clearer inspector and UI debugging
+
+- Split the inspector into Diagram, Settings and Files pages with a persistent header and navigation.
+- Group drag, display and pen settings; align slider values and disable size sliders when their protection is off.
+- Remove duplicate Open/Save actions, shorten repeated explanations, and move detailed controls and installation help into disclosures.
+- Preserve newer document names and edits when an earlier native file share finishes.
+- Verify all five regression suites and real in-app-browser flows: four viewport widths (320–1440 px), PD import/errors, invariant workers, tab rename/switch, autosave reload, mirror and undo/redo. Apple Pencil hardware and Safari remain untested.
+- Refresh the offline cache.
+
 ## v11 — Make alternating
 
 - Add an English Make alternating action for closed knot/link diagrams without moving the curves.
