@@ -1,26 +1,26 @@
 # Knot Diagram Lab
 
-아이패드의 펜·터치 입력으로 매듭 도식을 그리고 계산하는 정적 웹앱입니다.
+A static web app for drawing and analyzing knot diagrams with pen, touch, and mouse input, including on iPad.
 
-- 운영 사이트: https://jgkim.piano5788.chatgpt.site (Sites 배포)
-- 비공개 소스 백업: https://github.com/lunarjg/knot-lab
-- 웹사이트 UI는 영어를 유지합니다. GitHub push와 CI 실행은 Sites 운영 배포를 수행하지 않습니다.
+- [Live site](https://jgkim.piano5788.chatgpt.site), deployed through Sites.
+- [Private source backup](https://github.com/lunarjg/knot-lab).
+- The application UI and repository documentation are in English. GitHub pushes and CI runs do not deploy the production site.
 
-## 파일 구성
+## Project files
 
-- `dist/index.html`: 화면, 매듭 기하 엔진, Reidemeister 이동 판정, 계산, 파일별 탭, 파일 저장·복원
-- `dist/pd-import.js`: PD 입력 검증과 평면 도식 구성
-- `dist/manifest.webmanifest`, `dist/sw.js`, `dist/icon-*.png`: 홈 화면 설치와 오프라인 지원
-- `dist/invariants.js`, `dist/invariants-worker.js`: 정확한 불변량 계산과 취소 가능한 Web Worker
-- `tests/*.test.cjs`: 기하·PD·작업 상태·불변량·오프라인 회귀 검사
-- `.github/workflows/ci.yml`: push 및 pull request 시 Node.js 22/24 자동 검사
-- `.openai/hosting.json`: 현재 Sites 프로젝트의 배포 설정. 기존 project_id와 dist 정적 경로를 유지하세요.
+- `dist/index.html`: interface, knot geometry engine, Reidemeister move validation, calculations, document tabs, and file saving/restoration.
+- `dist/pd-import.js`: PD input validation and planar diagram construction.
+- `dist/manifest.webmanifest`, `dist/sw.js`, `dist/icon-*.png`: home-screen installation and offline support.
+- `dist/invariants.js`, `dist/invariants-worker.js`: exact invariant calculations and a cancellable Web Worker.
+- `tests/*.test.cjs`: geometry, PD import, application state, invariant, and offline regression tests.
+- `.github/workflows/ci.yml`: automated tests on Node.js 22 and 24 for pushes and pull requests.
+- `.openai/hosting.json`: deployment configuration for the existing Sites project. Preserve its `project_id` and the `dist` static directory.
 
-외부 패키지 설치나 빌드 과정 없이 `dist` 폴더를 정적 웹서버로 제공하면 됩니다. 서버로 도식 데이터를 전송하지 않습니다. 자동 저장은 기기 브라우저의 로컬 저장소를 사용합니다.
+Serve `dist` with a static web server. No external packages or build step are required. Diagram data is not sent to a server; autosave uses local storage in the device's browser.
 
-## 로컬 실행
+## Run locally
 
-Git, Node.js 22 이상, Python 3이 필요합니다. npm 패키지 설치나 빌드 단계는 없습니다. 비공개 저장소를 읽을 수 있는 GitHub 계정으로 인증한 뒤 복제합니다.
+Install Git, Node.js 22 or later, and Python 3. Authenticate with a GitHub account that can read the private repository, then clone it:
 
 ```sh
 git clone https://github.com/lunarjg/knot-lab.git
@@ -28,47 +28,47 @@ cd knot-lab
 node --version
 ```
 
-이 명령으로 새로 복제한 사본은 GitHub가 `origin`입니다. 기존 Sites 작업 사본에서는 Sites를 `origin`으로 유지하고 GitHub는 별도 `github` remote로 사용합니다. 서로 다른 사본의 remote를 혼동하지 않도록 push 전에 `git remote -v`를 확인하세요.
+In a new clone created this way, `origin` points to GitHub. In the existing Sites checkout, `origin` remains the Sites repository and GitHub uses a separate `github` remote. Check `git remote -v` before pushing.
 
-Python 3이 설치된 컴퓨터에서 이 폴더를 연 뒤 실행합니다.
+From the repository directory, start a local server:
 
 ```sh
 python3 -m http.server 8000 --directory dist
 ```
 
-브라우저에서 `http://localhost:8000`으로 접속합니다. 홈 화면 설치와 서비스 워커의 오프라인 사용은 HTTPS 또는 localhost 환경을 사용하세요. 로컬 HTML 파일을 직접 열면 서비스 워커는 작동하지 않습니다.
+Open `http://localhost:8000` in a browser. Use HTTPS or localhost for service-worker offline access; opening the HTML file directly does not enable the service worker. Home-screen installation depends on browser support.
 
-다른 정적 호스팅 서비스에서는 `dist` 안의 파일들을 사이트 루트에 배포하면 됩니다. 사이트 내용을 업데이트할 때는 `dist/sw.js`의 캐시 이름도 변경하세요.
+For other static hosting providers, publish the contents of `dist` at the site root. Update the cache name in `dist/sw.js` when changing application assets.
 
-## 사용
+## Usage
 
-- 위쪽 `＋` 버튼: 빈 도식을 새 탭에 생성
-- `열기`: JSON 파일을 새 탭에 열기. 여러 파일을 한 번에 선택할 수 있음
-- 파일 탭: 도식, 확대·이동 위치, 실행 취소·다시 실행, 이동 횟수를 각각 유지
-- 선택된 탭의 이름을 터치하면 바로 이름 편집. 다른 탭은 먼저 선택한 뒤 이름을 다시 터치. Enter 또는 바깥 터치로 저장, Esc로 취소하며 키보드 F2도 지원. 이름과 저장 파일명 제안은 자동 저장되고 도식의 실행 취소 이력은 유지
-- `저장`: 현재 탭을 JSON으로 내보내기. 이동 횟수도 파일에 포함됨
-- 자동 저장: 열린 탭과 도식·이동 횟수를 다음 접속 때 복원. 실행 취소 스택은 현재 세션에서만 유지
-- `PD 불러오기`: 현재 탭의 도식을 PD 코드로 교체. 실행 취소 가능
-- 오른쪽 패널의 왼쪽 손잡이: 너비 조절. 오른쪽 끝으로 밀고 놓으면 숨기기
-- 오른쪽 가장자리의 화살표: 패널 다시 펼치기
+- **New tab**: create a blank diagram.
+- **Open files**: open JSON files in new tabs. Multiple files can be selected at once.
+- Each document tab has its own diagram, zoom/pan position, undo/redo history, and move counts.
+- Tap the active tab's name to rename it. Select an inactive tab first, then tap its name again. Enter or tapping outside saves the name; Escape cancels. F2 also starts editing. Names and suggested export filenames are autosaved without changing diagram undo history.
+- **Save**: export the current tab as JSON, including move counts.
+- **Autosave**: restore open tabs, diagrams, and move counts on the next visit. Undo stacks last only for the current session.
+- **Import PD**: replace the current diagram with a PD code; Undo restores the previous diagram.
+- Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
+- Use the arrow on the right edge to reopen the inspector.
 
-PD 입력은 `[[a,b,c,d], ...]` 또는 `PD[X[a,b,c,d], ...]` 형식을 받습니다. 첫 번호는 들어오는 아래 현이며 나머지는 반시계 방향입니다. 각 현 번호는 두 번 나타나야 합니다. 최대 80개 교차까지 처리하며, 수치적으로 너무 촘촘한 배치는 오류 메시지와 함께 기존 작업을 유지합니다. 교차 없는 성분은 PD 코드만으로 표현되지 않습니다.
+PD input accepts `[[a,b,c,d], ...]` or `PD[X[a,b,c,d], ...]`. The first label is the incoming understrand; the remaining labels proceed counterclockwise. Each arc label must appear twice. Import supports up to 80 crossings. If a layout is too crowded to construct reliably, an error is shown and the existing diagram is preserved. Crossing-free components cannot be represented by PD code alone.
 
-계산되는 Turaev genus는 현재 도식에 대한 값입니다. 매듭 전체의 최소 genus를 구하는 것은 아닙니다.
+The displayed Turaev genus is the value for the current diagram, not the minimum over all diagrams of the knot.
 
-## 이번 수정
+## Geometry and editing behavior
 
-- 재샘플링에서 짧은 꼭짓점을 무조건 삭제하던 동작을 변경: 실제 이동 없이 교차가 사라지고 R2로 집계되던 재현 사례 수정
-- 현을 끄는 도중의 자동 모서리 보정 제거. 별도의 다듬기 기능은 유지
-- R2는 양쪽 현에서 인접한 교차가 빈 이각형을 이루는지 검사
-- R3는 빈 삼각형의 세 현에서 교차 순서가 모두 바뀌는지와 높이 관계를 검사
-- 정확히 삼중점에 걸친 중간 프레임은 마지막 정상 도식과 비교해 중복 집계 방지
-- 실행 취소·다시 실행 시 이동 횟수도 함께 복원
-- 파일별 탭, 여러 파일 열기, 탭별 자동 저장 및 기존 단일 작업 저장의 이전 지원
+- Resampling preserves corners that affect crossings, preventing crossings from disappearing and being counted as R2 moves without an actual movement.
+- Dragging does not automatically round corners. Separate smoothing actions are available.
+- R2 validation checks whether adjacent crossings on both strands bound an empty bigon.
+- R3 validation checks crossing-order reversals on all three sides of an empty triangle and verifies a consistent height order.
+- Intermediate frames at an exact triple point are compared with the last regular diagram to avoid counting a move twice.
+- Undo and redo restore move counts as well as geometry.
+- Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
 
-## 검사
+## Tests
 
-Node.js 22 이상에서 프로젝트 폴더를 기준으로 실행합니다.
+Run these commands from the repository directory with Node.js 22 or later:
 
 ```sh
 node tests/moves.test.cjs
@@ -78,15 +78,15 @@ node tests/invariants.test.cjs
 node tests/offline.test.cjs
 ```
 
-R1/R2 생성·소멸, R3 왕복과 삼중점 중간 프레임, 허용되지 않는 높이 관계, PD 계산값 보존, 파일별 탭의 독립성, 저장·복원 및 서비스 워커의 오프라인 경로를 검사합니다.
+Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-point intermediate frames, invalid height orders, PD calculations, independent document tabs, saving/restoration, and service-worker offline paths.
 
-화면 상태와 서비스 워커 검사는 Node의 모의 환경을 사용합니다. 실제 Safari의 렌더링이나 Apple Pencil 하드웨어 입력을 검증하는 브라우저 테스트는 아닙니다.
+Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
 
-## 사이트 소유권과 데이터
+## Site ownership and data
 
-기존 Sites 프로젝트와 운영 주소를 계속 사용합니다. GitHub 백업을 위해 새 사이트를 만들거나 공개 범위·편집 권한을 변경하지 않습니다.
-사이트 코드의 수정 및 재게시 권한은 Sites에서 소유 계정으로 관리하며, 방문자에게 편집 권한을 부여하지 않습니다.
-앱에는 공유 데이터를 수정하는 서버 API가 없습니다. 그리기·파일 열기·자동 저장은 각 방문자의 브라우저에서만 작동합니다.
+Keep using the existing Sites project and production address. The GitHub backup does not require creating a new site or changing its audience or editing permissions.
+
+The owning account manages source editing and publication through Sites. Visitors are not granted repository or publication permissions. The application has no server API for changing shared diagram data: drawing, opening files, and autosaving happen in each visitor's browser.
 
 ## Interaction update
 
@@ -103,15 +103,15 @@ The crossing choices survive later joins and closure, either closure order, undo
 
 ## R1 drag assistance
 
-Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Loosen small R1 loops while dragging” to retain curls.
+Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Remove small R1 loops while dragging” to retain curls.
 
-Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
+Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size when R1 protection is enabled. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
 
 ## Bigon and kink size protection
 
 The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. **Bigon size protection applies only when each boundary strand is over at one crossing and under at the other**, which prevents R2 removal. When the same boundary strand is over at both crossings, the bigon is exempt from all size floors (area, thickness, and crossing separation), allowing it to shrink for R2 removal. Classification follows the actual boundary occurrences, including two strands belonging to the same component; it does not compare component IDs or raw crossing indices.
 
-Default minimum areas remain 400 screen px² for protected bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for protected bigons, 6 px for kinks) and a 16 px crossing separation for protected bigons. Limits scale with the current zoom. Existing undersized protected faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
+Both protection options are off by default. When enabled, their default minimum areas are 400 screen px² for protected bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for protected bigons, 6 px for kinks) and a 16 px crossing separation for protected bigons. Limits scale with the current zoom. Existing undersized protected faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
 
 Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.
 
@@ -119,7 +119,7 @@ Additional cases compare identical geometry with the two possible over/under pat
 
 ## Make an alternating diagram
 
-Use **Make alternating** in the Reidemeister move counts panel. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
+Use **Make alternating** under **Diagram actions** on the inspector’s **Diagram** page. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
 
 The actual changes are added to **Crossing changes**, not R1/R2/R3 counts, and the entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
 
@@ -156,6 +156,8 @@ See `CHANGELOG.md`. The original six commits are preserved, with annotated relea
 The backup/CI commit follows v6 and does not change application behavior. It is not a new Sites deployment. Tags identify source commits; saved Sites version numbers are separate deployment checkpoints.
 
 ### Backup and future releases
+
+Use English for repository documentation, commit messages, issue and pull-request text, and release notes.
 
 In the existing Sites checkout, `origin` remains the Sites source repository and `github` points to `https://github.com/lunarjg/knot-lab.git`. Never embed credentials in remote URLs or tracked files. No collaborators are required for this private backup.
 
