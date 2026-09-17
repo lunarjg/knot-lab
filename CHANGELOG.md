@@ -1,5 +1,10 @@
 # Release history
 
+## v13 — Start with open arcs
+
+- Default Auto-close on release to off in both the checkbox and drawing state. Users can still enable it manually or join endpoints to close a loop.
+- Refresh the offline cache.
+
 ## v12 — Clearer inspector and UI debugging
 
 - Split the inspector into Diagram, Settings and Files pages with a persistent header and navigation.
