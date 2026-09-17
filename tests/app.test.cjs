@@ -38,6 +38,21 @@ const cr=lab.state.crossings[0],old=cr.over,e={pointerType:'mouse',pointerId:1,c
 t.fire(t.ids.get('cv'),'pointerdown',e);t.fire(t.ids.get('cv'),'pointerup',e);assert.equal(cr.over,1-old);t.ids.get('undo').click();
 console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear, all state views, autosave/reload, panel and crossing flip: PASS');
 
+// The "+" tab lives inside the scrollable tab strip itself, immediately
+// after the last tab, not as a fixed button outside it — so it always
+// stays right after the last tab and scrolls together with them.
+{
+ const p=boot(),api=p.ctx.knotLab,strip=p.ids.get('documentTabs'),plus=p.ids.get('newTab');
+ const last=()=>strip.children[strip.children.length-1];
+ assert.equal(last(),plus,'The + tab must be the last child of the tab strip');
+ api.openTab();api.openTab();
+ assert.equal(last(),plus,'The + tab must stay last after opening more tabs');
+ assert.equal(strip.children.filter(c=>c!==plus).length,3);
+ plus.click();assert.equal(api.tabs.length,4);
+ assert.equal(last(),plus,'The + tab must stay last after clicking it to open a tab');
+}
+console.log('The + tab stays as the last item in the scrollable tab strip: PASS');
+
 // Tap the active title to rename in place. Selecting another tab remains one
 // tap; renaming changes neither the diagram nor its undo/redo history.
 {
@@ -139,7 +154,7 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  const fileA=new File([originalJSON],'first.json'),fileB=new File([originalJSON],'second.json');
  await p.ids.get('fileInput').onchange({target:{files:[fileA,new File(['broken'],'invalid.json'),fileB]}});
  assert.equal(api.tabs.length,3);assert.deepEqual(Array.from(api.tabs,t=>t.title).slice(1),['first','second']);
- assert.equal(p.ids.get('documentTabs').children.length,3);
+ assert.equal(p.ids.get('documentTabs').children.filter(c=>c!==p.ids.get('newTab')).length,3);
  assert.equal(p.ids.get('documentTabs').children[2].children[0].getAttribute('aria-selected'),'true');
  api.activateTab(original);assert.equal(api.analysis.writhe,originalW);
  p.ids.get('newTab').click();assert.equal(api.tabs.length,4);assert.equal(api.analysis.c,0);

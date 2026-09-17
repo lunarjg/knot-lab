@@ -256,7 +256,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <header class="apphead"><strong>Knot Diagram Lab</strong><span class="save-status" id="saveStatus" role="status">Autosaved on this device</span></header>
     <div class="document-tabs">
       <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
-      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋ New tab</button>
+      <button id="newTab" class="iconbtn new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
       <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
     </div>
     <div class="bar">
@@ -1086,7 +1086,9 @@ const KC = (function () {
     return changed ? { ev } : null;
   }
 
-  // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing
+  // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing.
+  // This is the original relaxation exactly (raw point repulsion, immediate-neighbor
+  // corner smoothing) — restored as-is rather than the later, more aggressive rework.
   function relaxMutator(comps, R, strength) {
     const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
@@ -1106,21 +1108,12 @@ const KC = (function () {
             if (c2 === c && sDist(cm, cm.cum[i], cm.cum[j]) < 2.5 * R) continue;
             const o = comps[c2].pts[j], dx = q.x - o.x, dy = q.y - o.y, d = Math.hypot(dx, dy);
             if (d >= R || d < 1e-6) continue;
-            // Integrate over arc length, so inserting sample points cannot
-            // amplify repulsion. The force vanishes smoothly at intersections.
-            const other=comps[c2], count=other.pts.length;
-            const mass=(Math.hypot(o.x-other.pts[(j+count-1)%count].x,o.y-other.pts[(j+count-1)%count].y)+
-              Math.hypot(o.x-other.pts[(j+1)%count].x,o.y-other.pts[(j+1)%count].y))/(2*SEG);
-            const w=1-d*d/(R*R), f=w*w*mass;
-            fx += f*dx/R; fy += f*dy/R;
+            const w = (R - d) / R; fx += w * w * dx / d; fy += w * w * dy / d;
           }
         }
-        // Smooth over a fixed arc-length neighborhood, including curves
-        // with uneven sampling left by dragging and topology-safe resampling.
-        const reach=Math.min(2*SEG,cm.len/8);
-        const a=pointAtS(cm,cm.cum[i]-reach), b=pointAtS(cm,cm.cum[i]+reach);
-        disp[c][i].x = strength * (0.3*fx + 0.35*((a.x+b.x)/2-q.x));
-        disp[c][i].y = strength * (0.3*fy + 0.35*((a.y+b.y)/2-q.y));
+        const a = p[(i - 1 + n) % n], b = p[(i + 1) % n];
+        disp[c][i].x = strength * fx + 0.3 * ((a.x + b.x) / 2 - q.x);
+        disp[c][i].y = strength * fy + 0.3 * ((a.y + b.y) / 2 - q.y);
       }
     });
     comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
@@ -1570,6 +1563,9 @@ const KC = (function () {
       close.onclick=()=>closeTab(tab.id);
       item.appendChild(button);item.appendChild(close);$('documentTabs').appendChild(item);tabButtons.set(tab.id,button);updateTabLabel(tab);
     });
+    // Keep the "+" tab as the last item in the scrollable strip, not a
+    // fixed button outside it, so it stays right after the last tab.
+    $('documentTabs').appendChild($('newTab'));
     $('wrap').setAttribute('aria-labelledby','document-tab-'+activeTabId);
   }
   function finishTabInteraction() {
