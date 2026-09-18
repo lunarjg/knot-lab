@@ -349,3 +349,55 @@ console.log('Default crossing clearance blocks non-resolvable clusters, allows r
    'An unrelated component must keep smoothing across many relax calls, not freeze the moment any other region hits the clearance floor');
 }
 console.log('A crowded, permanently-blocked region does not freeze relaxation of an unrelated component: PASS');
+
+// Performance: dragging skips backup-cloning, resampling and "before" face
+// recomputation for components the mutator declares it won't touch
+// (opt.touchedComps), and adaptiveStep computes the "before" face structure
+// once per retry ladder instead of once per scale attempt. Both are pure
+// bookkeeping shortcuts and must produce byte-for-byte the same outcome as
+// the unoptimized path, for both a step that succeeds and one a smaller
+// component elsewhere blocks.
+{
+ const build=()=>{
+  const t=altTrefoil();
+  // Pre-resampled to SEG spacing, matching how every real component (drawn,
+  // imported or template) already looks by the time a drag can touch it —
+  // an untouched component is only ever skipped, never left needing a fix
+  // resampleComp would otherwise have applied to it regardless.
+  const squareCorners=[[2000,2000],[2020,2000],[2020,2020],[2000,2020]].map(([x,y])=>({x,y}));
+  const other=poly(KC.resampleClosed(squareCorners,KC.SEG).map(p=>[p.x,p.y]));
+  const comps=[...t.comps,other];
+  const raw=KC.computeRaw(comps);raw.forEach((x,i)=>{x.id=i+1;x.over=i%2;});
+  return {comps,crossings:raw,nextId:raw.length+1};
+ };
+ const mkOpt=(c,u,sig,touched)=>({
+  faceLimits:{bigon:{area:400,thickness:8,separation:16},kink:{area:180,thickness:6}},
+  crossingClearance:32,
+  weight:o=>0,
+  nextId:(()=>{let n=1000;return ()=>n++;})(),
+  ...(touched?{touchedComps:[c]}:{})
+ });
+ const dragMutator=(c,u,dx,dy,sig)=>comps=>{const cm=comps[c],gi=KC.indexOfU(cm,u);KC.moveWeighted(cm,gi,dx,dy,sig,u);};
+
+ // A move with room to succeed.
+ {
+  const withHint=build(), without=build();
+  const r1=KC.attemptStep(withHint,dragMutator(0,0.1,1.2,0.6,40),mkOpt(0,0.1,40,true));
+  const r2=KC.attemptStep(without,dragMutator(0,0.1,1.2,0.6,40),mkOpt(0,0.1,40,false));
+  assert.equal(r1.ok,r2.ok);assert.deepEqual(r1.ev,r2.ev);
+  assert.deepEqual(withHint.comps,without.comps,'touchedComps must not change the resulting geometry');
+  assert.deepEqual(withHint.crossings,without.crossings,'touchedComps must not change the resulting crossings');
+ }
+ // A move squeezed enough to hit the clearance floor and be rejected,
+ // exercising adaptiveStep's full retry ladder (and its beforeFaces reuse).
+ {
+  const withHint=build(), without=build();
+  const mutate=(c,u,sig)=>(comps,scale)=>{const cm=comps[c],gi=KC.indexOfU(cm,u);KC.moveWeighted(cm,gi,0,2.2*scale,sig,u);};
+  const r1=KC.adaptiveStep(withHint,mutate(0,0.02,10),mkOpt(0,0.02,10,true));
+  const r2=KC.adaptiveStep(without,mutate(0,0.02,10),mkOpt(0,0.02,10,false));
+  assert.equal(r1.ok,r2.ok);
+  assert.deepEqual(withHint.comps,without.comps,'touchedComps must not change a blocked outcome');
+  assert.deepEqual(withHint.crossings,without.crossings,'touchedComps must not change a blocked outcome');
+ }
+}
+console.log('touchedComps/beforeFaces drag shortcuts match the unoptimized path exactly: PASS');

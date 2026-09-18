@@ -523,8 +523,11 @@ const KC = (function () {
     return { x: a.x + f * (b.x - a.x), y: a.y + f * (b.y - a.y), dx: (b.x - a.x) / sl, dy: (b.y - a.y) / sl, seg: lo };
   }
 
+  function cloneComp(c) {
+    const k = { pts: c.pts.map(q => ({ x: q.x, y: q.y, u: q.u })) }; updateGeom(k); return k;
+  }
   function cloneComps(comps) {
-    return comps.map(c => { const k = { pts: c.pts.map(q => ({ x: q.x, y: q.y, u: q.u })) }; updateGeom(k); return k; });
+    return comps.map(cloneComp);
   }
   function cloneCrossings(X) {
     return X.map(c => ({ id: c.id, over: c.over, x: c.x, y: c.y, occ: c.occ.map(o => ({ ...o })) }));
@@ -889,10 +892,10 @@ const KC = (function () {
     return faces;
   }
 
-  function faceSizeViolation(beforeComps,beforeX,afterComps,afterX,limits) {
+  function faceSizeViolation(beforeComps,beforeX,afterComps,afterX,limits,afterFaces,beforeFaces) {
     if(!limits || (!limits.bigon && !limits.kink))return null;
-    const previous=new Map(smallFaces(beforeComps,beforeX).map(f=>[f.key,f]));
-    for(const face of smallFaces(afterComps,afterX)) {
+    const previous=new Map((beforeFaces||smallFaces(beforeComps,beforeX)).map(f=>[f.key,f]));
+    for(const face of afterFaces||smallFaces(afterComps,afterX)) {
       // Same strand over at both ends: no size floor may obstruct R2 removal.
       if(face.type==='bigon' && !face.alternating)continue;
       const rule=limits[face.type];if(!rule)continue;
@@ -919,10 +922,10 @@ const KC = (function () {
   // Returns the crossings involved in a violation (so a caller such as
   // relaxStep can pin just their neighborhood and retry) rather than a
   // plain boolean; null/empty means no violation.
-  function crossingClearanceViolation(beforeComps,beforeX,afterComps,afterX,clearance) {
+  function crossingClearanceViolation(beforeComps,beforeX,afterComps,afterX,clearance,afterFaces) {
     if(!clearance)return null;
     const removable=new Set();
-    smallFaces(afterComps,afterX).forEach(f=>{
+    (afterFaces||smallFaces(afterComps,afterX)).forEach(f=>{
       if(f.type==='bigon' && !f.alternating && f.crossingIds.length===2)
         removable.add(f.crossingIds.slice().sort((a,b)=>a-b).join(':'));
     });
@@ -948,14 +951,29 @@ const KC = (function () {
   }
 
   function attemptStep(S, mutator, opt) {
-    const backup = cloneComps(S.comps), next = S.nextId;
+    // A component the mutator's caller says it won't touch needs no backup
+    // clone of its own — the current object already IS its pre-mutation
+    // state, and reusing it (rather than deep-cloning every point in every
+    // other component) matters on every retry of a blocked/crowded drag.
+    const backup = opt?.touchedComps
+      ? S.comps.map((c,i) => opt.touchedComps.includes(i) ? cloneComp(c) : c)
+      : cloneComps(S.comps);
+    const next = S.nextId;
     const baseline = S.moveCheckpoint || { comps:backup, crossings:cloneCrossings(S.crossings) };
     mutator(S.comps);
-    S.comps.forEach(resampleComp);
+    // A component the mutator never touched cannot have anything new to
+    // split or prune; skipping it is a pure win on every drag frame, which
+    // otherwise reprocesses every other component in the diagram for a
+    // change confined to just the one being dragged.
+    (opt?.touchedComps ? opt.touchedComps.map(i => S.comps[i]) : S.comps).forEach(resampleComp);
     const raw = computeRaw(S.comps);
     const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
-    const smallFace=faceSizeViolation(backup,S.crossings,S.comps,r.crossings,opt?.faceLimits);
+    // Both checks below need the post-move face structure; compute it once
+    // instead of twice (rebuilding it is the most expensive part of a step,
+    // and this runs on every drag frame).
+    const afterFaces = (opt?.faceLimits || opt?.crossingClearance) ? smallFaces(S.comps, r.crossings) : null;
+    const smallFace=faceSizeViolation(backup,S.crossings,S.comps,r.crossings,opt?.faceLimits,afterFaces,opt?.beforeFaces);
     if (smallFace) {
       S.comps = backup; S.nextId = next;
       return { ok: false, reason: smallFace };
@@ -966,7 +984,7 @@ const KC = (function () {
     // does not apply to it. Keep the last regular diagram and classify once
     // the strands separate.
     const singular = raw.some((x,i) => raw.slice(i+1).filter(y=>Math.hypot(x.x-y.x,x.y-y.y)<1e-6).length>=2);
-    const violations = singular ? null : crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance);
+    const violations = singular ? null : crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance,afterFaces);
     if (violations) {
       S.comps = backup; S.nextId = next;
       return { ok: false, reason: 'clearance', violations };
@@ -978,9 +996,16 @@ const KC = (function () {
   }
 
   function adaptiveStep(S, mutate, opt) {
+    // The "before" face structure is the same for every scale in this
+    // ladder (a failed attempt always rolls back to the exact state this
+    // call started from), so it only needs computing once — not on every
+    // one of the up to 7 retries, which is otherwise the single most
+    // expensive part of a blocked/crowded drag step recurring every frame.
+    const beforeFaces = opt?.faceLimits ? smallFaces(S.comps, S.crossings) : null;
+    const opt2 = beforeFaces ? { ...opt, beforeFaces } : opt;
     let result;
     for(let scale=1;scale>=1/64;scale/=2) {
-      result=attemptStep(S,comps=>mutate(comps,scale),opt);
+      result=attemptStep(S,comps=>mutate(comps,scale),opt2);
       if(result.ok)return result;
     }
     return result;
@@ -2304,7 +2329,8 @@ const KC = (function () {
           kink: opts.protectKinks ? {area:opts.kinkArea/(view.s*view.s),thickness:6/view.s} : null
         },
         crossingClearance: CROSSING_CLEARANCE/view.s,
-        weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
+        weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); },
+        touchedComps: [c]
       });
       if (!r.ok) { blocked = r.reason; break; }
       drag.changed = true; addEvents(r.ev); steps++;
