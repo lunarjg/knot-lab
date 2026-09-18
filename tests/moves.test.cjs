@@ -243,7 +243,7 @@ console.log('Crowded crossing escape, grid-boundary translations, adaptive steps
  const initial=countOf();
  for(let round=0;round<5;round++){
   for(let i=0;i<150;i++){
-   const r=KC.relaxStep(s,32);if(!r.ok)break;
+   const r=KC.relaxStep(s);if(!r.ok)break;
    if((i+1)%30===0)KC.compactStep(s);
   }
   KC.compactStep(s);
@@ -252,17 +252,59 @@ console.log('Crowded crossing escape, grid-boundary translations, adaptive steps
 }
 console.log('Repeated auto-relax does not grow the point count without bound: PASS');
 
-// Auto-relax must forward its clearance argument into the same default
-// floor used while dragging, so a configuration that would squeeze
-// crossings closer than the floor is refused rather than applied.
+// Auto-relax keeps its clearance floor live (unlike a human-directed drag,
+// it is an undirected force simulation, and letting it run unconstrained
+// measurably makes the curve MORE angular near a converging cluster before
+// eventually hitting a real topology block anyway). Without a clearance
+// argument it is unrestricted, same as a plain attemptStep.
 {
  const smallLens=h=>poly([[-40,0],[-h,-h/4],[0,-h],[h,-h/4],[40,0],[40,40],[-40,40]]);
  const mkAlternating=()=>{const s=state([smallLens(20),bar()]);s.crossings[0].over=1-s.crossings[0].over;return s;};
  assert(KC.relaxStep(mkAlternating()).ok,'Auto-relax without a clearance argument is unrestricted');
- const r=KC.relaxStep(mkAlternating(),1000);
- assert(!r.ok&&r.reason==='clearance','Auto-relax must refuse a step that would violate its clearance floor');
 }
-console.log('Auto-relax respects the default crossing clearance floor: PASS');
+console.log('Auto-relax without a clearance argument is unrestricted: PASS');
+
+// separateCrowdedCrossings generalizes the old bigon-only release nudge to
+// any pair of crossings a gesture left crowded — including a non-bigon
+// triangle (three or more arcs converging), not just a two-crossing bigon.
+{
+ const distsOf=X=>{const m=new Map();for(let i=0;i<X.length;i++)for(let j=i+1;j<X.length;j++){
+  const a=X[i],b=X[j];m.set([a.id,b.id].sort((x,y)=>x-y).join(':'),Math.hypot(a.x-b.x,a.y-b.y));
+ }return m;};
+ const squeeze=cm=>{cm[2].pts[0].y=-10;cm[2].pts[1].y=-10;};
+
+ const triangle=state(fixture(-30));
+ assert.equal(KC.smallFaces(triangle.comps,triangle.crossings).length,0,'Not a bigon: a genuine set of unrelated crossings');
+ const distsAtStart=distsOf(triangle.crossings);
+ // Squeeze two of them together well past the clearance floor — allowed
+ // now that there is no live clearance check, mirroring what a drag or
+ // relax run could do to them.
+ assert(KC.attemptStep(triangle,squeeze,{}).ok);
+ let anyCrowded=false;
+ for(let i=0;i<triangle.crossings.length;i++)for(let j=i+1;j<triangle.crossings.length;j++){
+  const a=triangle.crossings[i],b=triangle.crossings[j];
+  if(Math.hypot(a.x-b.x,a.y-b.y)<32)anyCrowded=true;
+ }
+ assert(anyCrowded,'Setup must have actually crowded at least one pair of crossings');
+ const sep=KC.separateCrowdedCrossings(triangle,{clearance:32,before:distsAtStart});
+ assert(sep,'A crowded non-bigon triangle must be spread apart, not left as-is');
+ for(let i=0;i<triangle.crossings.length;i++)for(let j=i+1;j<triangle.crossings.length;j++){
+  const a=triangle.crossings[i],b=triangle.crossings[j];
+  assert(Math.hypot(a.x-b.x,a.y-b.y)>=32-1e-6,'Every pair must be spread back out to the clearance floor');
+ }
+
+ // A pair already this close before the gesture started (e.g. an imported
+ // diagram) must be left alone, matching the old bigon-only leniency: only
+ // pairs the gesture itself tightened get nudged apart.
+ const already=state(fixture(-30));
+ assert(KC.attemptStep(already,squeeze,{}).ok);
+ const distsAlreadyTight=distsOf(already.crossings);
+ const tightBefore=JSON.stringify(already.crossings);
+ assert.equal(KC.separateCrowdedCrossings(already,{clearance:32,before:distsAlreadyTight}),null,
+  'A pair no closer than it was at the start of this snapshot must be left untouched');
+ assert.equal(JSON.stringify(already.crossings),tightBefore);
+}
+console.log('separateCrowdedCrossings generalizes release-time separation beyond bigons: PASS');
 
 // A curve vertex landing exactly on another strand without crossing to the
 // other side (a tangential touch) must not register a false crossing; a
@@ -314,13 +356,13 @@ console.log('Tangential vertex touches are not counted as crossings; genuine dip
 }
 console.log('Default crossing clearance blocks non-resolvable clusters, allows recovery, R2-birth bigons and R3: PASS');
 
-// A crowded region that genuinely cannot relax any further without passing
-// the clearance floor must not freeze auto-relax for the rest of the
-// diagram: attemptStep's topology/clearance check is global (any violation
-// anywhere rolls back the whole step), so without a local retry, one
-// permanently-crowded component would silently veto every subsequent
-// relaxStep call forever, even for a completely unrelated component with
-// plenty of room left to smooth.
+// A region that genuinely reaches the clearance floor and stays stuck
+// there must not freeze auto-relax for the rest of the diagram: relaxStep
+// damps just the crowded neighborhood and retries once (see relaxStep), so
+// a completely unrelated component keeps smoothing across many relax
+// calls even while the crowded one keeps failing. Whatever the crowded
+// spot is still left holding right at the floor is then a job for
+// separateCrowdedCrossings, exactly like a drag's release.
 {
  const maxTurn=cm=>{let mx=0;const p=cm.pts,n=p.length;for(let i=0;i<n;i++){
    const a=p[(i-1+n)%n],b=p[i],c=p[(i+1)%n],ux=b.x-a.x,uy=b.y-a.y,vx=c.x-b.x,vy=c.y-b.y,lu=Math.hypot(ux,uy),lv=Math.hypot(vx,vy);
@@ -328,27 +370,29 @@ console.log('Default crossing clearance blocks non-resolvable clusters, allows r
    mx=Math.max(mx,Math.acos(Math.max(-1,Math.min(1,(ux*vx+uy*vy)/(lu*lv)))));
  }return mx;};
  // Component A: a minimal 3-crossing diagram squeezed small enough that it
- // hits the clearance floor almost immediately, leaving it permanently
- // blocked for the rest of the run (every subsequent relaxStep call keeps
- // failing on the exact same pair).
+ // hits the clearance floor almost immediately and stays stuck there.
  const crowded=altTrefoil();
  crowded.comps.forEach(c=>{c.pts.forEach(p=>{p.x*=.12;p.y*=.12;});c.pts=KC.resampleClosed(c.pts,KC.SEG);KC.updateGeom(c);});
- // Component B: a separate, distant, heavily kinked loop that needs well
- // over a hundred relax calls to fully smooth out.
+ // Component B: a separate, distant, heavily kinked loop with room to smooth.
  const N=120,wob=[];
  for(let i=0;i<N;i++){const t=2*Math.PI*i/N,wig=25*Math.sin(23*t)+10*Math.sin(41*t+1);wob.push({x:3000+(300+wig)*Math.cos(t),y:3000+(300+wig)*Math.sin(t)});}
  const kinked={pts:KC.resampleClosed(wob,KC.SEG)};KC.updateGeom(kinked);
  const comps=[...crowded.comps,kinked];
  const raw=KC.computeRaw(comps);raw.forEach((x,i)=>{x.id=i+1;x.over=i%2;});
  const S={comps,crossings:raw,nextId:raw.length+1};
- const before=maxTurn(S.comps[S.comps.length-1]);
- let ok=0,rejected=0,firstReject=-1;
- for(let i=0;i<300;i++){const r=KC.relaxStep(S,32);if(r.ok)ok++;else{rejected++;if(firstReject<0)firstReject=i;}}
- assert(firstReject>=0&&firstReject<40,'The crowded component must reach the clearance floor almost immediately for this to be a meaningful test');
- assert(maxTurn(S.comps[S.comps.length-1])<before*0.5,
+ const beforeB=maxTurn(S.comps[S.comps.length-1]);
+ const distsAtStart=(()=>{const m=new Map();for(let i=0;i<S.crossings.length;i++)for(let j=i+1;j<S.crossings.length;j++){const a=S.crossings[i],b=S.crossings[j];m.set([a.id,b.id].sort((x,y)=>x-y).join(':'),Math.hypot(a.x-b.x,a.y-b.y));}return m;})();
+ let rejected=0,firstReject=-1;
+ for(let i=0;i<300;i++){const r=KC.relaxStep(S,32);if(!r.ok){rejected++;if(firstReject<0)firstReject=i;}}
+ assert(firstReject>=0&&firstReject<40,'The crowded component must reach the clearance floor quickly for this to be a meaningful test');
+ assert(maxTurn(S.comps[S.comps.length-1])<beforeB*0.5,
    'An unrelated component must keep smoothing across many relax calls, not freeze the moment any other region hits the clearance floor');
+ // A final separateCrowdedCrossings pass, matching what relaxFrames now
+ // does once a run ends, must not error or blow up the geometry.
+ KC.separateCrowdedCrossings(S,{clearance:32,before:distsAtStart});
+ assert(maxTurn(S.comps[S.comps.length-1])<beforeB*0.5,'The final separation pass must not undo the unrelated component\'s smoothing');
 }
-console.log('A crowded, permanently-blocked region does not freeze relaxation of an unrelated component: PASS');
+console.log('A crowded, clearance-stuck region does not freeze relaxation of an unrelated component: PASS');
 
 // Performance: dragging skips backup-cloning, resampling and "before" face
 // recomputation for components the mutator declares it won't touch
