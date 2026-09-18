@@ -306,10 +306,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
             </div>
           </div>
           <div class="toolopt" id="optMove" hidden>
-            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></label>
+            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="80"><output id="sigmaV" for="sigma">80</output></label>
             <label class="inline"><input type="checkbox" id="under"> Pass underneath</label>
             <label class="inline"><input type="checkbox" id="protectBigons" checked> Protect R2</label>
             <label class="inline"><input type="checkbox" id="protectKinks"> Protect R1</label>
+            <label class="inline"><input type="checkbox" id="clearanceEnabled" checked> Crossing clearance</label>
           </div>
         </div>
       </div>
@@ -405,7 +406,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div id="pageSettings" hidden>
     <section>
       <h2>Dragging</h2>
-      <p class="small">Drag radius, Pass underneath, Protect R2 and Protect R1 are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture.</p>
+      <p class="small">Drag radius, Pass underneath, Protect R2, Protect R1 and the Crossing clearance on/off switch are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture.</p>
+      <div class="row"><label for="crossingClearance">Crossing clearance</label><input type="range" id="crossingClearance" min="8" max="100" step="4" value="32"><output id="crossingClearanceV" for="crossingClearance">32 px</output></div>
+      <p class="small">Minimum gap crossings are nudged back out to once a drag or auto-relax finishes, so a crowded spot stays visibly separated rather than pinned near-coincident. Turn it off in the Drag strand tool's options bar to leave crossings exactly where they land.</p>
       <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
       <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" disabled min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
       <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
@@ -1474,16 +1477,19 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 80, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, clearanceEnabled: true, crossingClearance: 32, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
   let prevTool = 'draw', redoStack = [], sel = null, lasso = null, clip = null, penTap = null, lastPenTap = null, pasteAt = null;
   const SNAP = 16;
   // Minimum on-screen gap kept between protected crossings (drag, release
-  // correction, auto-relax). Comfortably larger than the ~16px double gap
-  // drawn at each crossing so separated crossings read as clearly apart.
-  const CROSSING_CLEARANCE = 32;
+  // correction, auto-relax); opts.crossingClearance (Settings > Dragging)
+  // and opts.clearanceEnabled (the Drag strand tool's options bar) make it
+  // adjustable and switchable. 0 disables it entirely — attemptStep,
+  // relaxStep and separateCrowdedCrossings all already treat a falsy
+  // clearance as "no floor".
+  function effectiveClearance() { return opts.clearanceEnabled ? opts.crossingClearance : 0; }
   // Every pairwise crossing distance, keyed like separateCrowdedCrossings
   // expects — a snapshot to compare against once a gesture (drag, an
   // auto-relax run) ends, so only pairs that gesture itself tightened get
@@ -1778,11 +1784,11 @@ const KC = (function () {
   function relaxed(obj, iters) {
     const initialCrossingDistances = crossingDistanceMap(obj.crossings);
     for (let i = 0; i < iters; i++) {
-      const r = KC.relaxStep(obj, CROSSING_CLEARANCE); if (!r.ok) break;
+      const r = KC.relaxStep(obj, effectiveClearance()); if (!r.ok) break;
       if ((i+1) % 30 === 0) KC.compactStep(obj);
     }
     KC.compactStep(obj);
-    KC.separateCrowdedCrossings(obj, { clearance: CROSSING_CLEARANCE, before: initialCrossingDistances });
+    KC.separateCrowdedCrossings(obj, { clearance: effectiveClearance(), before: initialCrossingDistances });
     return obj;
   }
   $('braidGo').onclick = () => {
@@ -1939,7 +1945,7 @@ const KC = (function () {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S, CROSSING_CLEARANCE/view.s);
+        const r = KC.relaxStep(S, effectiveClearance()/view.s);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
         addEvents(r.ev); sinceCompact++;
       }
@@ -1952,7 +1958,7 @@ const KC = (function () {
       changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
         if (sinceCompact > 0) KC.compactStep(S);
-        const sep = KC.separateCrowdedCrossings(S, { clearance: CROSSING_CLEARANCE/view.s, before: initialCrossingDistances });
+        const sep = KC.separateCrowdedCrossings(S, { clearance: effectiveClearance()/view.s, before: initialCrossingDistances });
         if (sep) addEvents(sep.ev);
         stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
       }
@@ -2026,6 +2032,8 @@ const KC = (function () {
     opts[id]=e.target.checked; $(['bigonArea','kinkArea'][i]).disabled=!opts[id];
   });
   ['bigonArea','kinkArea'].forEach(id=>$(id).oninput=e=>{opts[id]=+e.target.value;$(id+'V').textContent=opts[id]+' px²';});
+  $('crossingClearance').oninput = e => { opts.crossingClearance = +e.target.value; $('crossingClearanceV').textContent = opts.crossingClearance + ' px'; };
+  $('clearanceEnabled').onchange = e => { opts.clearanceEnabled = e.target.checked; $('crossingClearance').disabled = !opts.clearanceEnabled; };
   $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
@@ -2210,7 +2218,7 @@ const KC = (function () {
         // (see tick()); any pair it left crowded is nudged back apart now
         // that the gesture is over, bundled into the drag's own undo step,
         // not a separate one.
-        const sep = KC.separateCrowdedCrossings(S, { clearance: CROSSING_CLEARANCE / view.s, before: drag.initialCrossingDistances });
+        const sep = KC.separateCrowdedCrossings(S, { clearance: effectiveClearance() / view.s, before: drag.initialCrossingDistances });
         if (sep) addEvents(sep.ev);
       }
       if (!drag.changed) undoStack.pop(); drag = null; cv.style.cursor = 'grab'; changed();
@@ -3302,7 +3310,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos() };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos() };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };

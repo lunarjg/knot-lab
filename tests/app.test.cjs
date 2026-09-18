@@ -232,10 +232,13 @@ console.log('New R1 self-crossing with protection and assistance enabled, move c
 }
 console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
 
-// The move tool's own options bar carries drag radius, underneath and the
-// R1/R2 protection toggles, so they are reachable without opening settings.
+// The move tool's own options bar carries drag radius, underneath, the
+// R1/R2 protection toggles and the crossing clearance on/off switch, so
+// they are reachable without opening settings. Drag radius defaults to 80.
 {
- const p=boot();
+ const p=boot(),api=p.ctx.knotLab;
+ assert.equal(p.ids.get('sigma').value,'80');
+ assert.equal(api.opts.sigma,80);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
  assert(p.ids.get('optMove').hidden);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
@@ -243,8 +246,35 @@ console.log('Shift held during a drag reverses underneath for that gesture only:
  assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
  p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
  p.ids.get('protectKinks').onchange({target:{checked:true}});assert(!p.ids.get('kinkArea').disabled);
+ assert(p.ids.get('clearanceEnabled').checked);assert(!p.ids.get('crossingClearance').disabled);
+ p.ids.get('crossingClearance').oninput({target:{value:'48'}});
+ assert.equal(p.ids.get('crossingClearanceV').textContent,'48 px');assert.equal(api.opts.crossingClearance,48);
+ p.ids.get('clearanceEnabled').onchange({target:{checked:false}});
+ assert.equal(api.opts.clearanceEnabled,false);assert(p.ids.get('crossingClearance').disabled);
 }
-console.log('The move tool options bar shows drag radius, underneath and R1/R2 protection: PASS');
+console.log('The move tool options bar shows drag radius, underneath, R1/R2 protection and the crossing clearance switch: PASS');
+
+// Turning the crossing clearance switch off must actually disable the
+// release-time separation, leaving crowded crossings exactly where a drag
+// left them instead of nudging them apart.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();d.comps=[
+ [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
+ [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
+ ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
+ api.openTab(api.deserialize(d),'bigon-off');api.view.s=1;api.view.ox=0;api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('clearanceEnabled').onchange({target:{checked:false}});
+ const bigonFaces=()=>vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
+ const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
+ for(let i=0;i<8;i++)p.step();
+ p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
+ assert.equal(api.state.crossings.length,2);
+ assert(bigonFaces().every(f=>f.separation<16),'With the switch off, a crowded bigon must be left exactly as tight as the drag made it');
+}
+console.log('Turning off crossing clearance leaves crowded crossings untouched on release: PASS');
 
 // Momentary crossing-switch: holding C acts like the Flip tool without
 // discarding whichever tool was active, and releasing C restores it.
