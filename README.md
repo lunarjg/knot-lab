@@ -3,8 +3,9 @@
 A static web app for drawing and analyzing knot diagrams with pen, touch, and mouse input, including on iPad.
 
 - [Live site](https://jgkim.piano5788.chatgpt.site), deployed through Sites.
+- [GitHub Pages mirror](https://lunarjg.github.io/knot-lab/), auto-deployed from `dist/` on every push to `main` by `.github/workflows/pages.yml`.
 - [Private source backup](https://github.com/lunarjg/knot-lab).
-- The application UI and repository documentation are in English. GitHub pushes and CI runs do not deploy the production site.
+- The application UI and repository documentation are in English.
 
 ## Project files
 
@@ -84,7 +85,7 @@ Application-state and service-worker tests use Node mock environments. They do n
 
 ## Site ownership and data
 
-Keep using the existing Sites project and production address. The GitHub backup does not require creating a new site or changing its audience or editing permissions.
+Keep using the existing Sites project and production address. The GitHub backup does not require creating a new site or changing its audience or editing permissions. Separately, `dist/` is also auto-deployed to a GitHub Pages mirror at every push to `main`; it serves the same static files but is independent of the Sites deployment and its own save/rollback workflow.
 
 The owning account manages source editing and publication through Sites. Visitors are not granted repository or publication permissions. The application has no server API for changing shared diagram data: drawing, opening files, and autosaving happen in each visitor's browser.
 
@@ -183,7 +184,7 @@ git push github main
 git push github v18
 ```
 
-Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.
+Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions runs two separate workflows: `ci.yml` runs tests only, with read-only repository permissions; `pages.yml` deploys `dist/` to the GitHub Pages mirror on every push to `main`. Neither workflow has Sites credentials or touches the Sites deployment.
 
 ### Roll back the live Sites deployment
 
