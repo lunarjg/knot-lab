@@ -313,3 +313,39 @@ console.log('Tangential vertex touches are not counted as crossings; genuine dip
  assert(frame1.ok && frame1.ev.r3===1);
 }
 console.log('Default crossing clearance blocks non-resolvable clusters, allows recovery, R2-birth bigons and R3: PASS');
+
+// A crowded region that genuinely cannot relax any further without passing
+// the clearance floor must not freeze auto-relax for the rest of the
+// diagram: attemptStep's topology/clearance check is global (any violation
+// anywhere rolls back the whole step), so without a local retry, one
+// permanently-crowded component would silently veto every subsequent
+// relaxStep call forever, even for a completely unrelated component with
+// plenty of room left to smooth.
+{
+ const maxTurn=cm=>{let mx=0;const p=cm.pts,n=p.length;for(let i=0;i<n;i++){
+   const a=p[(i-1+n)%n],b=p[i],c=p[(i+1)%n],ux=b.x-a.x,uy=b.y-a.y,vx=c.x-b.x,vy=c.y-b.y,lu=Math.hypot(ux,uy),lv=Math.hypot(vx,vy);
+   if(!lu||!lv)continue;
+   mx=Math.max(mx,Math.acos(Math.max(-1,Math.min(1,(ux*vx+uy*vy)/(lu*lv)))));
+ }return mx;};
+ // Component A: a minimal 3-crossing diagram squeezed small enough that it
+ // hits the clearance floor almost immediately, leaving it permanently
+ // blocked for the rest of the run (every subsequent relaxStep call keeps
+ // failing on the exact same pair).
+ const crowded=altTrefoil();
+ crowded.comps.forEach(c=>{c.pts.forEach(p=>{p.x*=.12;p.y*=.12;});c.pts=KC.resampleClosed(c.pts,KC.SEG);KC.updateGeom(c);});
+ // Component B: a separate, distant, heavily kinked loop that needs well
+ // over a hundred relax calls to fully smooth out.
+ const N=120,wob=[];
+ for(let i=0;i<N;i++){const t=2*Math.PI*i/N,wig=25*Math.sin(23*t)+10*Math.sin(41*t+1);wob.push({x:3000+(300+wig)*Math.cos(t),y:3000+(300+wig)*Math.sin(t)});}
+ const kinked={pts:KC.resampleClosed(wob,KC.SEG)};KC.updateGeom(kinked);
+ const comps=[...crowded.comps,kinked];
+ const raw=KC.computeRaw(comps);raw.forEach((x,i)=>{x.id=i+1;x.over=i%2;});
+ const S={comps,crossings:raw,nextId:raw.length+1};
+ const before=maxTurn(S.comps[S.comps.length-1]);
+ let ok=0,rejected=0,firstReject=-1;
+ for(let i=0;i<300;i++){const r=KC.relaxStep(S,32);if(r.ok)ok++;else{rejected++;if(firstReject<0)firstReject=i;}}
+ assert(firstReject>=0&&firstReject<40,'The crowded component must reach the clearance floor almost immediately for this to be a meaningful test');
+ assert(maxTurn(S.comps[S.comps.length-1])<before*0.5,
+   'An unrelated component must keep smoothing across many relax calls, not freeze the moment any other region hits the clearance floor');
+}
+console.log('A crowded, permanently-blocked region does not freeze relaxation of an unrelated component: PASS');
