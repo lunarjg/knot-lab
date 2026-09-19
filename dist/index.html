@@ -922,9 +922,6 @@ const KC = (function () {
   // they are a genuine R2-removable bigon (one strand over both times).
   // That covers alternating bigons and any larger cluster (e.g. three arcs
   // meeting near one spot) which cannot all cancel through a single move.
-  // Returns the crossings involved in a violation (so a caller such as
-  // relaxStep can pin just their neighborhood and retry) rather than a
-  // plain boolean; null/empty means no violation.
   function crossingClearanceViolation(beforeComps,beforeX,afterComps,afterX,clearance,afterFaces) {
     if(!clearance)return null;
     const removable=new Set();
@@ -937,7 +934,6 @@ const KC = (function () {
       const a=beforeX[i],b=beforeX[j];
       prevDist.set([a.id,b.id].sort((x,y)=>x-y).join(':'),Math.hypot(a.x-b.x,a.y-b.y));
     }
-    let violations=null;
     for(let i=0;i<afterX.length;i++)for(let j=i+1;j<afterX.length;j++) {
       const a=afterX[i],b=afterX[j],key=[a.id,b.id].sort((x,y)=>x-y).join(':');
       if(removable.has(key))continue;
@@ -948,9 +944,9 @@ const KC = (function () {
       // apart, but a valid move cannot pull them closer still.
       const before=prevDist.has(key)?prevDist.get(key):Infinity;
       const floor=before<clearance?before:clearance;
-      if(d+1e-7<floor)(violations||(violations=[])).push(a,b);
+      if(d+1e-7<floor)return true;
     }
-    return violations;
+    return null;
   }
 
   function attemptStep(S, mutator, opt) {
@@ -987,10 +983,9 @@ const KC = (function () {
     // does not apply to it. Keep the last regular diagram and classify once
     // the strands separate.
     const singular = raw.some((x,i) => raw.slice(i+1).filter(y=>Math.hypot(x.x-y.x,x.y-y.y)<1e-6).length>=2);
-    const violations = singular ? null : crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance,afterFaces);
-    if (violations) {
+    if (!singular && crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance,afterFaces)) {
       S.comps = backup; S.nextId = next;
-      return { ok: false, reason: 'clearance', violations };
+      return { ok: false, reason: 'clearance' };
     }
     S.crossings = r.crossings;
     if (singular) { S.moveCheckpoint = baseline; r.ev = {r1:0,r2:0,r3:0}; }
@@ -1013,30 +1008,17 @@ const KC = (function () {
     }
     return result;
   }
-  // Relaxation keeps a clearance floor, unlike an interactive drag: it is
-  // an autonomous force simulation (repulsion + smoothing), not a
-  // human-directed edit, and letting crossings pass arbitrarily close
-  // together lets its own repulsion term saturate and fight the smoothing
-  // term — measured actively making the curve MORE angular, not less, the
-  // closer a cluster of crossings got, before finally hitting a real
-  // topology block anyway. The floor keeps that from happening. But a
-  // whole diagram must still not freeze just because one region has
-  // genuinely reached that floor — several crossings converging on the
-  // same crowded spot (e.g. a symmetric diagram relaxing toward a rounder
-  // shape) hit it together, and a hard stop there would reject every
-  // subsequent frame outright, stalling smoothing everywhere else too. So
-  // on a clearance rejection, damp displacement smoothly (a Gaussian
-  // falloff, never a hard cutoff that would itself kink the curve) around
-  // just the crossings involved and retry once — the rest of the diagram
-  // keeps relaxing at full strength while that spot holds its position.
-  // Whatever is still crowded once the whole run ends is then a job for
-  // separateCrowdedCrossings, exactly like a drag's release.
+  // The original relaxation step (force formula and retry-at-shrinking-scale
+  // mechanism unchanged), with one addition: a crossing-clearance floor
+  // through the same opt interactive dragging uses, so a crossing pair
+  // never collapses toward the same point while shrinking. One call still
+  // mutates every component in a single atomic attemptStep, so a region
+  // that is permanently stuck right at the floor correctly reports ok:false
+  // for the whole call rather than drifting past it — whatever is left
+  // crowded once a run ends is then a job for separateCrowdedCrossings,
+  // exactly like a drag's release.
   function relaxStep(S, clearance) {
-    const r = attemptStep(S, comps => relaxMutator(comps, 40, 1.0), { crossingClearance: clearance });
-    if (r.ok || r.reason !== 'clearance' || !r.violations) return r;
-    const sigma = Math.max(2 * SEG, clearance * 0.5);
-    const freeze = r.violations.flatMap(x => x.occ.map(o => ({ c: o.c, s: o.s, sigma })));
-    return attemptStep(S, comps => relaxMutator(comps, 40, 1.0, freeze), { crossingClearance: clearance });
+    return adaptiveStep(S, (comps, scale) => relaxMutator(comps, 40, scale), { crossingClearance: clearance });
   }
   // Rebuild every component at even spacing to undo the one-directional
   // point growth from repeated relaxation (see compactPts). Routed through
@@ -1201,13 +1183,7 @@ const KC = (function () {
   // its immediate polyline neighbors, which stays correct when sampling is
   // uneven (after dragging) and produces smooth, round corners instead of
   // faceted ones.
-  // `freeze` (optional) is a list of {c, s, sigma}: arc-length neighborhoods
-  // whose displacement is damped down (a smooth Gaussian falloff, so there
-  // is no sharp discontinuity at the edge of the zone that would itself
-  // read as a kink) rather than suppressed outright — used to hold just the
-  // crossings already at the clearance floor still, so one crowded region
-  // cannot stall relaxation for the rest of the diagram (see relaxStep).
-  function relaxMutator(comps, R, strength, freeze) {
+  function relaxMutator(comps, R, strength) {
     const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
       const cx = Math.floor(q.x / CELL), cy = Math.floor(q.y / CELL), key = (cx + 32768) * 65536 + (cy + 32768);
@@ -1239,18 +1215,7 @@ const KC = (function () {
         disp[c][i].y = strength * (0.3*fy + 0.35*((a.y+b.y)/2-q.y));
       }
     });
-    comps.forEach((cm, c) => {
-      cm.pts = cm.pts.map((q, i) => {
-        let { x, y } = disp[c][i];
-        if (freeze) for (const f of freeze) {
-          if (f.c !== c) continue;
-          const d = sDist(cm, cm.cum[i], f.s), k = 1 - Math.exp(-(d * d) / (2 * f.sigma * f.sigma));
-          x *= k; y *= k;
-        }
-        const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; }
-        return { x: q.x + x, y: q.y + y, u: q.u };
-      });
-    });
+    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
   }
 
 
