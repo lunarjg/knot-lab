@@ -191,21 +191,17 @@ console.log('R1 drag assistance, click-only preservation, off switch and single-
  api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
  p.ids.get('sigma').oninput({target:{value:'10'}});
- assert(!p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
- p.ids.get('protectKinks').checked=true;
- p.ids.get('protectKinks').onchange({target:{checked:true}});
- // Bigon protection defaults on; keep this fixture focused on one R1 birth.
- assert(p.ids.get('protectBigons').checked);
- p.ids.get('protectBigons').onchange({target:{checked:true}});
+ assert(p.ids.get('loosenR1').checked);
  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
- for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+ for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
- assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
+ const finalC=api.analysis.c,finalR1=api.serialize().stats.r1;
+ assert(finalC>=1,'A self-crossing must form and not be immediately erased by assistance');assert(finalR1>=1);
  p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
- p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
+ p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);assert.equal(api.serialize().stats.r1,finalR1);
 }
-console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+console.log('New R1 self-crossing with assistance enabled, move count, undo and redo: PASS');
 
 // Holding Shift while dragging reverses underneath for that gesture only,
 // live for as long as it is held, without changing the base setting.
@@ -220,11 +216,12 @@ console.log('New R1 self-crossing with protection and assistance enabled, move c
   p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));
   if(withShift)p.key('keydown',{key:'Shift'});
   p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
-  for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
   if(withShift)p.key('keyup',{key:'Shift'});
   p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
-  assert.equal(api.analysis.c,1);
-  return api.state.crossings[0].over;
+  assert(api.analysis.c>=1);
+  // The first-born crossing reflects the approach direction/weight Shift flips.
+  return api.state.crossings.reduce((a,b)=>a.id<b.id?a:b).over;
  };
  assert.notEqual(birth(false),birth(true),'Shift held during the drag must flip which strand ends up on top');
  // The base setting itself must be unchanged after the gesture.
@@ -232,8 +229,7 @@ console.log('New R1 self-crossing with protection and assistance enabled, move c
 }
 console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
 
-// The move tool's own options bar carries drag radius, underneath, the
-// R1/R2 protection toggles and the crossing clearance on/off switch, so
+// The move tool's own options bar carries drag radius and underneath, so
 // they are reachable without opening settings. Drag radius defaults to 80.
 {
  const p=boot(),api=p.ctx.knotLab;
@@ -245,36 +241,8 @@ console.log('Shift held during a drag reverses underneath for that gesture only:
  assert(!p.ids.get('optMove').hidden);assert(!p.ids.get('toolopts').hidden);
  assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
  p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
- p.ids.get('protectKinks').onchange({target:{checked:true}});assert(!p.ids.get('kinkArea').disabled);
- assert(p.ids.get('clearanceEnabled').checked);assert(!p.ids.get('crossingClearance').disabled);
- p.ids.get('crossingClearance').oninput({target:{value:'48'}});
- assert.equal(p.ids.get('crossingClearanceV').textContent,'48 px');assert.equal(api.opts.crossingClearance,48);
- p.ids.get('clearanceEnabled').onchange({target:{checked:false}});
- assert.equal(api.opts.clearanceEnabled,false);assert(p.ids.get('crossingClearance').disabled);
 }
-console.log('The move tool options bar shows drag radius, underneath, R1/R2 protection and the crossing clearance switch: PASS');
-
-// Turning the crossing clearance switch off must actually disable the
-// release-time separation, leaving crowded crossings exactly where a drag
-// left them instead of nudging them apart.
-{
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[
- [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
- [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
- ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
- api.openTab(api.deserialize(d),'bigon-off');api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('clearanceEnabled').onchange({target:{checked:false}});
- const bigonFaces=()=>vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
- const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
- for(let i=0;i<8;i++)p.step();
- p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
- assert.equal(api.state.crossings.length,2);
- assert(bigonFaces().every(f=>f.separation<16),'With the switch off, a crowded bigon must be left exactly as tight as the drag made it');
-}
-console.log('Turning off crossing clearance leaves crowded crossings untouched on release: PASS');
+console.log('The move tool options bar shows drag radius and underneath: PASS');
 
 // Momentary crossing-switch: holding C acts like the Flip tool without
 // discarding whichever tool was active, and releasing C restores it.
@@ -369,34 +337,9 @@ for(const fix of [false,true])for(const horizontalFirst of [false,true]) {
 }
 console.log('Arc connectors pass under existing open/closed/self arcs, visual gaps, both closure orders, JSON/autosave, tabs and undo/redo: PASS');
 
-// Exercise the two independent controls through the actual drag event path.
-for(const alternating of [true,false])for(const protect of [true,false]) {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[
- [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
- [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
- ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
- api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
- if(alternating){const x=api.state.crossings[0];x.over=1-x.over;}
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('protectBigons').onchange({target:{checked:protect}});
- p.ids.get('bigonArea').oninput({target:{value:'600'}});assert.equal(p.ids.get('bigonAreaV').textContent,'600 px²');
- p.ids.get('kinkArea').oninput({target:{value:'240'}});assert.equal(p.ids.get('kinkAreaV').textContent,'240 px²');
- const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
- for(let i=0;i<4;i++)p.step();p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
- const faces=vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
- assert(faces.length);
- if(protect&&alternating){assert(faces.every(f=>f.area>=600-1e-6&&f.thickness>=8-1e-6&&f.separation>=16-1e-6));assert(p.ids.get('toast').textContent.includes('bigon'));}
- else assert(faces.some(f=>f.area<600),'R2-compatible bigons and disabled protection must allow a smaller bigon');
- p.ids.get('undo').click();assert.equal(api.analysis.c,2);
-}
-console.log('Bigon drag constraint, separate area controls, off switch and undo through pointer events: PASS');
-
-// Squeezing a genuine (non-alternating, R2-removable) bigon down to a tiny
-// gap must not be blocked mid-drag, but on release the crossings are kept
-// and gently separated back out to a visible gap — bundled into the same
-// undo step as the drag itself, and restored again on redo.
+// Squeezing a bigon down to a tiny gap must not be blocked mid-drag, and on
+// release the crossings are kept exactly where the drag left them — no
+// separate size or distance floor of any kind gates or corrects the result.
 {
  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
  const d=api.serialize();d.comps=[
@@ -405,21 +348,17 @@ console.log('Bigon drag constraint, separate area controls, off switch and undo 
  ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
  api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- const bigonFaces=()=>vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
- assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6));
  const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
  for(let i=0;i<8;i++)p.step();
  p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
  assert.equal(api.state.crossings.length,2,'A tiny genuine bigon must keep both crossings, not collapse');
- assert(bigonFaces().every(f=>f.separation>=16-1e-6),'A tiny bigon must be nudged back out to a visible gap on release');
+ const [a,b]=api.state.crossings;
+ assert(Math.hypot(a.x-b.x,a.y-b.y)<16,'Nothing nudges the crossings back apart on release');
  p.ids.get('undo').click();
  assert.equal(api.state.crossings.length,2);
- assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6),'Undo must revert the drag and its release correction together');
- p.ids.get('redo').click();
- assert(bigonFaces().every(f=>f.separation>=16-1e-6),'Redo must restore the separated bigon');
 }
-console.log('Tiny genuine R2-birth bigons are kept and gently separated on release, undo/redo bundled with the drag: PASS');
+console.log('Tiny genuine R2-birth bigons are kept exactly where a drag leaves them, no release correction: PASS');
 
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
@@ -470,10 +409,6 @@ console.log('Tiny genuine R2-birth bigons are kept and gently separated on relea
  assert(!p.ids.get('pageSettings').hidden);assert(p.ids.get('pageDiagram').hidden);assert(p.ids.get('pageFiles').hidden);
  p.ids.get('pdOpen').click();assert(!p.ids.get('pageFiles').hidden);assert(p.ids.get('pageSettings').hidden);
  assert.equal(p.ids.get('navFiles').getAttribute('aria-pressed'),'true');assert.equal(p.doc.activeElement,p.ids.get('pdInput'));
- for(const [check,range] of [['protectBigons','bigonArea'],['protectKinks','kinkArea']]) {
-  p.ids.get(check).onchange({target:{checked:false}});assert(p.ids.get(range).disabled);
-  p.ids.get(check).onchange({target:{checked:true}});assert(!p.ids.get(range).disabled);
- }
  assert(!p.ids.has('saveBtn2'));assert(!p.ids.has('openBtn2'));
 }
 // A pending native share must not replace a newer document name or clear newer edits.
@@ -486,7 +421,7 @@ console.log('Tiny genuine R2-birth bigons are kept and gently separated on relea
  const id=api.activeTabId;api.openTab();finish();await saving;
  const tab=api.tabs.find(t=>t.id===id);assert.equal(tab.title,'Renamed during export');assert(tab.dirty);
  api.activateTab(id);assert.equal(p.ids.get('fileName').value,'Renamed during export');
- console.log('Inspector navigation, disabled protections, duplicate actions removed and async export rename/edit race: PASS');
+ console.log('Inspector navigation, duplicate actions removed and async export rename/edit race: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 // Hit the actual strand between vertices at high zoom, not just vertex disks.

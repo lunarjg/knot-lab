@@ -308,9 +308,6 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           <div class="toolopt" id="optMove" hidden>
             <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="80"><output id="sigmaV" for="sigma">80</output></label>
             <label class="inline"><input type="checkbox" id="under"> Pass underneath</label>
-            <label class="inline"><input type="checkbox" id="protectBigons" checked> Protect R2</label>
-            <label class="inline"><input type="checkbox" id="protectKinks"> Protect R1</label>
-            <label class="inline"><input type="checkbox" id="clearanceEnabled" checked> Crossing clearance</label>
           </div>
         </div>
       </div>
@@ -406,12 +403,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div id="pageSettings" hidden>
     <section>
       <h2>Dragging</h2>
-      <p class="small">Drag radius, Pass underneath, Protect R2, Protect R1 and the Crossing clearance on/off switch are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture.</p>
-      <div class="row"><label for="crossingClearance">Crossing clearance</label><input type="range" id="crossingClearance" min="8" max="100" step="4" value="32"><output id="crossingClearanceV" for="crossingClearance">32 px</output></div>
-      <p class="small">Minimum gap crossings are nudged back out to once a drag or auto-relax finishes, so a crowded spot stays visibly separated rather than pinned near-coincident. Turn it off in the Drag strand tool's options bar to leave crossings exactly where they land.</p>
-      <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" disabled min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
-      <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
+      <p class="small">Drag radius and Pass underneath are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture. Only real topology (Reidemeister validity) gates a move — crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.</p>
       <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Remove small R1 loops while dragging<small>Only empty loops present before the drag.</small></span></label>
     </section>
     <section>
@@ -833,127 +825,11 @@ const KC = (function () {
     return { ok: true, crossings: raw, ev };
   }
 
-  // Trace bounded faces of the embedded diagram. Each edge is the complete
-  // curved arc between consecutive crossing occurrences, not their chord.
-  function smallFaces(comps, crossings) {
-    const lists=comps.map(()=>[]), outgoing=new Map(), edges=[];
-    crossings.forEach(X=>{
-      outgoing.set(X.id,[]);
-      X.occ.forEach((o,k)=>lists[o.c].push({X,o,over:k===X.over,key:X.id+':'+(k===X.over?'o':'u')}));
-    });
-    lists.forEach((list,c)=>{
-      list.sort((a,b)=>a.o.s-b.o.s);
-      const cm=comps[c];
-      list.forEach((a,i)=>{
-        const b=list[(i+1)%list.length];
-        const span=i===list.length-1?cm.len+b.o.s-a.o.s:b.o.s-a.o.s;
-        const middle=cm.pts.map((p,j)=>({p,s:mod(cm.cum[j]-a.o.s,cm.len)}))
-          .filter(v=>v.s>1e-7 && v.s<span-1e-7).sort((a,b)=>a.s-b.s);
-        const points=[{x:a.X.x,y:a.X.y},...middle.map(v=>v.p),{x:b.X.x,y:b.X.y}];
-        const id=c+':'+a.key+'>'+b.key;
-        const alternating=a.over!==b.over;
-        const f={from:a.X.id,to:b.X.id,points,alternating,key:id+'+'};
-        const r={from:b.X.id,to:a.X.id,points:[...points].reverse(),alternating,key:id+'-'};
-        f.twin=r;r.twin=f;
-        for(const [e,occ,sign] of [[f,a.o,1],[r,b.o,-1]]) {
-          const q=e.points.find(p=>Math.hypot(p.x-e.points[0].x,p.y-e.points[0].y)>1e-8);
-          e.angle=q?Math.atan2(q.y-e.points[0].y,q.x-e.points[0].x):Math.atan2(sign*occ.dy,sign*occ.dx);
-          outgoing.get(e.from).push(e);edges.push(e);
-        }
-      });
-    });
-    outgoing.forEach(es=>es.sort((a,b)=>a.angle-b.angle||a.key.localeCompare(b.key)));
-    for(const e of edges) {
-      const es=outgoing.get(e.to),i=es.indexOf(e.twin);
-      e.next=es[(i+es.length-1)%es.length];
-    }
-    const seen=new Set(),faces=[];
-    for(const start of edges) {
-      if(seen.has(start))continue;
-      const cycle=[];let e=start;
-      while(!seen.has(e)) {seen.add(e);cycle.push(e);e=e.next;}
-      if(e!==start || cycle.length>2)continue;
-      if(cycle.length===2 && cycle[0].from===cycle[1].from)continue;
-      const points=cycle.flatMap(e=>e.points.slice(0,-1));
-      if(points.length<3)continue;
-      const origin=points[0];let twiceArea=0,perimeter=0;
-      points.forEach((a,i)=>{const b=points[(i+1)%points.length];
-        twiceArea+=(a.x-origin.x)*(b.y-origin.y)-(a.y-origin.y)*(b.x-origin.x);
-        perimeter+=Math.hypot(b.x-a.x,b.y-a.y);
-      });
-      // Clockwise exterior walks have negative area. Degenerate regions have
-      // no interior and are handled by the normal Reidemeister checks.
-      if(twiceArea<=0 || perimeter<=0)continue;
-      const type=cycle.length===1?'kink':'bigon',area=twiceArea/2;
-      const separation=type==='bigon'?Math.hypot(cycle[0].points[0].x-cycle[1].points[0].x,cycle[0].points[0].y-cycle[1].points[0].y):Infinity;
-      // Compare the actual boundary occurrences, including self-crossings:
-      // component IDs or raw crossing.over indices cannot identify an R2 pair.
-      const alternating=type==='bigon' && cycle.every(e=>e.alternating);
-      const crossingIds=[...new Set(cycle.map(e=>e.from))];
-      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,crossingId:type==='kink'?cycle[0].from:null,crossingIds,alternating,area,thickness:2*area/perimeter,separation});
-    }
-    return faces;
-  }
-
-  function faceSizeViolation(beforeComps,beforeX,afterComps,afterX,limits,afterFaces,beforeFaces) {
-    if(!limits || (!limits.bigon && !limits.kink))return null;
-    const previous=new Map((beforeFaces||smallFaces(beforeComps,beforeX)).map(f=>[f.key,f]));
-    for(const face of afterFaces||smallFaces(afterComps,afterX)) {
-      // Same strand over at both ends: no size floor may obstruct R2 removal.
-      if(face.type==='bigon' && !face.alternating)continue;
-      const rule=limits[face.type];if(!rule)continue;
-      const old=previous.get(face.key);
-      // A valid R1 birth starts at zero area. Let it form before protecting
-      // its size on later steps; reconcile already checked the topology.
-      if(face.type==='kink' && !old && !beforeX.some(x=>x.id===face.crossingId))continue;
-      for(const metric of ['area','thickness','separation']) {
-        const minimum=rule[metric]||0;
-        // Existing small imported faces can expand without being locked in
-        // place. They cannot become still smaller; new faces obey the limit.
-        const floor=old?Math.min(minimum,old[metric]):minimum;
-        if(face[metric]+1e-7<floor)return face.type;
-      }
-    }
-    return null;
-  }
-
-  // A default, always-on floor beneath the optional bigon/kink protection:
-  // no two distinct crossings may collapse toward the same point unless
-  // they are a genuine R2-removable bigon (one strand over both times).
-  // That covers alternating bigons and any larger cluster (e.g. three arcs
-  // meeting near one spot) which cannot all cancel through a single move.
-  function crossingClearanceViolation(beforeComps,beforeX,afterComps,afterX,clearance,afterFaces) {
-    if(!clearance)return null;
-    const removable=new Set();
-    (afterFaces||smallFaces(afterComps,afterX)).forEach(f=>{
-      if(f.type==='bigon' && !f.alternating && f.crossingIds.length===2)
-        removable.add(f.crossingIds.slice().sort((a,b)=>a-b).join(':'));
-    });
-    const prevDist=new Map();
-    for(let i=0;i<beforeX.length;i++)for(let j=i+1;j<beforeX.length;j++) {
-      const a=beforeX[i],b=beforeX[j];
-      prevDist.set([a.id,b.id].sort((x,y)=>x-y).join(':'),Math.hypot(a.x-b.x,a.y-b.y));
-    }
-    for(let i=0;i<afterX.length;i++)for(let j=i+1;j<afterX.length;j++) {
-      const a=afterX[i],b=afterX[j],key=[a.id,b.id].sort((x,y)=>x-y).join(':');
-      if(removable.has(key))continue;
-      const d=Math.hypot(a.x-b.x,a.y-b.y);
-      // A pair already outside the clearance zone is free to move (even
-      // closer) so long as it does not cross below the floor. Already-close
-      // crossings (e.g. imported diagrams) may stay as they are or move
-      // apart, but a valid move cannot pull them closer still.
-      const before=prevDist.has(key)?prevDist.get(key):Infinity;
-      const floor=before<clearance?before:clearance;
-      if(d+1e-7<floor)return true;
-    }
-    return null;
-  }
-
   function attemptStep(S, mutator, opt) {
     // A component the mutator's caller says it won't touch needs no backup
     // clone of its own — the current object already IS its pre-mutation
     // state, and reusing it (rather than deep-cloning every point in every
-    // other component) matters on every retry of a blocked/crowded drag.
+    // other component) matters on every drag frame.
     const backup = opt?.touchedComps
       ? S.comps.map((c,i) => opt.touchedComps.includes(i) ? cloneComp(c) : c)
       : cloneComps(S.comps);
@@ -968,57 +844,22 @@ const KC = (function () {
     const raw = computeRaw(S.comps);
     const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
-    // Both checks below need the post-move face structure; compute it once
-    // instead of twice (rebuilding it is the most expensive part of a step,
-    // and this runs on every drag frame).
-    const afterFaces = (opt?.faceLimits || opt?.crossingClearance) ? smallFaces(S.comps, r.crossings) : null;
-    const smallFace=faceSizeViolation(backup,S.crossings,S.comps,r.crossings,opt?.faceLimits,afterFaces,opt?.beforeFaces);
-    if (smallFace) {
-      S.comps = backup; S.nextId = next;
-      return { ok: false, reason: smallFace };
-    }
+    S.crossings = r.crossings;
     // A frame exactly on a triple point has no well-defined crossing order:
     // crossings genuinely coincide there as the diagram passes through, most
-    // often mid-way through a valid R3 slide, so the clearance floor (below)
-    // does not apply to it. Keep the last regular diagram and classify once
-    // the strands separate.
+    // often mid-way through a valid R3 slide. Keep the last regular diagram
+    // and classify once the strands separate.
     const singular = raw.some((x,i) => raw.slice(i+1).filter(y=>Math.hypot(x.x-y.x,x.y-y.y)<1e-6).length>=2);
-    if (!singular && crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance,afterFaces)) {
-      S.comps = backup; S.nextId = next;
-      return { ok: false, reason: 'clearance' };
-    }
-    S.crossings = r.crossings;
     if (singular) { S.moveCheckpoint = baseline; r.ev = {r1:0,r2:0,r3:0}; }
     else S.moveCheckpoint = null;
     return r;
   }
-
-  function adaptiveStep(S, mutate, opt) {
-    // The "before" face structure is the same for every scale in this
-    // ladder (a failed attempt always rolls back to the exact state this
-    // call started from), so it only needs computing once — not on every
-    // one of the up to 7 retries, which is otherwise the single most
-    // expensive part of a blocked/crowded drag step recurring every frame.
-    const beforeFaces = opt?.faceLimits ? smallFaces(S.comps, S.crossings) : null;
-    const opt2 = beforeFaces ? { ...opt, beforeFaces } : opt;
-    let result;
-    for(let scale=1;scale>=1/64;scale/=2) {
-      result=attemptStep(S,comps=>mutate(comps,scale),opt2);
-      if(result.ok)return result;
-    }
-    return result;
-  }
-  // The original relaxation step (force formula and retry-at-shrinking-scale
-  // mechanism unchanged), with one addition: a crossing-clearance floor
-  // through the same opt interactive dragging uses, so a crossing pair
-  // never collapses toward the same point while shrinking. One call still
-  // mutates every component in a single atomic attemptStep, so a region
-  // that is permanently stuck right at the floor correctly reports ok:false
-  // for the whole call rather than drifting past it — whatever is left
-  // crowded once a run ends is then a job for separateCrowdedCrossings,
-  // exactly like a drag's release.
-  function relaxStep(S, clearance) {
-    return adaptiveStep(S, (comps, scale) => relaxMutator(comps, 40, scale), { crossingClearance: clearance });
+  // Auto-relax's step: the same attemptStep every other move goes through,
+  // so only real topology (reconcile) gates it — no separate size or
+  // distance floor. A blocked frame simply stops the run; there is nothing
+  // else to retry at a smaller scale.
+  function relaxStep(S) {
+    return attemptStep(S, comps => relaxMutator(comps, 40, 1.0), {});
   }
   // Rebuild every component at even spacing to undo the one-directional
   // point growth from repeated relaxation (see compactPts). Routed through
@@ -1123,66 +964,8 @@ const KC = (function () {
     return null;
   }
 
-  // A human-directed drag carries no clearance floor while it's in
-  // progress: crossings are free to pass arbitrarily close together, or
-  // even briefly overlap, while a Reidemeister-valid move is in progress —
-  // real topology validation (reconcile) is what actually decides what's
-  // legal, not visual distance (auto-relax, an undirected force simulation
-  // rather than a human-steered edit, keeps its own floor live instead —
-  // see relaxStep — but can still leave a spot pinned right at it). Once
-  // the gesture ends, this spreads back out any pair of crossings it left
-  // crowded, so the diagram doesn't stay pinned near-coincident: a genuine
-  // R2-removable bigon (one strand over both times) is kept rather than
-  // deleted and nudged apart, and any other crowded pair (three or more
-  // arcs converging, or two unrelated crossings that happened to end up
-  // close) is nudged apart the same way. Only pairs this gesture actually
-  // tightened are touched — either newly formed, or measurably closer than
-  // when it started — so unrelated pre-existing geometry (e.g. an imported
-  // diagram already drawn tight) is left alone. Blocked attempts (no room
-  // to separate without another topology change) are simply left as they are.
-  function separateCrowdedCrossings(S, opt) {
-    const clearance = opt.clearance, before = opt.before;
-    if (!clearance || !before) return null;
-    let ev = { r1: 0, r2: 0, r3: 0 }, changed = false;
-    for (let guard = 0; guard < 30; guard++) {
-      const X = S.crossings;
-      // Unlike the live clearance floor (crossingClearanceViolation), a
-      // genuine R2-removable bigon is not exempt here: it is exactly the
-      // case this function exists for — kept rather than deleted, so it
-      // needs nudging apart like anything else, not skipped.
-      let worst = null;
-      for (let i = 0; i < X.length; i++) for (let j = i + 1; j < X.length; j++) {
-        const a = X[i], b = X[j], key = [a.id, b.id].sort((x, y) => x - y).join(':');
-        const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (d >= clearance - 1e-7) continue;
-        const prior = before.get(key);
-        if (!(prior === undefined || prior > d + 1e-6)) continue;
-        if (!worst || d < worst.d) worst = { a, b, d };
-      }
-      if (!worst) break;
-      const { a: Xa, b: Xb, d } = worst;
-      if (d < 1e-6) break; // no well-defined direction to separate along
-      const dx = Xb.x - Xa.x, dy = Xb.y - Xa.y;
-      const ux = dx / d, uy = dy / d, push = (clearance - d) / 2 + clearance * 0.05, sigma = Math.max(6, Math.min(clearance, d) * 0.6);
-      const r = adaptiveStep(S, (comps, scale) => {
-        const s = push * scale;
-        [[Xa, -1], [Xb, 1]].forEach(([X, sign]) => X.occ.forEach(o => moveWeighted(comps[o.c], 0, sign * ux * s, sign * uy * s, sigma, o.u)));
-      }, {});
-      if (!r.ok) break;
-      ev.r1 += r.ev.r1; ev.r2 += r.ev.r2; ev.r3 += r.ev.r3; changed = true;
-    }
-    return changed ? { ev } : null;
-  }
-
-  // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing.
-  // Repulsion is integrated over arc length (a "mass" per sample) so that
-  // inserting sample points cannot amplify the force — the raw per-point
-  // version feeds back into resampling and both the curve and its point
-  // count grow without bound over repeated relaxation. Smoothing pulls each
-  // point toward the arc-length midpoint of a small neighborhood rather than
-  // its immediate polyline neighbors, which stays correct when sampling is
-  // uneven (after dragging) and produces smooth, round corners instead of
-  // faceted ones.
+  // Energy-style relaxation: short-range repulsion between distant parts of
+  // the curve + smoothing toward the immediate-neighbor midpoint.
   function relaxMutator(comps, R, strength) {
     const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
@@ -1202,20 +985,15 @@ const KC = (function () {
             if (c2 === c && sDist(cm, cm.cum[i], cm.cum[j]) < 2.5 * R) continue;
             const o = comps[c2].pts[j], dx = q.x - o.x, dy = q.y - o.y, d = Math.hypot(dx, dy);
             if (d >= R || d < 1e-6) continue;
-            const other=comps[c2], count=other.pts.length;
-            const mass=(Math.hypot(o.x-other.pts[(j+count-1)%count].x,o.y-other.pts[(j+count-1)%count].y)+
-              Math.hypot(o.x-other.pts[(j+1)%count].x,o.y-other.pts[(j+1)%count].y))/(2*SEG);
-            const w=1-d*d/(R*R), f=w*w*mass;
-            fx += f*dx/R; fy += f*dy/R;
+            const w = (R - d) / R; fx += w * w * dx / d; fy += w * w * dy / d;
           }
         }
-        const reach=Math.min(2*SEG,cm.len/8);
-        const a=pointAtS(cm,cm.cum[i]-reach), b=pointAtS(cm,cm.cum[i]+reach);
-        disp[c][i].x = strength * (0.3*fx + 0.35*((a.x+b.x)/2-q.x));
-        disp[c][i].y = strength * (0.3*fy + 0.35*((a.y+b.y)/2-q.y));
+        const a = p[(i - 1 + n) % n], b = p[(i + 1) % n];
+        disp[c][i].x = strength * fx + 0.3 * ((a.x + b.x) / 2 - q.x);
+        disp[c][i].y = strength * fy + 0.3 * ((a.y + b.y) / 2 - q.y);
       }
     });
-    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
+    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2) { x *= 1.2 / m; y *= 1.2 / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
   }
 
 
@@ -1427,7 +1205,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, adaptiveStep, relaxStep, compactStep, compactPts, smallFaces, faceSizeViolation, crossingClearanceViolation, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, separateCrowdedCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, relaxStep, compactStep, compactPts, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1442,31 +1220,12 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 80, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, clearanceEnabled: true, crossingClearance: 32, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 80, under: false, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
   let prevTool = 'draw', redoStack = [], sel = null, lasso = null, clip = null, penTap = null, lastPenTap = null, pasteAt = null;
   const SNAP = 16;
-  // Minimum on-screen gap kept between protected crossings (drag, release
-  // correction, auto-relax); opts.crossingClearance (Settings > Dragging)
-  // and opts.clearanceEnabled (the Drag strand tool's options bar) make it
-  // adjustable and switchable. 0 disables it entirely — attemptStep,
-  // relaxStep and separateCrowdedCrossings all already treat a falsy
-  // clearance as "no floor".
-  function effectiveClearance() { return opts.clearanceEnabled ? opts.crossingClearance : 0; }
-  // Every pairwise crossing distance, keyed like separateCrowdedCrossings
-  // expects — a snapshot to compare against once a gesture (drag, an
-  // auto-relax run) ends, so only pairs that gesture itself tightened get
-  // nudged back apart.
-  function crossingDistanceMap(crossings) {
-    const m = new Map();
-    for (let i = 0; i < crossings.length; i++) for (let j = i + 1; j < crossings.length; j++) {
-      const a = crossings[i], b = crossings[j];
-      m.set([a.id, b.id].sort((x, y) => x - y).join(':'), Math.hypot(a.x - b.x, a.y - b.y));
-    }
-    return m;
-  }
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
   let invariantKey=null,invariantWorker=null,invariantJob=0;
@@ -1747,13 +1506,11 @@ const KC = (function () {
 
   // ---------- braid import ----------
   function relaxed(obj, iters) {
-    const initialCrossingDistances = crossingDistanceMap(obj.crossings);
     for (let i = 0; i < iters; i++) {
-      const r = KC.relaxStep(obj, effectiveClearance()); if (!r.ok) break;
+      const r = KC.relaxStep(obj); if (!r.ok) break;
       if ((i+1) % 30 === 0) KC.compactStep(obj);
     }
     KC.compactStep(obj);
-    KC.separateCrowdedCrossings(obj, { clearance: effectiveClearance(), before: initialCrossingDistances });
     return obj;
   }
   $('braidGo').onclick = () => {
@@ -1900,17 +1657,12 @@ const KC = (function () {
   }
   function relaxFrames(total) {
     relaxing = total; let blockedOnce = false, sinceCompact = 0; const ownerTab=activeTabId, epoch=++relaxEpoch;
-    // This is the "before" snapshot separateCrowdedCrossings compares
-    // against once the whole run ends, to spread back out only whatever a
-    // crowded spot's clearance-floor damping (see relaxStep) still left it
-    // holding at the floor.
-    const initialCrossingDistances = crossingDistanceMap(S.crossings);
     $('smoothBtn').textContent='Stop relaxing';
     const frame = () => {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S, effectiveClearance()/view.s);
+        const r = KC.relaxStep(S);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
         addEvents(r.ev); sinceCompact++;
       }
@@ -1923,8 +1675,6 @@ const KC = (function () {
       changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
         if (sinceCompact > 0) KC.compactStep(S);
-        const sep = KC.separateCrowdedCrossings(S, { clearance: effectiveClearance()/view.s, before: initialCrossingDistances });
-        if (sep) addEvents(sep.ev);
         stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
       }
     };
@@ -1993,12 +1743,6 @@ const KC = (function () {
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
-  ['protectBigons','protectKinks'].forEach((id,i)=>$(id).onchange=e=>{
-    opts[id]=e.target.checked; $(['bigonArea','kinkArea'][i]).disabled=!opts[id];
-  });
-  ['bigonArea','kinkArea'].forEach(id=>$(id).oninput=e=>{opts[id]=+e.target.value;$(id+'V').textContent=opts[id]+' px²';});
-  $('crossingClearance').oninput = e => { opts.crossingClearance = +e.target.value; $('crossingClearanceV').textContent = opts.crossingClearance + ' px'; };
-  $('clearanceEnabled').onchange = e => { opts.clearanceEnabled = e.target.checked; $('crossingClearance').disabled = !opts.clearanceEnabled; };
   $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
@@ -2121,11 +1865,7 @@ const KC = (function () {
     const hit = nearestPoint(w, tol);
     if (hit) {
       pushUndo();
-      // While the drag is in progress crossings are free to pass arbitrarily
-      // close together (see tick()), so on release separateCrowdedCrossings
-      // needs to know which pairs THIS gesture actually tightened.
-      const initialCrossingDistances = crossingDistanceMap(S.crossings);
-      drag = { c: hit.c, u: hit.u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under, initialCrossingIds: new Set(S.crossings.map(x=>x.id)), initialCrossingDistances };
+      drag = { c: hit.c, u: hit.u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under, initialCrossingIds: new Set(S.crossings.map(x=>x.id)) };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
       if (!looping) { looping = true; requestAnimationFrame(tick); }
@@ -2178,14 +1918,6 @@ const KC = (function () {
     const a = active; active = null;
     if (!a) return;
     if (a.kind === 'drag') {
-      if (drag.changed) {
-        // The drag itself let crossings pass arbitrarily close together
-        // (see tick()); any pair it left crowded is nudged back apart now
-        // that the gesture is over, bundled into the drag's own undo step,
-        // not a separate one.
-        const sep = KC.separateCrowdedCrossings(S, { clearance: effectiveClearance() / view.s, before: drag.initialCrossingDistances });
-        if (sep) addEvents(sep.ev);
-      }
       if (!drag.changed) undoStack.pop(); drag = null; cv.style.cursor = 'grab'; changed();
     }
     else if (a.kind === 'pan') pan = null;
@@ -2331,22 +2063,11 @@ const KC = (function () {
       const dx = drag.mx - g.x, dy = drag.my - g.y, d = Math.hypot(dx, dy);
       if (d < 0.8) break;
       const st = Math.min(2.5, d), c = drag.c, u = drag.u;
-      // No clearance floor here: while the strand is actively held, crossings
-      // may pass arbitrarily close together (even overlap) as long as the
-      // move is actually Reidemeister-valid — reconcile is what decides
-      // that, not visual distance (faceLimits below is a separate, opt-in
-      // size floor on protected bigons/kinks). Anything left crowded once
-      // the strand is released gets spread back out by
-      // separateCrowdedCrossings in endAction().
-      const r = KC.adaptiveStep(S, (comps,scale) => {
+      const r = KC.attemptStep(S, comps => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
-        KC.moveWeighted(cm, gi, dx / d * st * scale, dy / d * st * scale, sig, u);
+        KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig, u);
       }, {
         under: drag.under,
-        faceLimits: {
-          bigon: opts.protectBigons ? {area:opts.bigonArea/(view.s*view.s),thickness:8/view.s,separation:16/view.s} : null,
-          kink: opts.protectKinks ? {area:opts.kinkArea/(view.s*view.s),thickness:6/view.s} : null
-        },
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); },
         touchedComps: [c]
       });
@@ -2358,7 +2079,7 @@ const KC = (function () {
       if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
     }
     if (steps) changed();
-    if (blocked && blocked !== drag.lastBlocked) toast({ bigon: 'This non-R2 bigon is too small or thin. Adjust Protect non-R2 bigons in settings to allow it to shrink.', kink: 'This R1 kink is too small or thin. Adjust Protect R1 kinks in settings to allow it to shrink.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand', clearance: 'These crossings cannot pass each other. Drag away to separate them.' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }

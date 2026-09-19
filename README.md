@@ -91,7 +91,7 @@ The owning account manages source editing and publication through Sites. Visitor
 ## Interaction update
 
 - Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
-- Protect non-R2 bigons and Protect R1 kinks independently constrain the size of those regions during dragging. R2-compatible bigons and other crossing pairs have no size floor. Minimum areas are adjustable; existing undersized protected regions may expand. Rejected moves restore geometry and crossing IDs.
+- Only real topology (Reidemeister validity) gates a drag or auto-relax step — there is no separate size or distance floor on bigons, kinks, or crossing spacing. Crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
@@ -107,21 +107,9 @@ Small empty monogons near the dragged strand can now straighten during a drag (e
 
 Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size when R1 protection is enabled. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
 
-## Bigon and kink size protection
+## No size or distance floor on dragging or auto-relax
 
-The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. **Bigon size protection applies only when each boundary strand is over at one crossing and under at the other**, which prevents R2 removal. When the same boundary strand is over at both crossings, the bigon is exempt from all size floors (area, thickness, and crossing separation), allowing it to shrink for R2 removal. Classification follows the actual boundary occurrences, including two strands belonging to the same component; it does not compare component IDs or raw crossing indices.
-
-Both protection options are off by default. When enabled, their default minimum areas are 400 screen px² for protected bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for protected bigons, 6 px for kinks) and a 16 px crossing separation for protected bigons. Limits scale with the current zoom. Existing undersized protected faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
-
-Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.
-
-Additional cases compare identical geometry with the two possible over/under patterns, R2 shrink/disappear/reappear and move counts, one-component bigons, mirrored height order, reversed occurrences, and pointer dragging with protection enabled.
-
-## Default crossing clearance
-
-Independent of the optional bigon/kink size protection above, a small clearance floor (16 screen px, scaled by zoom) is always active while dragging. It stops any two crossings from collapsing toward the same point — including three or more arcs converging near one spot — unless they form a genuine R2-removable bigon (the same strand over at both crossings), which stays free to shrink toward release as before. A blocked drag shows “These crossings cannot pass each other. Drag away to separate them.” and can always be reversed by dragging back; valid R1/R2/R3 moves, including the exact triple-point frame inside an R3 slide, are never blocked by this floor.
-
-On release, a tiny genuine bigon that this drag tightened (newly formed, or shrunk from where it started) is kept — its crossings are not deleted — but gently nudged back out to the clearance distance so it stays visible and distinguishable rather than pinned near-coincident. This correction is part of the same undo step as the drag, so one undo reverts both together. A tangential touch that never actually crosses to the other side does not register as a crossing at all.
+A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move; whatever the diagram is left holding when the gesture ends is exactly what stays, with no automatic separation or correction afterward. A tangential touch that never actually crosses to the other side still does not register as a crossing at all.
 
 ## Make an alternating diagram
 
