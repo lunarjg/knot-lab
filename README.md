@@ -101,11 +101,7 @@ When a drawn stroke starts or ends at an existing open endpoint, its new connect
 
 The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. The draw hint explains the joining rule in English. Free strokes and the separate drag-under setting keep their existing defaults.
 
-## R1 drag assistance
-
-Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Remove small R1 loops while dragging” to retain curls.
-
-Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size when R1 protection is enabled. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
+Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way — existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
 
 ## No size or distance floor on dragging or auto-relax
 

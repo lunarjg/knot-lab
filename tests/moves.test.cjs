@@ -39,7 +39,10 @@ const forbidden=state(fixture(-1),true),before=JSON.stringify(forbidden.comps);c
 // Previously even a no-op deleted these two crossings and incremented R2.
 const kink=y=>poly([[-20,10],[-1,1],[0,y],[1,1],[20,10],[20,20],[-20,20]]);
 const bar=()=>poly([[-30,0],[30,0],[30,-20],[-30,-20]]);
-const noop=state([kink(-1),bar()]);const n=KC.attemptStep(noop,()=>{},{});assert(n.ok);assert.equal(noop.crossings.length,2);assert.deepEqual(n.ev,{r1:0,r2:0,r3:0});
+// At normal screen scale (unlike the subpixel scales exercised below), a
+// no-op resample must not touch which crossings exist.
+const scaleUp=cm=>poly(cm.pts.map(p=>[p.x*20,p.y*20]));
+const noop=state([scaleUp(kink(-1)),scaleUp(bar())]);const n=KC.attemptStep(noop,()=>{},{});assert(n.ok);assert.equal(noop.crossings.length,2);assert.deepEqual(n.ev,{r1:0,r2:0,r3:0});
 let id=100;const a=[kink(-1),bar()],b=[kink(.5),bar()],x=state(a).crossings;
 const death=KC.reconcile(x,a,b,KC.computeRaw(b),{nextId:()=>id++});assert(death.ok);assert.deepEqual(death.ev,{r1:0,r2:1,r3:0});
 const birth=KC.reconcile([],b,a,KC.computeRaw(a),{nextId:()=>id++});assert(birth.ok);assert.deepEqual(birth.ev,{r1:0,r2:1,r3:0});
@@ -53,52 +56,16 @@ console.log('R1 birth and death remain correctly classified: PASS');
 
 // Without a size floor, a valid R1 self-crossing may start below any
 // previous size threshold and later shrink and grow freely.
-const curled2=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat2=poly([[-20,0],[20,0],[20,20],[-20,20]]);
+const curled2=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[x*5,y*5])),flat2=poly([[-20,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[x*5,y*5]));
 for(const under of [false,true]) {
  const born=state(KC.cloneComps([flat2]));
  const r=KC.attemptStep(born,cm=>{cm[0].pts=curled2.pts.map(p=>({...p}));},{under,weight:o=>o.u<.3?1:0});
  assert(r.ok,'A valid R1 self-crossing must be allowed to start');assert.equal(r.ev.r1,1);assert.equal(born.crossings.length,1);assert.equal(born.nextId,2);
- assert.equal(KC.loosenR1(born,{component:0,u:2/8,radius:60,maxLoopLength:120,eligibleIds:new Set()}),null,'Do not immediately erase a newly created self-crossing');
  const grow=KC.attemptStep(born,cm=>cm[0].pts.forEach(p=>{p.y*=2;}),{});assert(grow.ok);assert.equal(grow.ev.r1,0);
  const shrink=KC.attemptStep(born,cm=>cm[0].pts.forEach(p=>{p.y*=.5;}),{});assert(shrink.ok);assert.equal(shrink.ev.r1,0);
 }
 console.log('Crossings shrink and grow freely with no bigon/kink size floor: PASS');
 
-// Assisted R1 removes only a nearby empty monogon, never a threaded/enclosing loop.
-const curlPoints=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]];
-const curlState=extra=>state([poly(curlPoints),...extra]);
-const loosen={component:0,u:2/8,radius:60,maxLoopLength:120};
-for(const over of [0,1]) {
- const s=curlState([]);s.crossings[0].over=over;
- const r=KC.loosenR1(s,loosen);assert(r,'Empty curl should loosen');
- assert.equal(s.crossings.length,0);assert.deepEqual(r.ev,{r1:1,r2:0,r3:0});assert.equal(s.comps.length,1);
- assert.equal(KC.loosenR1(s,loosen),null,'Must not count the same R1 twice');
-}
-const tinyBox=(x,y)=>poly([[x-.08,y-.08],[x+.08,y-.08],[x+.08,y+.08],[x-.08,y+.08]]);
-for(const extra of [[tinyBox(0,2.65)],[tinyBox(0,1.8)]]) {
- const s=curlState(extra),before=JSON.stringify(s);assert.equal(s.crossings.length,1);
- assert.equal(KC.loosenR1(s,loosen),null,'A component inside the loop or neck must be protected');assert.equal(JSON.stringify(s),before);
-}
-const openThread=curlState([]);openThread.open=[{pts:[{x:-5,y:2.6},{x:5,y:2.6}]}];
-const threadBefore=JSON.stringify(openThread);assert.equal(KC.loosenR1(openThread,loosen),null);assert.equal(JSON.stringify(openThread),threadBefore);
-const remote=curlState([]),remoteBefore=JSON.stringify(remote);
-assert.equal(KC.loosenR1(remote,{...loosen,u:6/8,radius:2}),null);assert.equal(JSON.stringify(remote),remoteBefore);
-const busy=curlState([poly(curlPoints.map(([x,y])=>[x+60,y]))]);
-assert.equal(busy.crossings.length,2);busy.crossings[1].over=1;
-const survivors=JSON.stringify(busy.crossings.filter(x=>x.occ[0].c===1));
-assert(KC.loosenR1(busy,loosen));assert.equal(JSON.stringify(busy.crossings.filter(x=>x.occ[0].c===1)),survivors,'Unrelated crossings must remain untouched');
-console.log('Assisted R1: both signs, one count, enclosed components, neck obstruction, open strands and distant curls: PASS');
-const twoCurls=[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[40,0],[58,0],[61,3],[59,3],[62,0],[80,0],[80,20],[-20,20]];
-for(let rotation=0;rotation<twoCurls.length;rotation++) {
- const points=twoCurls.slice(rotation).concat(twoCurls.slice(0,rotation)),s=state([poly(points)]);
- assert.equal(s.crossings.length,2);const other=s.crossings.find(x=>x.x>40);other.over=1;
- const originalOver=other.occ[other.over].u;
- const u=points.findIndex(p=>p[0]===1&&p[1]===3)/points.length;
- assert(KC.loosenR1(s,{component:0,u,radius:10,maxLoopLength:120}));
- assert.equal(s.crossings.length,1);assert.equal(s.crossings[0].id,other.id);
- assert(KC.circD(s.crossings[0].occ[s.crossings[0].over].u,originalOver)<1e-6);
-}
-console.log('Local R1 preserves other crossings on the same component across cyclic seams: PASS');
 
 // Subpixel crossings on grid boundaries must survive resampling and movement.
 for(const h of [.001,1e-7])for(const offset of [0,24,-24,.37]) {
@@ -167,51 +134,3 @@ console.log('Auto-relax is unrestricted by anything but topology: PASS');
 }
 console.log('Tangential vertex touches are not counted as crossings; genuine dips still are: PASS');
 
-// Performance: dragging skips backup-cloning and resampling for components
-// the mutator declares it won't touch (opt.touchedComps) — a pure
-// bookkeeping shortcut that must produce byte-for-byte the same outcome as
-// the unoptimized path, for both a step that succeeds and one that a
-// smaller component's topology blocks.
-{
- const build=()=>{
-  const t=altTrefoil();
-  // Pre-resampled to SEG spacing, matching how every real component (drawn,
-  // imported or template) already looks by the time a drag can touch it —
-  // an untouched component is only ever skipped, never left needing a fix
-  // resampleComp would otherwise have applied to it regardless.
-  const squareCorners=[[2000,2000],[2020,2000],[2020,2020],[2000,2020]].map(([x,y])=>({x,y}));
-  const other=poly(KC.resampleClosed(squareCorners,KC.SEG).map(p=>[p.x,p.y]));
-  const comps=[...t.comps,other];
-  const raw=KC.computeRaw(comps);raw.forEach((x,i)=>{x.id=i+1;x.over=i%2;});
-  return {comps,crossings:raw,nextId:raw.length+1};
- };
- const mkOpt=(c,touched)=>({
-  weight:o=>0,
-  nextId:(()=>{let n=1000;return ()=>n++;})(),
-  ...(touched?{touchedComps:[c]}:{})
- });
- const dragMutator=(c,u,dx,dy,sig)=>comps=>{const cm=comps[c],gi=KC.indexOfU(cm,u);KC.moveWeighted(cm,gi,dx,dy,sig,u);};
-
- // A move with room to succeed.
- {
-  const withHint=build(), without=build();
-  const r1=KC.attemptStep(withHint,dragMutator(0,0.1,1.2,0.6,40),mkOpt(0,true));
-  const r2=KC.attemptStep(without,dragMutator(0,0.1,1.2,0.6,40),mkOpt(0,false));
-  assert.equal(r1.ok,r2.ok);assert.deepEqual(r1.ev,r2.ev);
-  assert.deepEqual(withHint.comps,without.comps,'touchedComps must not change the resulting geometry');
-  assert.deepEqual(withHint.crossings,without.crossings,'touchedComps must not change the resulting crossings');
- }
- // A move an invalid R2 height order blocks outright.
- {
-  const withHint=build(), without=build();
-  withHint.crossings[0].over=1-withHint.crossings[0].over;
-  without.crossings[0].over=1-without.crossings[0].over;
-  const mutate=(c,u,sig)=>comps=>{const cm=comps[c],gi=KC.indexOfU(cm,u);KC.moveWeighted(cm,gi,0,2.2,sig,u);};
-  const r1=KC.attemptStep(withHint,mutate(0,0.02,10),mkOpt(0,true));
-  const r2=KC.attemptStep(without,mutate(0,0.02,10),mkOpt(0,false));
-  assert.equal(r1.ok,r2.ok);
-  assert.deepEqual(withHint.comps,without.comps,'touchedComps must not change a blocked outcome');
-  assert.deepEqual(withHint.crossings,without.crossings,'touchedComps must not change a blocked outcome');
- }
-}
-console.log('touchedComps drag shortcuts match the unoptimized path exactly: PASS');

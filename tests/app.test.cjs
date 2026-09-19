@@ -163,45 +163,23 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  console.log('File picker batch opens, failed-file isolation, visible selected tabs and New tab: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
-// A real drag loosens one local curl; click-only, the off switch, undo and
-// redo preserve the expected geometry and R1 count in the active document.
-for(const enabled of [true,false]) {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[200+5*x,200+5*y])];
- api.openTab(api.deserialize(d),'curl');assert.equal(api.analysis.c,1);
- api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('loosenR1').onchange({target:{checked:enabled}});
- const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointerup',ev(205,215,'pointerup'));p.flush();
- assert.equal(api.analysis.c,1,'Merely clicking must preserve the curl');
- p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointermove',ev(206,215,'pointermove'));p.step();
- p.fire(canvas,'pointerup',ev(206,215,'pointerup'));p.flush();
- assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
- p.ids.get('undo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,0);
- p.ids.get('redo').click();assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
-}
-console.log('R1 drag assistance, click-only preservation, off switch and single-gesture undo/redo: PASS');
-
-// A user can create a self-crossing while kink protection and R1 assistance
-// are both enabled. Assistance must not erase a loop born during this drag.
+// A user can create a self-crossing by dragging a strand over itself.
 {
  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
  d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
  api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
  p.ids.get('sigma').oninput({target:{value:'10'}});
- assert(p.ids.get('loosenR1').checked);
  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
  for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
  const finalC=api.analysis.c,finalR1=api.serialize().stats.r1;
- assert(finalC>=1,'A self-crossing must form and not be immediately erased by assistance');assert(finalR1>=1);
+ assert(finalC>=1,'A self-crossing must form');assert(finalR1>=1);
  p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
  p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);assert.equal(api.serialize().stats.r1,finalR1);
 }
-console.log('New R1 self-crossing with assistance enabled, move count, undo and redo: PASS');
+console.log('New R1 self-crossing, move count, undo and redo: PASS');
 
 // Holding Shift while dragging reverses underneath for that gesture only,
 // live for as long as it is held, without changing the base setting.
@@ -459,7 +437,6 @@ for(const pointerType of ['mouse','pen','touch']) {
  // Make the pair non-R2 by setting opposite overstrands.
  api.state.crossings[0].over=0;api.state.crossings[1].over=1;
  api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.ids.get('loosenR1').onchange({target:{checked:false}});
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
  const ev=y=>({pointerType,pointerId:54,clientX:400,clientY:y,button:0,width:1,height:1,preventDefault(){}});
  p.fire(p.ids.get('cv'),'pointerdown',ev(199.999));p.fire(p.ids.get('cv'),'pointermove',ev(185));
