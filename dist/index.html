@@ -129,12 +129,6 @@ h3{font-size:14px;margin:14px 0 6px}
 #invariantResults a,details a{color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
 .small{font-size:12px;color:var(--muted);margin:6px 0 0}
-.moves{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.move{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:8px;text-align:center}
-.move .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
-.move .l{font-size:12px;color:var(--muted)}
-.move.pulse{animation:pulse .5s ease-out}
-@keyframes pulse{0%{border-color:var(--accent);background:var(--accent-soft)}100%{}}
 textarea.pd{width:100%;height:92px;resize:vertical;border:1px solid var(--rule);background:var(--paper);border-radius:9px;padding:8px;font-family:var(--mono);font-size:12px;line-height:1.45}
 .help p{margin:0 0 6px;color:var(--muted);font-size:13px}
 .help b{color:var(--ink);font-weight:600}
@@ -144,7 +138,7 @@ kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--rule);border
   .stage{height:78vh;padding:10px}
   aside{padding:4px 14px 30px}
 }
-@media (prefers-reduced-motion: reduce){ .toast,.move.pulse{transition:none;animation:none} }
+@media (prefers-reduced-motion: reduce){ .toast{transition:none;animation:none} }
 
 /* iPad working surface: the canvas remains full-height when the inspector closes. */
 html,body{overscroll-behavior:none;overflow:hidden}
@@ -391,15 +385,6 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <p>Jones uses V(unknot) = 1 and V(t) = (−A³)<sup>−w(D)</sup>⟨D⟩ with A = t<sup>−1/4</sup>. Exact state expansion supports up to 18 crossings. Link polynomials may have half-integer powers.</p>
         <p>Methods: <a href="https://arxiv.org/html/2204.12104v2" target="_blank" rel="noopener noreferrer">Kauffman: Jones polynomial</a>; <a href="https://arxiv.org/abs/1910.08044" target="_blank" rel="noopener noreferrer">Kolay: coloring matrices</a>; <a href="https://homepages.math.uic.edu/~kauffman/KFI.pdf" target="_blank" rel="noopener noreferrer">linking numbers</a>.</p>
       </details>
-    </section>
-    <section>
-      <h2>Reidemeister move counts</h2>
-      <div class="moves">
-        <div class="move" id="mR1"><div class="n">0</div><div class="l">R1</div></div>
-        <div class="move" id="mR2"><div class="n">0</div><div class="l">R2</div></div>
-        <div class="move" id="mR3"><div class="n">0</div><div class="l">R3</div></div>
-      </div>
-      <p class="small">Crossing changes: <span id="nflip">0</span> (may change the knot type)</p>
     </section>
     </div>
     <div id="pageSettings" hidden>
@@ -1049,7 +1034,6 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
   const opts = { sigma: 80, under: false, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
@@ -1059,8 +1043,7 @@ const KC = (function () {
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
   let invariantKey=null,invariantWorker=null,invariantJob=0;
-  const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],stats:{r1:0,r2:0,r3:0,flips:0},moveCheckpoint:null});
-  const cleanStats = value => Object.fromEntries(['r1','r2','r3','flips'].map(k=>[k,Number.isSafeInteger(value?.[k])&&value[k]>=0?value[k]:0]));
+  const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],moveCheckpoint:null});
 
   const $ = id => document.getElementById(id);
   const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -1093,10 +1076,10 @@ const KC = (function () {
   // ---------- state management ----------
   function snapshot() {
     return { comps: KC.cloneComps(S.comps), crossings: KC.cloneCrossings(S.crossings), nextId: S.nextId,
-      open: S.open.map(st => ({ pts: st.pts.map(q => ({ x: q.x, y: q.y })) })), memory: S.memory.map(m => ({ ...m })), stats:{...stats},
+      open: S.open.map(st => ({ pts: st.pts.map(q => ({ x: q.x, y: q.y })) })), memory: S.memory.map(m => ({ ...m })),
       moveCheckpoint:S.moveCheckpoint ? {comps:KC.cloneComps(S.moveCheckpoint.comps),crossings:KC.cloneCrossings(S.moveCheckpoint.crossings)} : null };
   }
-  function restore(s) { S.comps = s.comps; S.crossings = s.crossings; S.nextId = s.nextId; S.open = s.open || []; S.memory = s.memory || []; S.moveCheckpoint=s.moveCheckpoint || null; Object.assign(stats,cleanStats(s.stats)); }
+  function restore(s) { S.comps = s.comps; S.crossings = s.crossings; S.nextId = s.nextId; S.open = s.open || []; S.memory = s.memory || []; S.moveCheckpoint=s.moveCheckpoint || null; }
   function pushUndo() { stopRelax(); undoStack.push(snapshot()); if (undoStack.length > 60) undoStack.shift(); redoStack = []; }
   function undo() {
     if (active) return;
@@ -1113,7 +1096,6 @@ const KC = (function () {
   function load(obj, keepView) {
     pushUndo();
     S.comps = obj.comps; S.crossings = obj.crossings; S.nextId = obj.nextId; S.open = []; S.memory = []; S.moveCheckpoint=null;
-    stats.r1 = stats.r2 = stats.r3 = stats.flips = 0;
     changed(); if (!keepView) fitView();
     clearSel(); if (tool === 'draw' || tool === 'erase' || tool === 'lasso') setTool('move');
   }
@@ -1125,18 +1107,17 @@ const KC = (function () {
 
   // ---------- save / open ----------
   const FORMAT = 'knot-lab', AUTOSAVE_KEY = 'knot-lab:autosave', WORKSPACE_KEY = 'knot-lab:workspace';
-  function serializeState(state, counts) {
+  function serializeState(state) {
     return {
       format:FORMAT,version:1,savedAt:new Date().toISOString(),
       comps:state.comps.map(cm=>cm.pts.map(q=>[q.x,q.y])),
       crossings:state.crossings.map(X=>{const o=X.occ[X.over];return [X.x,X.y,o.dx,o.dy];}),
       open:state.open.map(st=>st.pts.map(q=>[q.x,q.y])),
       crossingMemory:(state.memory||[]).map(m=>[m.x,m.y,m.ox,m.oy]),
-      pd:KC.analyze(state.comps,state.crossings).pd,
-      stats:cleanStats(counts)
+      pd:KC.analyze(state.comps,state.crossings).pd
     };
   }
-  function serialize() { return serializeState(S,stats); }
+  function serialize() { return serializeState(S); }
   function deserialize(data) {
     if (!data || data.format !== FORMAT || !Array.isArray(data.comps)) throw new Error('This is not a Knot Diagram Lab file');
     const toPts = a => {
@@ -1157,7 +1138,7 @@ const KC = (function () {
     });
     const open = (Array.isArray(data.open) ? data.open : []).map(toPts).filter(p => p.length >= 2).map(pts => ({ pts }));
     const memory=(Array.isArray(data.crossingMemory)?data.crossingMemory:[]).filter(m=>Array.isArray(m)&&m.length===4&&m.every(Number.isFinite)&&Math.hypot(m[2],m[3])>1e-8).slice(-800).map(([x,y,ox,oy])=>({x,y,ox,oy}));
-    return { comps, crossings: raw, nextId: id, open, memory, stats:cleanStats(data.stats) };
+    return { comps, crossings: raw, nextId: id, open, memory };
   }
   function defaultName() {
     const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -1202,7 +1183,7 @@ const KC = (function () {
     try {
       const data={format:'knot-lab-workspace',version:1,activeId:activeTabId,tabs:tabs.map(t=>({
         id:t.id,title:t.title,fileName:t.fileName,dirty:t.dirty,view:t.view,viewMode:t.viewMode,pdInput:t.pdInput,
-        document:serializeState(t.state,t.state.stats)
+        document:serializeState(t.state)
       }))};
       localStorage.setItem(WORKSPACE_KEY,JSON.stringify(data));
       localStorage.removeItem(AUTOSAVE_KEY);
@@ -1308,7 +1289,7 @@ const KC = (function () {
   function openTab(obj=blankState(), name='', dirty=false) {
     finishTabInteraction();stashTab();
     const id=String(nextTabId++),title=name || 'New diagram '+id;
-    const tab={id,title,fileName:name,pdInput:'',dirty,state:{...obj,stats:cleanStats(obj.stats),memory:obj.memory || [],moveCheckpoint:null},undo:[],redo:[],view:null,viewMode:'diagram'};
+    const tab={id,title,fileName:name,pdInput:'',dirty,state:{...obj,memory:obj.memory || [],moveCheckpoint:null},undo:[],redo:[],view:null,viewMode:'diagram'};
     tabs.push(tab);activateTab(id,false,false);return id;
   }
   function closeTab(id) {
@@ -1471,11 +1452,11 @@ const KC = (function () {
     if(!result.ok){toast('Could not make this crossing order alternating. Check for overlapping or degenerate crossings.',true);return;}
     if(!result.flips){toast(S.crossings.length?'The closed diagram is already alternating':'No closed crossings to change');return;}
     stopRelax();pushUndo();S.moveCheckpoint=null;
-    S.crossings.forEach((X,i)=>X.over=result.over[i]);stats.flips+=result.flips;
+    S.crossings.forEach((X,i)=>X.over=result.over[i]);
     changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
   };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
-  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); stats.r1 = stats.r2 = stats.r3 = stats.flips = 0; changed(); setTool('draw'); };
+  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); changed(); setTool('draw'); };
   let relaxing = 0, relaxEpoch = 0;
   const relaxLabel = text => { $('smoothBtn').textContent = text; $('relaxMove').textContent = text; };
   function stopRelax() {
@@ -1491,7 +1472,6 @@ const KC = (function () {
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
         const r = KC.relaxStep(S);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
-        addEvents(r.ev);
       }
       changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
@@ -1693,7 +1673,7 @@ const KC = (function () {
     }
     if (t === 'flip') {
       const X = nearestCrossing(w, tol * 1.4);
-      if (X) { pushUndo(); S.moveCheckpoint=null; X.over = 1 - X.over; stats.flips++; changed(); active = { ...base, kind: 'flip' }; }
+      if (X) { pushUndo(); S.moveCheckpoint=null; X.over = 1 - X.over; changed(); active = { ...base, kind: 'flip' }; }
       else startPan(e, base);
       return;
     }
@@ -1930,7 +1910,7 @@ const KC = (function () {
       // one, which otherwise walks the grab backwards along a stretched strand.
       const held = S.comps[drag.c];
       drag.u = held.pts[KC.indexOfU(held, drag.u)].u;
-      drag.changed = true; addEvents(r.ev); steps++;
+      drag.changed = true; steps++;
     }
     if (steps) changed();
     if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move' }[blocked] || 'Blocked', true);
@@ -2501,10 +2481,6 @@ const KC = (function () {
     if (did) { erasing && (erasing.changed = true); hoverErase = null; changed(); } else render();
   }
 
-  function addEvents(ev) {
-    ['r1', 'r2', 'r3'].forEach(k => { if (ev[k]) { stats[k] += ev[k]; const el = $('m' + k.toUpperCase()); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); } });
-  }
-
   // ---------- toast / hint / panel ----------
   let toastTimer = null;
   function toast(msg, warn) {
@@ -2587,8 +2563,6 @@ const KC = (function () {
     $('gTcalc').textContent = S.comps.length ? `(${a.k > 1 ? '2·' + a.k : '2'} + ${a.c} − ${a.sA.count} − ${a.sB.count}) / 2 = ${fmt(a.gT)}` : '';
     setText('vc', a.c); setText('vsA', a.sA.count); setText('vsB', a.sB.count);
     setText('vw', (a.writhe > 0 ? '+' : '') + a.writhe); setText('vmu', a.mu); setText('vs', a.sS.count); setText('vg', fmt(a.gSeif));
-    ['r1', 'r2', 'r3'].forEach(k => $('m' + k.toUpperCase()).querySelector('.n').textContent = stats[k]);
-    setText('nflip', stats.flips);
     $('makeAlternating').disabled=!a.c || a.alternating;
     const flags = [];
     if (a.c) {

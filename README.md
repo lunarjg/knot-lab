@@ -44,10 +44,10 @@ For other static hosting providers, publish the contents of `dist` at the site r
 
 - **New tab**: create a blank diagram.
 - **Open files**: open JSON files in new tabs. Multiple files can be selected at once.
-- Each document tab has its own diagram, zoom/pan position, undo/redo history, and move counts.
+- Each document tab has its own diagram, zoom/pan position, and undo/redo history.
 - Tap the active tab's name to rename it. Select an inactive tab first, then tap its name again. Enter or tapping outside saves the name; Escape cancels. F2 also starts editing. Names and suggested export filenames are autosaved without changing diagram undo history.
-- **Save**: export the current tab as JSON, including move counts.
-- **Autosave**: restore open tabs, diagrams, and move counts on the next visit. Undo stacks last only for the current session.
+- **Save**: export the current tab as JSON.
+- **Autosave**: restore open tabs and diagrams on the next visit. Undo stacks last only for the current session.
 - **Import PD**: replace the current diagram with a PD code; Undo restores the previous diagram.
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
 - Use the arrow on the right edge to reopen the inspector.
@@ -61,8 +61,7 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
 - A drag rounds off its own sharp corners when it ends, and takes up the slack around the grip while it is in progress; the standalone smoothing actions remain available for everything else.
 - A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
-- R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle; a step sampled so that it lands exactly on an R3 slide's triple point can count that R3 twice (once approaching it, once leaving) rather than once for the whole slide — a move-count quirk, not a topology error.
-- Undo and redo restore move counts as well as geometry.
+- R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle. The classification decides only whether a step is accepted; it is not displayed, so a step sampled exactly on an R3 slide's triple point being classified as two R3s rather than one has no visible effect.
 - Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
 
 ## Tests
@@ -114,7 +113,7 @@ A drag or an auto-relax step is gated only by real topology (Reidemeister validi
 
 Use **Make alternating** under **Diagram actions** on the inspector’s **Diagram** page. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
 
-The actual changes are added to **Crossing changes**, not R1/R2/R3 counts, and the entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
+The entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
 
 ## Knot and link invariants
 

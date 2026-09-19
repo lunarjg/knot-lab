@@ -6,6 +6,14 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Remove the Reidemeister move counters (Claude Code, unreleased)
+
+- Remove the inspector's "Reidemeister move counts" section entirely: the R1/R2/R3 tiles, their pulse-on-change animation, and the "Crossing changes" tally that lived in the same section. The `stats` object and all of its plumbing go with them — undo/redo snapshots, `serializeState`, saved JSON, workspace autosave, and per-tab state no longer carry counts.
+- Saved files no longer write a `stats` field. Older files that still have one load fine; the field is simply ignored.
+- The `reconcile` classification itself stays exactly as it was — it is what decides whether a step is a valid Reidemeister move, and `smoothSharpCorners` still reads its events to roll back a smoothing pass that would change the topology. Only the user-visible tallying is gone. One consequence: the R3 double-count quirk noted below no longer has any visible effect.
+- Tests that used the counters as their observable were rewritten against surviving state rather than dropped: the per-tab flip/undo/redo test now follows `analysis.writhe`, and the Make alternating test now asserts that exactly one serialized crossing changes height instead of reading `stats.flips`.
+- Bump the service-worker cache name to `knot-lab-v20-reference-drawing`, which had not been touched since `v19` despite the engine rewrite on this branch, so installed clients refresh their offline precache.
+
 ## Take up a stretched strand's slack while dragging it (Claude Code, unreleased)
 
 - Port the reference build's slack-absorbing drag from `knot-lab.html`: each drag step now also runs one corner-smoothing pass over the stretch of strand around the grip (out to three drag radii), so re-pulling an already-stretched strand draws it back in a little instead of only ever lengthening it. It runs inside the drag's own validated `attemptStep`, so it cannot change the topology, and it is gated on the existing **Smooth corners** setting rather than a new one.

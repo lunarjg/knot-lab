@@ -107,20 +107,22 @@ console.log('Touch, pen and mouse resize, drag-to-hide, edge-arrow reopen, width
  api.activateTab(second);assert.equal(api.analysis.writhe,-w);
  p.ids.get('undo').click();assert.equal(api.analysis.writhe,w);
  const before=api.tabs.length;assert.equal(await api.openFile(new File(['not json'],'bad.json')),false);assert.equal(api.tabs.length,before);assert.equal(api.activeTabId,second);
- // Counter changes stay in their own document and undo restores them.
+ // A crossing flip stays in its own document and undo restores it.
  const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
  const cr=api.state.crossings[0],ev={pointerType:'mouse',pointerId:4,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
- p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);assert.equal(api.serialize().stats.flips,1);
- p.ids.get('undo').click();assert.equal(api.serialize().stats.flips,0);p.ids.get('redo').click();assert.equal(api.serialize().stats.flips,1);
- api.activateTab(original);assert.equal(api.serialize().stats.flips,0);api.activateTab(second);assert.equal(api.serialize().stats.flips,1);
- // Workspace reload retains every tab, the selected tab, geometry and counters.
+ const wPlain=api.analysis.writhe;
+ p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);
+ const wFlipped=api.analysis.writhe;assert.notEqual(wFlipped,wPlain);
+ p.ids.get('undo').click();assert.equal(api.analysis.writhe,wPlain);p.ids.get('redo').click();assert.equal(api.analysis.writhe,wFlipped);
+ api.activateTab(original);assert.equal(api.analysis.writhe,w);api.activateTab(second);assert.equal(api.analysis.writhe,wFlipped);
+ // Workspace reload retains every tab, the selected tab and geometry.
  for(const {f,ms} of p.timers.values())if(ms===700)f();
- const r=boot(p.store.get('knot-lab:workspace'));assert.equal(r.ctx.knotLab.tabs.length,2);assert.equal(r.ctx.knotLab.activeTabId,second);assert.equal(r.ctx.knotLab.serialize().stats.flips,1);
- r.ctx.knotLab.activateTab(original);assert.equal(r.ctx.knotLab.analysis.writhe,w);assert.equal(r.ctx.knotLab.serialize().stats.flips,0);
+ const r=boot(p.store.get('knot-lab:workspace'));assert.equal(r.ctx.knotLab.tabs.length,2);assert.equal(r.ctx.knotLab.activeTabId,second);assert.equal(r.ctx.knotLab.analysis.writhe,wFlipped);
+ r.ctx.knotLab.activateTab(original);assert.equal(r.ctx.knotLab.analysis.writhe,w);
  r.ctx.knotLab.closeTab(second);assert.equal(r.ctx.knotLab.tabs.length,1);
  r.ctx.knotLab.closeTab(original);assert.equal(r.ctx.knotLab.tabs.length,1);assert.equal(r.ctx.knotLab.analysis.c,0);
  const migrated=boot(originalDoc);assert.equal(migrated.ctx.knotLab.analysis.c,3);assert.equal(migrated.ctx.knotLab.tabs.length,1);
- console.log('New-file tabs, invalid-file isolation, independent geometry/history/counters, workspace reload, closing and legacy migration: PASS');
+ console.log('New-file tabs, invalid-file isolation, independent geometry and history, workspace reload, closing and legacy migration: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 // The precise eraser outline follows every pressed sample, even before hover,
@@ -184,12 +186,12 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  };
  assert.equal(curl(true).ctx.knotLab.analysis.c,0,'With Smooth corners on, the grip takes up that slack instead of curling');
  const p=curl(false),api=p.ctx.knotLab;
- const finalC=api.analysis.c,finalR1=api.serialize().stats.r1;
- assert(finalC>=1,'A self-crossing must form');assert(finalR1>=1);
- p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
- p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);assert.equal(api.serialize().stats.r1,finalR1);
+ const finalC=api.analysis.c;
+ assert(finalC>=1,'A self-crossing must form');
+ p.ids.get('undo').click();assert.equal(api.analysis.c,0);
+ p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);
 }
-console.log('New R1 self-crossing with Smooth corners off, move count, undo and redo: PASS');
+console.log('New R1 self-crossing with Smooth corners off, undo and redo: PASS');
 
 // Crossing a different strand, or a part of the same strand far enough away
 // along its length, is untouched by the in-drag smoothing: its reach is
@@ -485,14 +487,17 @@ console.log('Tiny genuine R2-birth bigons are kept exactly where a drag leaves t
  button.click();const calculating=workers.at(-1);alt.click();
  assert(calculating.terminated);calculating.complete();assert(p.ids.get('invariantResults').hidden);
  assert(api.analysis.alternating);assert(alt.disabled);assert.equal(api.state.nextId,nextId);
- const after=api.serialize();assert.equal(after.stats.flips,before.stats.flips+1);
+ const after=api.serialize();
+ // Exactly one crossing changes height, and nothing about the geometry moves.
+ assert.equal(after.crossings.length,before.crossings.length);
+ const changedHeights=after.crossings.filter((X,i)=>JSON.stringify(X)!==JSON.stringify(before.crossings[i])).length;
+ assert.equal(changedHeights,1,'Making this diagram alternating needs exactly one flip');
  for(const key of ['comps','open','crossingMemory'])assert.equal(JSON.stringify(after[key]),JSON.stringify(before[key]));
- for(const key of ['r1','r2','r3'])assert.equal(after.stats[key],before.stats[key]);
  p.ids.get('undo').click();assert(!api.analysis.alternating);assert.equal(JSON.stringify(api.serialize().crossings),JSON.stringify(before.crossings));
- assert.equal(api.serialize().stats.flips,before.stats.flips);p.ids.get('redo').click();assert(api.analysis.alternating);
+ p.ids.get('redo').click();assert(api.analysis.alternating);
  alt.click();p.ids.get('undo').click();assert(!api.analysis.alternating,'Already-alternating conversion must not add an undo entry');p.ids.get('redo').click();
  api.activateTab(api.tabs.find(t=>t.id!==originalId).id);assert(alt.disabled);api.activateTab(originalId);assert(api.analysis.alternating);
- for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert(restored.ctx.knotLab.analysis.alternating);assert.equal(restored.ctx.knotLab.serialize().stats.flips,after.stats.flips);
+ for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert(restored.ctx.knotLab.analysis.alternating);assert.equal(JSON.stringify(restored.ctx.knotLab.serialize().crossings),JSON.stringify(after.crossings));
  console.log('Make alternating: button state, minimal flips, fixed geometry, open arcs, undo/redo, tabs, autosave and canceled stale invariants: PASS');
  console.log('Invariant UI: exact results, mirror, tab switch, stale messages, cancel and retry after worker error: PASS');
 }
