@@ -1,5 +1,20 @@
 # Release history
 
+Entries `v1`–`v17` (tagged releases), and the codebase state this repository
+started from, were built by an earlier Codex-based development process.
+Everything below this line was implemented by a Claude Code session
+continuing that work, across two pull requests; none of it has been tagged
+as a new release yet.
+
+## Auto-relax overlap handling, configurable crossing clearance, drag performance (Claude Code, unreleased)
+
+- Fix auto-relax stopping early and leaving the diagram angular: the clearance check was global, so once any pair of crossings converged to the floor, every subsequent frame was rejected outright and the whole run aborted on the first rejection — silently stopping smoothing everywhere else in the diagram too. On a clearance rejection, a relax step now retries once with displacement smoothly damped (not a hard cutoff) around just the crossings that violated, so the rest of the diagram keeps relaxing at full strength.
+- Let crossings overlap freely while dragging; separate on release: dragging used to reject the whole step the moment any two crossings passed closer than the clearance floor, regardless of whether the move was actually a valid Reidemeister move. Real topology validation already decides what's legal, so the drag itself now carries no clearance floor at all; on release, a generalized separation pass (covering any crowded pair, not just two-crossing bigons) spreads back out whatever the gesture left crowded, bundled into the same undo step as the drag. Auto-relax keeps its own clearance floor live, since — unlike a drag — it is an undirected force simulation, and removing the floor there measurably made the curve more angular near a converging cluster before eventually hitting a real topology block anyway.
+- Make crossing clearance configurable and switchable, instead of a fixed constant: a "Crossing clearance" slider in Settings > Dragging (8–100px, default 32) controls the minimum gap, and a matching on/off switch sits in the Drag strand tool's own options bar next to Protect R1/R2 and Pass underneath.
+- Raise the default Drag radius from 40 to 80.
+- Optimize the drag hot path: profiling showed each blocked/crowded drag step doing far more work than necessary — duplicate face-structure rebuilds, the retry ladder recomputing unchanged state on every attempt, and every step deep-cloning/resampling every component even though a drag only ever touches one. ~33% less time per drag frame on a synthetic crowded diagram (33ms → 22ms).
+- Document that `dist/` now auto-deploys to a GitHub Pages mirror on every push to `main`.
+
 ## v18 — Gentle auto-relax and crossing clearance
 
 - Restore auto-relax to a plain step that stops cleanly the moment it would violate topology, as in the original relaxation, instead of creeping through blocked configurations via ever-smaller adaptive steps; that retry now belongs only to interactive crowded-crossing dragging.
