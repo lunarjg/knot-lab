@@ -6,6 +6,24 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Fix dragging being able to change the knot type (Claude Code, unreleased)
+
+A drag is supposed to be a sequence of Reidemeister moves, so it can never change the knot. It could. Dragging a point of a trefoil across the diagram at the then-default drag radius turned it into the **unknot** (Jones polynomial 1), and lower radii produced other wrong knots. Two independent causes, both introduced by earlier rounds on this branch:
+
+- **Unpairable births and deaths were accepted silently.** Removing the "a strand would pass through another strand" rejection (done on the theory that such a step is just the reverse of an R2) meant a crossing could appear or vanish without being classified as R1 or R2 at all. That is exactly a strand sliding through another one. Reinstated: a birth or death that matches neither an R2 bigon nor an R1 kink now rejects the step, which is rolled back.
+- **R2 pairs were matched by proximity alone.** Two crossings that merely landed near each other were paired as an R2, so a step that was not an R2 passed validation. `pairCost` now also requires a genuine *empty* bigon — the two crossings adjacent along both strands with no third crossing between them.
+
+Because the emptiness test does the structural work, the distance cap that used to stand in for it can be generous: the old 70/60 thresholds rejected a legitimate separation of two unlinked components costing ~153, so both are replaced by `R2_REACH = 32 * SEG`. Measured on a sweep, ≥160 is where that legal separation is allowed; violations stay at zero all the way up to 1000.
+
+The fix is free for ordinary editing. Over 40 random drags (pull a strand 60–160 units in a random direction) at radius 20, 40 and 80, it blocks **0%** of steps and every drag still reaches its target — identical to before. It only refuses the pathological gesture, where refusing is correct.
+
+- Coverage added to `tests/moves.test.cjs`: dragging can never change the Jones polynomial, across four knots × three drag radii × four grab points; and two unlinked components can still be dragged apart, which is the case the pass-through rejection was originally removed for. The old test asserting that a wide pass-through "must not be blocked" encoded the bug and is gone; it also used an axis-aligned fixture whose edges were exactly parallel, and a single 900-unit jump no validation could decompose.
+- **Lower the default drag radius back from 80 to 40.** At 80 the Gaussian reaches 3σ = 240 arc units, so a part of the curve 150–300 units away from the grip still moved up to 50 units when the pointer travelled 120 — which is what "I touch one place and a different part comes along" was. At 40 the same band moves 17. Grab fidelity itself was never the problem: the grabbed point tracks the pointer to 0.00 units. The slider still goes to 160.
+
+## Verify that exported PD codes really encode the drawn diagram (Claude Code, unreleased)
+
+`invariants.js` reads `analyze()`'s internal structures, never the `pd` field, so nothing checked the PD writer — the existing PD test only round-tripped diagram quantities. Added a test that computes the Kauffman bracket, writhe and Jones polynomial **from the PD integers alone**, deriving each crossing's orientation structurally rather than assuming a labelling convention. For eight geometric fixtures it must agree with the geometry-derived Jones and with the PD read back through the independent importer, and where the knot is nameable (trefoil, figure-8, 8_19, Hopf link) with the published polynomial. All three agree everywhere, so the exported PD is faithful; the gap was in the tests, not the code.
+
 ## Separate overlapping crossings when a drag ends (Claude Code, unreleased)
 
 - Add **Separate overlapping crossings** (Settings → Dragging, on by default). When a drag ends, any two crossings the drag pushed into each other repel slightly, like weak magnets, until they clear 24 world units — enough that their drawn undercrossing breaks (`min(12, 8/view.s)` either side) cannot touch at any zoom, while staying a few segments (`SEG` is 7) of nudge rather than a rearrangement.

@@ -243,11 +243,11 @@ console.log('Shift held during a drag reverses underneath for that gesture only:
 
 // The move tool's own options bar carries drag radius, underneath and its own
 // Auto-relax button, so they are reachable without opening settings. Drag
-// radius defaults to 80.
+// radius defaults to 40.
 {
  const p=boot(),api=p.ctx.knotLab;
- assert.equal(p.ids.get('sigma').value,'80');
- assert.equal(api.opts.sigma,80);
+ assert.equal(p.ids.get('sigma').value,'40');
+ assert.equal(api.opts.sigma,40);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
  assert(p.ids.get('optMove').hidden);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
@@ -324,6 +324,8 @@ console.log('A finished drag smooths its own sharp corners inside the drag undo 
   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
   p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  // pin the radius so this measures the slack pass, not whatever the default is
+  p.ids.get('sigma').oninput({target:{value:'80'}});
   const total=()=>api.state.comps.reduce((a,c)=>a+c.len,0);
   const ev=(x,y,type)=>({pointerType:'mouse',pointerId:44,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
   const hit=api.state.comps[0].pts[10];

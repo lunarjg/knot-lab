@@ -8,6 +8,7 @@ const totals={r1:0,r2:0,r3:0};const S=state(fixture(-1));
 // Alternate every closed component together, minimizing flips for the fixed
 // projection (including disconnected pieces and the wrap around each component).
 require('../dist/pd-import.js');
+const INV=require('../dist/invariants.js');
 const altTrefoil=()=>PDImport.fromPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]',KC);
 const splitA=altTrefoil(),splitB=altTrefoil();splitB.comps.forEach(c=>c.pts.forEach(p=>p.x+=3000));
 const split=state(splitA.comps.concat(splitB.comps));
@@ -54,22 +55,60 @@ const birth=KC.reconcile([],b,a,KC.computeRaw(a),{nextId:()=>id++});assert(birth
 x[0].over=1-x[0].over;assert.equal(KC.reconcile(x,a,b,KC.computeRaw(b),{}).reason,'R2');
 console.log('R3 forward/reverse, cyclic-height rejection, no-op resampling, R2 birth/death and invalid R2: PASS');
 
-// Carrying a strand clean across another one in a single step is the reverse
-// of the R2 that would undo it, so it is accepted rather than rejected for
-// "passing through"; only a genuinely contradictory height order still is.
+// Two components that are not linked (one passes over the other at every
+// crossing) can be pulled apart by dragging, and the strands never have to
+// pass through each other to do it. The move is carried out the way the app
+// actually moves things -- in increments -- not as one unverifiable jump.
 {
- const barLong=()=>poly([[-200,0],[200,0],[200,-60],[-200,-60]]);
- const upright=()=>poly([[-100,-300],[-100,300],[-160,300],[-160,-300]]);
- const s=state([barLong(),upright()]);
+ const bar=[[-200,0],[200,0],[200,-60],[-200,-60]];
+ // tilted so no two edges are exactly parallel or exactly coincident
+ const upright=[[-100,-300],[-100,300],[-160,300],[-160,-300]].map(([x,y])=>[x+y*0.05,y]);
+ const s=state([poly(bar),poly(upright)]);
  assert.equal(s.crossings.length,4);
- const r=KC.attemptStep(s,cm=>{cm[1].pts.forEach(p=>{p.x+=900;});},{});
- assert(r.ok,'A wide step carrying a strand past another must not be blocked');
- assert.equal(s.crossings.length,0);
- const back=state([barLong(),upright()]);
- const rb=KC.attemptStep(back,cm=>{cm[1].pts.forEach(p=>{p.x-=900;});},{});
- assert(rb.ok);assert.equal(back.crossings.length,0);
+ for(let done=0;done<900;done+=5){
+  const r=KC.attemptStep(s,cm=>{cm[1].pts.forEach(p=>{p.x+=5;});},{});
+  assert(r.ok,'Separating two unlinked components must not be blocked (stopped at +'+done+(r.reason?': '+r.reason:'')+')');
+ }
+ assert.equal(s.crossings.length,0,'The components must end up apart');
 }
-console.log('A strand carried across another in one step is allowed, not blocked as a pass-through: PASS');
+console.log('Two unlinked components can be dragged apart, with no pass-through needed: PASS');
+
+// The whole point of the editor: a drag is a sequence of Reidemeister moves,
+// so it can never change the knot type. A step that would slide a strand
+// through another one is rejected instead of being silently accepted.
+{
+ const jonesOf=s=>{
+  const r=INV.calculate(KC.analyze(s.comps,s.crossings));
+  assert.equal(r.jones.status,'ready');
+  return r.jones.terms.map(t=>t.coefficient+'@'+t.power2).join(' ');
+ };
+ const fixtures=[
+  ['trefoil',()=>KC.fromCurves3D([KC.torusCurve(2,3,2,1)],420)],
+  ['figure-8',()=>KC.fromCurves3D([KC.figureEightCurve()],440)],
+  ['torus(3,4)',()=>KC.fromCurves3D([KC.torusCurve(3,4,2,1.15)],520)],
+  ['Hopf link',()=>KC.fromCurves3D(KC.braidCurves([1,1]),360)]
+ ];
+ // Haul a grabbed point clean across the diagram -- the gesture that used to
+ // unknot a trefoil outright once unpairable births stopped being rejected.
+ for(const [name,make] of fixtures) for(const sigma of [20,40,80]) for(const frac of [0,0.25,0.5,0.75]){
+  const s=make(),before=jonesOf(s);
+  for(let c=0;c<s.comps.length;c++){
+   const pts=s.comps[c].pts,g0=pts[Math.floor(frac*pts.length)];
+   let u=g0.u,stalls=0;const tx=-g0.x,ty=-g0.y;
+   for(let k=0;k<2000;k++){
+    const m=s.comps[c],g=m.pts[KC.indexOfU(m,u)];
+    const dx=tx-g.x,dy=ty-g.y,d=Math.hypot(dx,dy);
+    if(d<0.8)break;
+    const st=Math.min(2.5,d);
+    const r=KC.attemptStep(s,comps=>{const q=comps[c],gj=KC.indexOfU(q,u);KC.moveWeighted(q,gj,dx/d*st,dy/d*st,sigma);},{});
+    if(!r.ok){if(++stalls>3)break;continue;}
+    const held=s.comps[c];u=held.pts[KC.indexOfU(held,u)].u;
+   }
+  }
+  assert.equal(jonesOf(s),before,`Dragging changed the knot type: ${name}, drag radius ${sigma}, grab ${frac}`);
+ }
+}
+console.log('Dragging can never change the knot type, at any drag radius: PASS');
 
 // Release-time crossing separation only touches pairs the gesture tightened,
 // never pre-existing tight geometry, and never changes the topology.
