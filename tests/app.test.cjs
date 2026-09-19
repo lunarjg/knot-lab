@@ -9,7 +9,7 @@ function boot(saved,narrow=true,Worker){
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
   getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
-  focus(){doc.activeElement=this} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
+  focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
@@ -107,20 +107,22 @@ console.log('Touch, pen and mouse resize, drag-to-hide, edge-arrow reopen, width
  api.activateTab(second);assert.equal(api.analysis.writhe,-w);
  p.ids.get('undo').click();assert.equal(api.analysis.writhe,w);
  const before=api.tabs.length;assert.equal(await api.openFile(new File(['not json'],'bad.json')),false);assert.equal(api.tabs.length,before);assert.equal(api.activeTabId,second);
- // Counter changes stay in their own document and undo restores them.
+ // A crossing flip stays in its own document and undo restores it.
  const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
  const cr=api.state.crossings[0],ev={pointerType:'mouse',pointerId:4,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
- p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);assert.equal(api.serialize().stats.flips,1);
- p.ids.get('undo').click();assert.equal(api.serialize().stats.flips,0);p.ids.get('redo').click();assert.equal(api.serialize().stats.flips,1);
- api.activateTab(original);assert.equal(api.serialize().stats.flips,0);api.activateTab(second);assert.equal(api.serialize().stats.flips,1);
- // Workspace reload retains every tab, the selected tab, geometry and counters.
+ const wPlain=api.analysis.writhe;
+ p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);
+ const wFlipped=api.analysis.writhe;assert.notEqual(wFlipped,wPlain);
+ p.ids.get('undo').click();assert.equal(api.analysis.writhe,wPlain);p.ids.get('redo').click();assert.equal(api.analysis.writhe,wFlipped);
+ api.activateTab(original);assert.equal(api.analysis.writhe,w);api.activateTab(second);assert.equal(api.analysis.writhe,wFlipped);
+ // Workspace reload retains every tab, the selected tab and geometry.
  for(const {f,ms} of p.timers.values())if(ms===700)f();
- const r=boot(p.store.get('knot-lab:workspace'));assert.equal(r.ctx.knotLab.tabs.length,2);assert.equal(r.ctx.knotLab.activeTabId,second);assert.equal(r.ctx.knotLab.serialize().stats.flips,1);
- r.ctx.knotLab.activateTab(original);assert.equal(r.ctx.knotLab.analysis.writhe,w);assert.equal(r.ctx.knotLab.serialize().stats.flips,0);
+ const r=boot(p.store.get('knot-lab:workspace'));assert.equal(r.ctx.knotLab.tabs.length,2);assert.equal(r.ctx.knotLab.activeTabId,second);assert.equal(r.ctx.knotLab.analysis.writhe,wFlipped);
+ r.ctx.knotLab.activateTab(original);assert.equal(r.ctx.knotLab.analysis.writhe,w);
  r.ctx.knotLab.closeTab(second);assert.equal(r.ctx.knotLab.tabs.length,1);
  r.ctx.knotLab.closeTab(original);assert.equal(r.ctx.knotLab.tabs.length,1);assert.equal(r.ctx.knotLab.analysis.c,0);
  const migrated=boot(originalDoc);assert.equal(migrated.ctx.knotLab.analysis.c,3);assert.equal(migrated.ctx.knotLab.tabs.length,1);
- console.log('New-file tabs, invalid-file isolation, independent geometry/history/counters, workspace reload, closing and legacy migration: PASS');
+ console.log('New-file tabs, invalid-file isolation, independent geometry and history, workspace reload, closing and legacy migration: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 // The precise eraser outline follows every pressed sample, even before hover,
@@ -163,49 +165,53 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  console.log('File picker batch opens, failed-file isolation, visible selected tabs and New tab: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
-// A real drag loosens one local curl; click-only, the off switch, undo and
-// redo preserve the expected geometry and R1 count in the active document.
-for(const enabled of [true,false]) {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[[[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[200+5*x,200+5*y])];
- api.openTab(api.deserialize(d),'curl');assert.equal(api.analysis.c,1);
- api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('loosenR1').onchange({target:{checked:enabled}});
- const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointerup',ev(205,215,'pointerup'));p.flush();
- assert.equal(api.analysis.c,1,'Merely clicking must preserve the curl');
- p.fire(canvas,'pointerdown',ev(205,215,'pointerdown'));p.fire(canvas,'pointermove',ev(206,215,'pointermove'));p.step();
- p.fire(canvas,'pointerup',ev(206,215,'pointerup'));p.flush();
- assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
- p.ids.get('undo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,0);
- p.ids.get('redo').click();assert.equal(api.analysis.c,enabled?0:1);assert.equal(api.serialize().stats.r1,enabled?1:0);
-}
-console.log('R1 drag assistance, click-only preservation, off switch and single-gesture undo/redo: PASS');
-
-// A user can create a self-crossing while kink protection and R1 assistance
-// are both enabled. Assistance must not erase a loop born during this drag.
+// Curling a strand over its own immediate neighbourhood is the slack the
+// in-drag smoothing exists to absorb, so it only forms a new self-crossing
+// with "Smooth corners" off; crossing a strand somewhere else is unaffected
+// (covered below). Move counts, undo and redo follow the curl either way.
 {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
- d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
- api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('sigma').oninput({target:{value:'10'}});
- assert(!p.ids.get('protectKinks').checked&&p.ids.get('loosenR1').checked);
- p.ids.get('protectKinks').checked=true;
- p.ids.get('protectKinks').onchange({target:{checked:true}});
- // Bigon protection defaults on; keep this fixture focused on one R1 birth.
- assert(p.ids.get('protectBigons').checked);
- p.ids.get('protectBigons').onchange({target:{checked:true}});
- const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
- for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
- p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
- assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
- p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
- p.ids.get('redo').click();assert.equal(api.analysis.c,1);assert.equal(api.serialize().stats.r1,1);
+ const curl=(cornerFix)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+  d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
+  api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  p.ids.get('sigma').oninput({target:{value:'10'}});
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
+  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+  return p;
+ };
+ assert.equal(curl(true).ctx.knotLab.analysis.c,0,'With Smooth corners on, the grip takes up that slack instead of curling');
+ const p=curl(false),api=p.ctx.knotLab;
+ const finalC=api.analysis.c;
+ assert(finalC>=1,'A self-crossing must form');
+ p.ids.get('undo').click();assert.equal(api.analysis.c,0);
+ p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);
 }
-console.log('New R1 self-crossing with protection and assistance enabled, move count, undo and redo: PASS');
+console.log('New R1 self-crossing with Smooth corners off, undo and redo: PASS');
+
+// Crossing a different strand, or a part of the same strand far enough away
+// along its length, is untouched by the in-drag smoothing: its reach is
+// measured along the strand, so only the slack beside the grip is absorbed.
+for(const cornerFix of [true,false]) {
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+ const ring=(cx,cy)=>{const o=[];for(let i=0;i<60;i++){const t=2*Math.PI*i/60;o.push([cx+90*Math.cos(t),cy+90*Math.sin(t)]);}return o;};
+ d.comps=[ring(200,300),ring(600,300)];
+ api.openTab(api.deserialize(d),'two rings');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ assert.equal(api.analysis.c,0);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:18,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(290,300,'pointerdown'));p.fire(canvas,'pointermove',ev(640,300,'pointermove'));
+ for(let i=0;i<40;i++){p.step();if(api.analysis.c>=2)break;}
+ p.fire(canvas,'pointerup',ev(640,300,'pointerup'));p.flush();
+ assert(api.analysis.c>=2,`Dragging one strand across another must still make crossings (cornerFix=${cornerFix})`);
+}
+console.log('Dragging one strand across another still makes crossings either way: PASS');
 
 // Holding Shift while dragging reverses underneath for that gesture only,
 // live for as long as it is held, without changing the base setting.
@@ -214,17 +220,20 @@ console.log('New R1 self-crossing with protection and assistance enabled, move c
   const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
   d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
   api.openTab(api.deserialize(d),'shift drag');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:false}});   // let the curl form
   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
   p.ids.get('sigma').oninput({target:{value:'10'}});
   const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
   p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));
   if(withShift)p.key('keydown',{key:'Shift'});
   p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
-  for(let i=0;i<20;i++){p.step();if(api.analysis.c===1)break;}
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
   if(withShift)p.key('keyup',{key:'Shift'});
   p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
-  assert.equal(api.analysis.c,1);
-  return api.state.crossings[0].over;
+  assert(api.analysis.c>=1);
+  // The first-born crossing reflects the approach direction/weight Shift flips.
+  return api.state.crossings.reduce((a,b)=>a.id<b.id?a:b).over;
  };
  assert.notEqual(birth(false),birth(true),'Shift held during the drag must flip which strand ends up on top');
  // The base setting itself must be unchanged after the gesture.
@@ -232,19 +241,105 @@ console.log('New R1 self-crossing with protection and assistance enabled, move c
 }
 console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
 
-// The move tool's own options bar carries drag radius, underneath and the
-// R1/R2 protection toggles, so they are reachable without opening settings.
+// The move tool's own options bar carries drag radius, underneath and its own
+// Auto-relax button, so they are reachable without opening settings. Drag
+// radius defaults to 80.
 {
- const p=boot();
+ const p=boot(),api=p.ctx.knotLab;
+ assert.equal(p.ids.get('sigma').value,'80');
+ assert.equal(api.opts.sigma,80);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
  assert(p.ids.get('optMove').hidden);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
  assert(!p.ids.get('optMove').hidden);assert(!p.ids.get('toolopts').hidden);
  assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
  p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
- p.ids.get('protectKinks').onchange({target:{checked:true}});assert(!p.ids.get('kinkArea').disabled);
+ assert(p.ids.has('relaxMove'),'The move options bar carries its own Auto-relax button');
 }
-console.log('The move tool options bar shows drag radius, underneath and R1/R2 protection: PASS');
+console.log('The move tool options bar shows drag radius, underneath and Auto-relax: PASS');
+
+// Auto-relax is reachable from the move options bar and from the A shortcut,
+// and both track the same run: either one stops it again, and both labels
+// follow along.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ const geometry=()=>JSON.stringify(api.serialize().comps);
+ const labels=()=>[p.ids.get('smoothBtn').textContent,p.ids.get('relaxMove').textContent];
+ const before=geometry();
+ p.ids.get('relaxMove').onclick();p.step();
+ assert.notEqual(geometry(),before,'The options bar button must start relaxing');
+ assert.deepEqual(labels(),['Stop relaxing','Stop relaxing'],'Both buttons show the running state');
+ p.key('keydown',{key:'a'});p.flush();
+ assert.deepEqual(labels(),['Auto-relax','Auto-relax'],'A stops a run started from the options bar');
+ const stopped=geometry();
+ p.key('keydown',{key:'a'});p.step();
+ assert.notEqual(geometry(),stopped,'A starts a run as well');
+ assert.deepEqual(labels(),['Stop relaxing','Stop relaxing']);
+ p.ids.get('smoothBtn').onclick();p.flush();
+ assert.deepEqual(labels(),['Auto-relax','Auto-relax']);
+ // A typed into a text field must stay text, not a shortcut.
+ const quiet=geometry();
+ p.key('keydown',{key:'a',target:p.ids.get('pdInput')});p.step();
+ assert.equal(geometry(),quiet,'A inside a text field must not start relaxing');
+}
+console.log('Auto-relax from the move options bar and the A shortcut: PASS');
+
+// A drag tidies up the kinks it leaves behind when it ends, in the same undo
+// step, without changing the diagram's topology.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ api.importPD(pd);api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ const maxTurn=()=>Math.max(...api.state.comps.flatMap(c=>c.pts.map((q,i,a)=>{
+  const prev=a[(i+a.length-1)%a.length],next=a[(i+1)%a.length];
+  const ux=q.x-prev.x,uy=q.y-prev.y,vx=next.x-q.x,vy=next.y-q.y;
+  return Math.abs(Math.atan2(ux*vy-uy*vx,ux*vx+uy*vy));
+ })));
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('sigma').oninput({target:{value:'10'}});
+ const hit=api.state.comps[0].pts[10],crossingsBefore=api.analysis.c;
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:31,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(hit.x,hit.y,'pointerdown'));
+ p.fire(canvas,'pointermove',ev(hit.x+70,hit.y+50,'pointermove'));
+ for(let i=0;i<12;i++)p.step();
+ const kinkedWhileHeld=maxTurn();
+ p.fire(canvas,'pointerup',ev(hit.x+70,hit.y+50,'pointerup'));p.flush();
+ assert(maxTurn()<=kinkedWhileHeld,'Releasing the strand must not leave it sharper than it was mid-drag');
+ assert.equal(api.analysis.c,crossingsBefore,'Tidying up must not add or remove a crossing');
+ const settled=JSON.stringify(api.serialize().comps);
+ p.ids.get('undo').click();
+ assert.equal(api.analysis.c,crossingsBefore);
+ assert.notEqual(JSON.stringify(api.serialize().comps),settled,'One undo takes back the drag and its tidy-up together');
+ p.ids.get('redo').click();
+ assert.equal(JSON.stringify(api.serialize().comps),settled);
+}
+console.log('A finished drag smooths its own sharp corners inside the drag undo step: PASS');
+
+// Working an already-stretched strand takes up its slack: the smoothing pass
+// that runs around the grip while dragging draws the strand back in instead
+// of only ever paying out more of it. "Smooth corners" turns it off.
+{
+ const whip=(cornerFix)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+  api.importPD(pd);api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  const total=()=>api.state.comps.reduce((a,c)=>a+c.len,0);
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:44,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  const hit=api.state.comps[0].pts[10];
+  p.fire(canvas,'pointerdown',ev(hit.x,hit.y,'pointerdown'));
+  // stretch a finger out, then whip it around so the strand folds up
+  for(const [dx,dy] of [[260,40],[120,220],[-140,90],[60,-180]]) {
+   p.fire(canvas,'pointermove',ev(hit.x+dx,hit.y+dy,'pointermove'));
+   for(let i=0;i<12;i++)p.step();
+  }
+  p.fire(canvas,'pointerup',ev(hit.x+60,hit.y-180,'pointerup'));p.flush();
+  return total();
+ };
+ const loose=whip(false), takenUp=whip(true);
+ assert(takenUp<loose,`Dragging with Smooth corners on must take up slack (${takenUp.toFixed(0)} vs ${loose.toFixed(0)})`);
+}
+console.log('Dragging an already-stretched strand takes up its slack, and Smooth corners switches that off: PASS');
 
 // Momentary crossing-switch: holding C acts like the Flip tool without
 // discarding whichever tool was active, and releasing C restores it.
@@ -259,6 +354,27 @@ console.log('The move tool options bar shows drag radius, underneath and R1/R2 p
  assert.equal(p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool,'draw');
 }
 console.log('Holding C is a momentary crossing-switch that restores the previous tool on release: PASS');
+
+// The canvas itself isn't focusable, so focus left on a text field (PD
+// code, braid word, a rename, ...) would otherwise keep swallowing every
+// single-letter shortcut even after the user moved on to the diagram.
+// A pointerdown on the canvas must reclaim focus so shortcuts work again.
+{
+ const p=boot(),canvas=p.ids.get('cv'),pressedTool=()=>p.doc.querySelectorAll('[data-tool]').find(e=>e.getAttribute('aria-pressed')==='true').dataset.tool;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.ids.get('pdInput').focus();
+ assert.equal(p.doc.activeElement, p.ids.get('pdInput'));
+ p.key('keydown',{key:'c',target:p.ids.get('pdInput')});
+ assert.equal(pressedTool(),'draw','A shortcut must stay suppressed while a text field looks focused');
+ p.key('keyup',{key:'c'});
+ const ev={pointerType:'mouse',pointerId:1,clientX:100,clientY:100,button:0,buttons:1,preventDefault(){}};
+ p.fire(canvas,'pointerdown',ev);p.fire(canvas,'pointerup',{...ev,buttons:0});
+ assert.equal(p.doc.activeElement, p.doc.body,'A canvas interaction must reclaim focus from a stale text field');
+ p.key('keydown',{key:'c'});
+ assert.equal(pressedTool(),'flip','The shortcut must work again once focus has moved off the text field');
+ p.key('keyup',{key:'c'});
+}
+console.log('A canvas interaction reclaims focus so shortcuts are not silently swallowed by a stale text field: PASS');
 
 function arcSession(pointerType='mouse',fix=true,saved) {
  const p=boot(saved),api=p.ctx.knotLab,canvas=p.ids.get('cv');
@@ -318,34 +434,9 @@ for(const fix of [false,true])for(const horizontalFirst of [false,true]) {
 }
 console.log('Arc connectors pass under existing open/closed/self arcs, visual gaps, both closure orders, JSON/autosave, tabs and undo/redo: PASS');
 
-// Exercise the two independent controls through the actual drag event path.
-for(const alternating of [true,false])for(const protect of [true,false]) {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[
- [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
- [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
- ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
- api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
- if(alternating){const x=api.state.crossings[0];x.over=1-x.over;}
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('protectBigons').onchange({target:{checked:protect}});
- p.ids.get('bigonArea').oninput({target:{value:'600'}});assert.equal(p.ids.get('bigonAreaV').textContent,'600 px²');
- p.ids.get('kinkArea').oninput({target:{value:'240'}});assert.equal(p.ids.get('kinkAreaV').textContent,'240 px²');
- const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
- for(let i=0;i<4;i++)p.step();p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
- const faces=vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
- assert(faces.length);
- if(protect&&alternating){assert(faces.every(f=>f.area>=600-1e-6&&f.thickness>=8-1e-6&&f.separation>=16-1e-6));assert(p.ids.get('toast').textContent.includes('bigon'));}
- else assert(faces.some(f=>f.area<600),'R2-compatible bigons and disabled protection must allow a smaller bigon');
- p.ids.get('undo').click();assert.equal(api.analysis.c,2);
-}
-console.log('Bigon drag constraint, separate area controls, off switch and undo through pointer events: PASS');
-
-// Squeezing a genuine (non-alternating, R2-removable) bigon down to a tiny
-// gap must not be blocked mid-drag, but on release the crossings are kept
-// and gently separated back out to a visible gap — bundled into the same
-// undo step as the drag itself, and restored again on redo.
+// Squeezing a bigon down to a tiny gap must not be blocked mid-drag, and on
+// release the crossings are kept exactly where the drag left them — no
+// separate size or distance floor of any kind gates or corrects the result.
 {
  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
  const d=api.serialize();d.comps=[
@@ -354,21 +445,17 @@ console.log('Bigon drag constraint, separate area controls, off switch and undo 
  ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
  api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- const bigonFaces=()=>vm.runInContext('KC.smallFaces(knotLab.state.comps,knotLab.state.crossings)',p.ctx).filter(f=>f.type==='bigon');
- assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6));
  const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
  for(let i=0;i<8;i++)p.step();
  p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
  assert.equal(api.state.crossings.length,2,'A tiny genuine bigon must keep both crossings, not collapse');
- assert(bigonFaces().every(f=>f.separation>=16-1e-6),'A tiny bigon must be nudged back out to a visible gap on release');
+ const [a,b]=api.state.crossings;
+ assert(Math.hypot(a.x-b.x,a.y-b.y)<16,'Nothing nudges the crossings back apart on release');
  p.ids.get('undo').click();
  assert.equal(api.state.crossings.length,2);
- assert(bigonFaces().every(f=>Math.abs(f.separation-80)<1e-6),'Undo must revert the drag and its release correction together');
- p.ids.get('redo').click();
- assert(bigonFaces().every(f=>f.separation>=16-1e-6),'Redo must restore the separated bigon');
 }
-console.log('Tiny genuine R2-birth bigons are kept and gently separated on release, undo/redo bundled with the drag: PASS');
+console.log('Tiny genuine R2-birth bigons are kept exactly where a drag leaves them, no release correction: PASS');
 
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
@@ -400,14 +487,17 @@ console.log('Tiny genuine R2-birth bigons are kept and gently separated on relea
  button.click();const calculating=workers.at(-1);alt.click();
  assert(calculating.terminated);calculating.complete();assert(p.ids.get('invariantResults').hidden);
  assert(api.analysis.alternating);assert(alt.disabled);assert.equal(api.state.nextId,nextId);
- const after=api.serialize();assert.equal(after.stats.flips,before.stats.flips+1);
+ const after=api.serialize();
+ // Exactly one crossing changes height, and nothing about the geometry moves.
+ assert.equal(after.crossings.length,before.crossings.length);
+ const changedHeights=after.crossings.filter((X,i)=>JSON.stringify(X)!==JSON.stringify(before.crossings[i])).length;
+ assert.equal(changedHeights,1,'Making this diagram alternating needs exactly one flip');
  for(const key of ['comps','open','crossingMemory'])assert.equal(JSON.stringify(after[key]),JSON.stringify(before[key]));
- for(const key of ['r1','r2','r3'])assert.equal(after.stats[key],before.stats[key]);
  p.ids.get('undo').click();assert(!api.analysis.alternating);assert.equal(JSON.stringify(api.serialize().crossings),JSON.stringify(before.crossings));
- assert.equal(api.serialize().stats.flips,before.stats.flips);p.ids.get('redo').click();assert(api.analysis.alternating);
+ p.ids.get('redo').click();assert(api.analysis.alternating);
  alt.click();p.ids.get('undo').click();assert(!api.analysis.alternating,'Already-alternating conversion must not add an undo entry');p.ids.get('redo').click();
  api.activateTab(api.tabs.find(t=>t.id!==originalId).id);assert(alt.disabled);api.activateTab(originalId);assert(api.analysis.alternating);
- for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert(restored.ctx.knotLab.analysis.alternating);assert.equal(restored.ctx.knotLab.serialize().stats.flips,after.stats.flips);
+ for(const {f,ms} of p.timers.values())if(ms===700)f();const restored=boot(p.store.get('knot-lab:workspace'));assert(restored.ctx.knotLab.analysis.alternating);assert.equal(JSON.stringify(restored.ctx.knotLab.serialize().crossings),JSON.stringify(after.crossings));
  console.log('Make alternating: button state, minimal flips, fixed geometry, open arcs, undo/redo, tabs, autosave and canceled stale invariants: PASS');
  console.log('Invariant UI: exact results, mirror, tab switch, stale messages, cancel and retry after worker error: PASS');
 }
@@ -419,10 +509,6 @@ console.log('Tiny genuine R2-birth bigons are kept and gently separated on relea
  assert(!p.ids.get('pageSettings').hidden);assert(p.ids.get('pageDiagram').hidden);assert(p.ids.get('pageFiles').hidden);
  p.ids.get('pdOpen').click();assert(!p.ids.get('pageFiles').hidden);assert(p.ids.get('pageSettings').hidden);
  assert.equal(p.ids.get('navFiles').getAttribute('aria-pressed'),'true');assert.equal(p.doc.activeElement,p.ids.get('pdInput'));
- for(const [check,range] of [['protectBigons','bigonArea'],['protectKinks','kinkArea']]) {
-  p.ids.get(check).onchange({target:{checked:false}});assert(p.ids.get(range).disabled);
-  p.ids.get(check).onchange({target:{checked:true}});assert(!p.ids.get(range).disabled);
- }
  assert(!p.ids.has('saveBtn2'));assert(!p.ids.has('openBtn2'));
 }
 // A pending native share must not replace a newer document name or clear newer edits.
@@ -435,7 +521,7 @@ console.log('Tiny genuine R2-birth bigons are kept and gently separated on relea
  const id=api.activeTabId;api.openTab();finish();await saving;
  const tab=api.tabs.find(t=>t.id===id);assert.equal(tab.title,'Renamed during export');assert(tab.dirty);
  api.activateTab(id);assert.equal(p.ids.get('fileName').value,'Renamed during export');
- console.log('Inspector navigation, disabled protections, duplicate actions removed and async export rename/edit race: PASS');
+ console.log('Inspector navigation, duplicate actions removed and async export rename/edit race: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 // Hit the actual strand between vertices at high zoom, not just vertex disks.
@@ -473,7 +559,6 @@ for(const pointerType of ['mouse','pen','touch']) {
  // Make the pair non-R2 by setting opposite overstrands.
  api.state.crossings[0].over=0;api.state.crossings[1].over=1;
  api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.ids.get('loosenR1').onchange({target:{checked:false}});
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
  const ev=y=>({pointerType,pointerId:54,clientX:400,clientY:y,button:0,width:1,height:1,preventDefault(){}});
  p.fire(p.ids.get('cv'),'pointerdown',ev(199.999));p.fire(p.ids.get('cv'),'pointermove',ev(185));

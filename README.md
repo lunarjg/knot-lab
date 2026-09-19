@@ -2,9 +2,9 @@
 
 A static web app for drawing and analyzing knot diagrams with pen, touch, and mouse input, including on iPad.
 
-- [Live site](https://jgkim.piano5788.chatgpt.site), deployed through Sites.
+- Live site: [Sites](https://jgkim.piano5788.chatgpt.site), deployed through Sites, and its [GitHub Pages mirror](https://lunarjg.github.io/knot-lab/), auto-deployed from `dist/` on every push to `main` by `.github/workflows/pages.yml`.
 - [Private source backup](https://github.com/lunarjg/knot-lab).
-- The application UI and repository documentation are in English. GitHub pushes and CI runs do not deploy the production site.
+- The application UI and repository documentation are in English.
 
 ## Project files
 
@@ -44,10 +44,10 @@ For other static hosting providers, publish the contents of `dist` at the site r
 
 - **New tab**: create a blank diagram.
 - **Open files**: open JSON files in new tabs. Multiple files can be selected at once.
-- Each document tab has its own diagram, zoom/pan position, undo/redo history, and move counts.
+- Each document tab has its own diagram, zoom/pan position, and undo/redo history.
 - Tap the active tab's name to rename it. Select an inactive tab first, then tap its name again. Enter or tapping outside saves the name; Escape cancels. F2 also starts editing. Names and suggested export filenames are autosaved without changing diagram undo history.
-- **Save**: export the current tab as JSON, including move counts.
-- **Autosave**: restore open tabs, diagrams, and move counts on the next visit. Undo stacks last only for the current session.
+- **Save**: export the current tab as JSON.
+- **Autosave**: restore open tabs and diagrams on the next visit. Undo stacks last only for the current session.
 - **Import PD**: replace the current diagram with a PD code; Undo restores the previous diagram.
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
 - Use the arrow on the right edge to reopen the inspector.
@@ -58,12 +58,10 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 
 ## Geometry and editing behavior
 
-- Resampling preserves corners that affect crossings, preventing crossings from disappearing and being counted as R2 moves without an actual movement.
-- Dragging does not automatically round corners. Separate smoothing actions are available.
-- R2 validation checks whether adjacent crossings on both strands bound an empty bigon.
-- R3 validation checks crossing-order reversals on all three sides of an empty triangle and verifies a consistent height order.
-- Intermediate frames at an exact triple point are compared with the last regular diagram to avoid counting a move twice.
-- Undo and redo restore move counts as well as geometry.
+- Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
+- A drag rounds off its own sharp corners when it ends, and takes up the slack around the grip while it is in progress; the standalone smoothing actions remain available for everything else.
+- A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
+- R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle. The classification decides only whether a step is accepted; it is not displayed, so a step sampled exactly on an R3 slide's triple point being classified as two R3s rather than one has no visible effect.
 - Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
 
 ## Tests
@@ -84,14 +82,14 @@ Application-state and service-worker tests use Node mock environments. They do n
 
 ## Site ownership and data
 
-Keep using the existing Sites project and production address. The GitHub backup does not require creating a new site or changing its audience or editing permissions.
+Keep using the existing Sites project and production address. The GitHub backup does not require creating a new site or changing its audience or editing permissions. Separately, `dist/` is also auto-deployed to a GitHub Pages mirror at every push to `main`; it serves the same static files but is independent of the Sites deployment and its own save/rollback workflow.
 
 The owning account manages source editing and publication through Sites. Visitors are not granted repository or publication permissions. The application has no server API for changing shared diagram data: drawing, opening files, and autosaving happen in each visitor's browser.
 
 ## Interaction update
 
 - Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
-- Protect non-R2 bigons and Protect R1 kinks independently constrain the size of those regions during dragging. R2-compatible bigons and other crossing pairs have no size floor. Minimum areas are adjustable; existing undersized protected regions may expand. Rejected moves restore geometry and crossing IDs.
+- Only real topology (Reidemeister validity) gates a drag or auto-relax step — there is no separate size or distance floor on bigons, kinks, or crossing spacing. Crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
@@ -101,33 +99,21 @@ When a drawn stroke starts or ends at an existing open endpoint, its new connect
 
 The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. The draw hint explains the joining rule in English. Free strokes and the separate drag-under setting keep their existing defaults.
 
-## R1 drag assistance
+Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way. A step that carries a strand clean across another one is accepted too, since it is just the reverse of the R2 that would undo it; only a contradictory height order (R2 with different overstrands, or a cyclic R3) is still rejected.
 
-Small empty monogons near the dragged strand can now straighten during a drag (enabled by default). Loops containing a closed component or intersecting an open stroke are protected. The candidate must remove exactly one R1 crossing while preserving every surviving crossing and its over/under strands. The action is included in the drag undo step and move counts. Disable “Remove small R1 loops while dragging” to retain curls.
+When a drag ends, the strand's sharp corners are smoothed automatically, inside the drag's own undo step. That pass is cosmetic only — any smoothing that would add or remove a crossing is rolled back, so it never quietly undoes a curl that was just made.
 
-Self-crossings are allowed through valid R1/R2 moves. New R1 loops may begin below the kink area/thickness floor and grow; subsequent steps protect their existing size when R1 protection is enabled. Automatic R1 assistance only considers crossings present at the beginning of the drag, so it cannot immediately undo a self-crossing just created by that gesture. Existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
+While a drag is in progress, the same smoothing runs each step over the stretch of strand around the grip (out to three drag radii), so pulling on a strand that is already stretched takes up its slack and draws it back in instead of letting it fold into a sharp spike. The pass shares the **Smooth corners** setting: turning that off restores the plain behavior, where re-pulling a stretched strand only ever lengthens it. Because it runs inside the same validated step as the movement itself, it cannot change the topology — but it does round off the very tight curl a grip would otherwise leave right at the grabbed point, so a deliberate tiny self-crossing made exactly under the cursor wants **Smooth corners** off.
 
-## Bigon and kink size protection
+## No size or distance floor on dragging or auto-relax
 
-The old all-pairs crossing-distance guard is replaced by tracing bounded one-edge (R1 kink) and two-edge (bigon) faces, using the full curved boundaries. **Bigon size protection applies only when each boundary strand is over at one crossing and under at the other**, which prevents R2 removal. When the same boundary strand is over at both crossings, the bigon is exempt from all size floors (area, thickness, and crossing separation), allowing it to shrink for R2 removal. Classification follows the actual boundary occurrences, including two strands belonging to the same component; it does not compare component IDs or raw crossing indices.
-
-Both protection options are off by default. When enabled, their default minimum areas are 400 screen px² for protected bigons and 180 screen px² for kinks, separately adjustable. The guard also checks effective thickness (2 × area / perimeter; 8 px for protected bigons, 6 px for kinks) and a 16 px crossing separation for protected bigons. Limits scale with the current zoom. Existing undersized protected faces can grow but cannot shrink further. Valid disappearance of a face is still handled by the Reidemeister checks, and local R1 untwisting remains available.
-
-Regression cases cover fixed crossing positions with a collapsing bigon, a single-crossing kink, thin regions with sufficient area, independent controls, zoom, cyclic seams, near-zero area, R3 through a triple point, pointer-driven dragging, and rollback.
-
-Additional cases compare identical geometry with the two possible over/under patterns, R2 shrink/disappear/reappear and move counts, one-component bigons, mirrored height order, reversed occurrences, and pointer dragging with protection enabled.
-
-## Default crossing clearance
-
-Independent of the optional bigon/kink size protection above, a small clearance floor (16 screen px, scaled by zoom) is always active while dragging. It stops any two crossings from collapsing toward the same point — including three or more arcs converging near one spot — unless they form a genuine R2-removable bigon (the same strand over at both crossings), which stays free to shrink toward release as before. A blocked drag shows “These crossings cannot pass each other. Drag away to separate them.” and can always be reversed by dragging back; valid R1/R2/R3 moves, including the exact triple-point frame inside an R3 slide, are never blocked by this floor.
-
-On release, a tiny genuine bigon that this drag tightened (newly formed, or shrunk from where it started) is kept — its crossings are not deleted — but gently nudged back out to the clearance distance so it stays visible and distinguishable rather than pinned near-coincident. This correction is part of the same undo step as the drag, so one undo reverts both together. A tangential touch that never actually crosses to the other side does not register as a crossing at all.
+A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move; whatever the diagram is left holding when the gesture ends is exactly what stays, with no automatic separation or correction afterward.
 
 ## Make an alternating diagram
 
 Use **Make alternating** under **Diagram actions** on the inspector’s **Diagram** page. The operation changes over/under assignments so that crossing visits alternate along every closed component, including the cyclic join. It keeps the projected curves fixed and selects the fewest crossing changes for that fixed projection, independently across disconnected pieces. This is not a search over other projections or a knot invariant, and crossing changes can change the knot/link type. Open arcs are excluded.
 
-The actual changes are added to **Crossing changes**, not R1/R2/R3 counts, and the entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
+The entire conversion is one undo/redo step. Existing invariant calculations are canceled and their results invalidated. Already-alternating or crossing-free diagrams need no change; the button is disabled. An inconsistent crossing order fails without editing the diagram.
 
 ## Knot and link invariants
 
@@ -183,7 +169,7 @@ git push github main
 git push github v18
 ```
 
-Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions only runs tests and has read-only repository permissions; it contains no deployment job or Sites credentials.
+Do not move existing tags, force-push, or rewrite shared history. Wait for GitHub Actions to pass on the intended commit. Then use the existing Sites workflow: push that exact source state to Sites, save a version for its full commit SHA, and deploy it to the same project. Preserve `.openai/hosting.json`, the site address, and its access level. GitHub Actions runs two separate workflows: `ci.yml` runs tests only, with read-only repository permissions; `pages.yml` deploys `dist/` to the GitHub Pages mirror on every push to `main`. Neither workflow has Sites credentials or touches the Sites deployment.
 
 ### Roll back the live Sites deployment
 

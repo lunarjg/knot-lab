@@ -62,6 +62,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .toolopts{display:flex;align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:4px 10px;min-height:34px}
 .toolopts[hidden]{display:none}
 .toolopt{display:inline-flex;align-items:center;gap:10px}
+.toolopt .iconbtn{white-space:nowrap;padding:4px 10px}
 .toolopt[hidden]{display:none}
 .inline{display:inline-flex;align-items:center;gap:7px;color:var(--muted);white-space:nowrap}
 .inline[hidden]{display:none}
@@ -128,12 +129,6 @@ h3{font-size:14px;margin:14px 0 6px}
 #invariantResults a,details a{color:var(--accent)}
 button:disabled{opacity:.5;cursor:default}
 .small{font-size:12px;color:var(--muted);margin:6px 0 0}
-.moves{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.move{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:8px;text-align:center}
-.move .n{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
-.move .l{font-size:12px;color:var(--muted)}
-.move.pulse{animation:pulse .5s ease-out}
-@keyframes pulse{0%{border-color:var(--accent);background:var(--accent-soft)}100%{}}
 textarea.pd{width:100%;height:92px;resize:vertical;border:1px solid var(--rule);background:var(--paper);border-radius:9px;padding:8px;font-family:var(--mono);font-size:12px;line-height:1.45}
 .help p{margin:0 0 6px;color:var(--muted);font-size:13px}
 .help b{color:var(--ink);font-weight:600}
@@ -143,7 +138,7 @@ kbd{font-family:var(--mono);font-size:11.5px;border:1px solid var(--rule);border
   .stage{height:78vh;padding:10px}
   aside{padding:4px 14px 30px}
 }
-@media (prefers-reduced-motion: reduce){ .toast,.move.pulse{transition:none;animation:none} }
+@media (prefers-reduced-motion: reduce){ .toast{transition:none;animation:none} }
 
 /* iPad working surface: the canvas remains full-height when the inspector closes. */
 html,body{overscroll-behavior:none;overflow:hidden}
@@ -306,10 +301,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
             </div>
           </div>
           <div class="toolopt" id="optMove" hidden>
-            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></label>
+            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="80"><output id="sigmaV" for="sigma">80</output></label>
             <label class="inline"><input type="checkbox" id="under"> Pass underneath</label>
-            <label class="inline"><input type="checkbox" id="protectBigons" checked> Protect R2</label>
-            <label class="inline"><input type="checkbox" id="protectKinks"> Protect R1</label>
+            <button class="iconbtn" id="relaxMove" title="Auto-relax (A)">Auto-relax</button>
           </div>
         </div>
       </div>
@@ -392,24 +386,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <p>Methods: <a href="https://arxiv.org/html/2204.12104v2" target="_blank" rel="noopener noreferrer">Kauffman: Jones polynomial</a>; <a href="https://arxiv.org/abs/1910.08044" target="_blank" rel="noopener noreferrer">Kolay: coloring matrices</a>; <a href="https://homepages.math.uic.edu/~kauffman/KFI.pdf" target="_blank" rel="noopener noreferrer">linking numbers</a>.</p>
       </details>
     </section>
-    <section>
-      <h2>Reidemeister move counts</h2>
-      <div class="moves">
-        <div class="move" id="mR1"><div class="n">0</div><div class="l">R1</div></div>
-        <div class="move" id="mR2"><div class="n">0</div><div class="l">R2</div></div>
-        <div class="move" id="mR3"><div class="n">0</div><div class="l">R3</div></div>
-      </div>
-      <p class="small">Crossing changes: <span id="nflip">0</span> (may change the knot type)</p>
-    </section>
     </div>
     <div id="pageSettings" hidden>
     <section>
       <h2>Dragging</h2>
-      <p class="small">Drag radius, Pass underneath, Protect R2 and Protect R1 are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture.</p>
-      <div class="row"><label for="bigonArea">Minimum bigon area</label><input type="range" id="bigonArea" min="100" max="1600" step="20" value="400"><output id="bigonAreaV" for="bigonArea">400 px²</output></div>
-      <div class="row"><label for="kinkArea">Minimum R1 loop area</label><input type="range" id="kinkArea" disabled min="60" max="800" step="20" value="180"><output id="kinkAreaV" for="kinkArea">180 px²</output></div>
-      <p class="small">Sizes are measured in screen pixels at the current zoom.</p>
-      <label class="chk"><input type="checkbox" id="loosenR1" checked><span>Remove small R1 loops while dragging<small>Only empty loops present before the drag.</small></span></label>
+      <p class="small">Drag radius and Pass underneath are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture. Only real topology (Reidemeister validity) gates a move — crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.</p>
     </section>
     <section>
       <h2>Display</h2>
@@ -431,8 +412,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <p><b>Draw</b> Turn Auto-close off for open arcs. Joining an endpoint passes under existing arcs.</p>
       <p><b>Drag</b> Move strands with Reidemeister moves. Drag empty space to pan; pinch or scroll to zoom.</p>
       <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
-      <p><b>Smoothing</b> Pen “Smooth corners” applies to new strokes. “Smooth sharp corners” edits existing curves; Auto-relax spreads the diagram.</p>
-      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
+      <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
+      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
       </details>
     </section>
@@ -548,18 +529,12 @@ const KC = (function () {
       const kept = [out[0]];
       for (let i = 1; i < out.length; i++) {
         const q = kept[kept.length - 1];
-        const b = out[(i + 1) % out.length], a = out[i];
-        const vx = b.x - q.x, vy = b.y - q.y, len2 = vx * vx + vy * vy;
-        const along = (a.x-q.x)*vx + (a.y-q.y)*vy;
-        const deviation = Math.abs((a.x-q.x)*vy - (a.y-q.y)*vx);
-        // Removing a corner can create/delete crossings without any user movement.
-        // Only remove a point lying on the unchanged straight segment.
-        if (Math.hypot(a.x-q.x,a.y-q.y) < 0.45*SEG && len2 > 0 && along >= 0 && along <= len2 && deviation < 1e-10*Math.sqrt(len2)) continue;
+        if (Math.hypot(out[i].x - q.x, out[i].y - q.y) < 0.45 * SEG) continue;
         kept.push(out[i]);
       }
       while (kept.length > 16) {
         const l = kept[kept.length - 1], f = kept[0];
-        if (Math.hypot(l.x-f.x,l.y-f.y) < 1e-10) kept.pop(); else break;
+        if (Math.hypot(l.x - f.x, l.y - f.y) < 0.45 * SEG) kept.pop(); else break;
       }
       comp.pts = kept;
     } else comp.pts = out;
@@ -575,18 +550,12 @@ const KC = (function () {
   // All transverse self/mutual intersections of the closed polylines
   function computeRaw(comps) {
     const CELL = 24, grid = new Map();
-    // The same intersection can round to opposite sides of a grid boundary.
-    // Use one canonical cell for both segment bounds and intersection ownership.
-    const cellOf = v => {
-      const q=v/CELL, nearest=Math.round(q);
-      return Math.abs(q-nearest)<1e-12 ? nearest : Math.floor(q);
-    };
     comps.forEach((cm, c) => {
       const p = cm.pts, n = p.length;
       for (let i = 0; i < n; i++) {
         const a = p[i], b = p[(i + 1) % n];
-        const x0 = cellOf(Math.min(a.x, b.x)), x1 = cellOf(Math.max(a.x, b.x));
-        const y0 = cellOf(Math.min(a.y, b.y)), y1 = cellOf(Math.max(a.y, b.y));
+        const x0 = Math.floor(Math.min(a.x, b.x) / CELL), x1 = Math.floor(Math.max(a.x, b.x) / CELL);
+        const y0 = Math.floor(Math.min(a.y, b.y) / CELL), y1 = Math.floor(Math.max(a.y, b.y) / CELL);
         for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
           const key = (cx + 32768) * 65536 + (cy + 32768);
           let l = grid.get(key); if (!l) { l = []; grid.set(key, l); }
@@ -608,26 +577,10 @@ const KC = (function () {
           const den = rx * sy - ry * sx;
           if (Math.abs(den) < 1e-12) continue;
           const qx = b1.x - a1.x, qy = b1.y - a1.y;
-          const endpoint = t => Math.abs(t)<1e-12 ? 0 : Math.abs(t-1)<1e-12 ? 1 : t;
-          const t = endpoint((qx * sy - qy * sx) / den), w = endpoint((qx * ry - qy * rx) / den);
+          const t = (qx * sy - qy * sx) / den, w = (qx * ry - qy * rx) / den;
           if (t < 0 || t >= 1 || w < 0 || w >= 1) continue;
-          // A touch landing exactly on a curve's own vertex is shared between that
-          // vertex's two segments. Only count it if the curve actually crosses to
-          // the other side there; a tangential graze that stays on one side (or
-          // merely reaches the other curve and backs off) is not a real crossing.
-          const side = (ox, oy, dx, dy, px, py) => dx * (py - oy) - dy * (px - ox);
-          if (t === 0) {
-            const prev = P[(i - 1 + n1) % n1];
-            const s1 = side(b1.x, b1.y, sx, sy, prev.x, prev.y), s2 = side(b1.x, b1.y, sx, sy, a2.x, a2.y);
-            if (s1 * s2 > 1e-9) continue;
-          }
-          if (w === 0) {
-            const prev2 = Q[(j - 1 + n2) % n2];
-            const p1 = side(a1.x, a1.y, rx, ry, prev2.x, prev2.y), p2 = side(a1.x, a1.y, rx, ry, b2.x, b2.y);
-            if (p1 * p2 > 1e-9) continue;
-          }
           const x = a1.x + t * rx, y = a1.y + t * ry;
-          if (cellOf(x) !== cx || cellOf(y) !== cy) continue;
+          if (Math.floor(x / CELL) !== cx || Math.floor(y / CELL) !== cy) continue;
           res.push({ x, y, id: 0, over: 0, occ: [mkOcc(comps, c1, i, t), mkOcc(comps, c2, j, w)] });
         }
       }
@@ -692,22 +645,10 @@ const KC = (function () {
       return sDist(cm[a.c], a.s, na.s) + sDist(cm[b.c], b.s, nb.s) + 0.5 * Math.hypot(A.x - B.x, A.y - B.y);
     };
 
-    const isBigon = (A,B,perm,cm,all) => {
-      const det=(a,b)=>a.dx*b.dy-a.dy*b.dx;
-      if(det(A.occ[0],A.occ[1])*det(B.occ[perm],B.occ[1-perm])>=0)return false;
-      for(let k=0;k<2;k++) {
-        const a=A.occ[k],b=B.occ[k^perm];
-        if(a.c!==b.c)return false;
-        const L=cm[a.c].len,forward=mod(b.s-a.s,L);
-        const start=forward<=L/2?a.s:b.s,span=Math.min(forward,L-forward);
-        for(const X of all)for(const o of X.occ)if(o!==a&&o!==b&&o.c===a.c) {
-          const d=mod(o.s-start,L);if(d>1e-7&&d<span-1e-7)return false;
-        }
-      }
-      return true;
-    };
-
-    // --- deaths: must be R1 (tiny empty loop) or a valid R2 pair (same strand on top in both)
+    // --- deaths: an R2 pair must agree on which strand is on top; a pair that
+    // does not match up as R2 or R1 is simply left uncounted rather than
+    // rejected, since a wide step can carry a strand across another one in one
+    // go and that is still just the reverse of the R2 it would undo.
     const doneD = new Set();
     for (const d of deaths) {
       if (doneD.has(d)) continue;
@@ -716,7 +657,7 @@ const KC = (function () {
         if (e === d || doneD.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
           const c = pairCost(d, e, perm, oldComps);
-          if (c < 70 && isBigon(d,e,perm,oldComps,oldX) && (!best || c < best[0])) best = [c, e, perm];
+          if (c < 70 && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       if (best) {
@@ -726,7 +667,7 @@ const KC = (function () {
         ev.r2++; continue;
       }
       if (isSmallLoop(d, oldX, oldComps, 16 * SEG)) { doneD.add(d); ev.r1++; continue; }
-      return { ok: false, reason: 'pass' };
+      doneD.add(d);
     }
 
     // --- births: the dragged strand goes on top (or below in "under" mode)
@@ -746,7 +687,7 @@ const KC = (function () {
         if (e === b || doneB.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
           const c = pairCost(b, e, perm, comps);
-          if (c < 60 && isBigon(b,e,perm,comps,raw) && (!best || c < best[0])) best = [c, e, perm];
+          if (c < 60 && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       b.id = nextId(); b.over = decide(b); doneB.add(b);
@@ -754,224 +695,83 @@ const KC = (function () {
         const [, e, perm] = best;
         e.id = nextId(); e.over = perm ? 1 - b.over : b.over; doneB.add(e); ev.r2++;
       } else if (isSmallLoop(b, raw, comps, 16 * SEG)) ev.r1++;
-      else if (!opt.allowUnclassifiedBirths) return {ok:false,reason:'pass'};
     }
 
-    // R3 changes the order on all three sides of one empty triangular region.
-    // Use occurrence adjacency, including the cyclic seam and two-crossing components.
-    const keyOf = (X,k) => X.id + ':' + (k === X.over ? 'o' : 'u');
-    const before = new Map(), after = new Map(), byCross = new Map();
-    const build = (xs, cm, table) => {
-      const lists = cm.map(() => []);
-      xs.forEach(X => X.occ.forEach((o,k) => {
-        const e={X,k,o,key:keyOf(X,k),neighbors:[]}; table.set(e.key,e);lists[o.c].push(e);
-      }));
-      lists.forEach(list => {
-        list.sort((a,b)=>a.o.s-b.o.s);
-        if(list.length<2)return;
-        list.forEach((e,i)=>e.neighbors=[list[(i+list.length-1)%list.length],list[(i+1)%list.length]]);
-      });
-    };
-    build(oldX, oldComps, before);build(raw, comps, after);
-    for(const O of mO.keys()) byCross.set(O.id,O);
-    const signed = (a,b,cm) => circSigned(a.o.s/cm[a.o.c].len,b.o.s/cm[b.o.c].len)*cm[a.o.c].len;
-    const reversal = (a,b) => {
-      const na=after.get(a.key),nb=after.get(b.key);
-      if(!na||!nb||!na.neighbors.some(e=>e.key===nb.key))return false;
-      const x=signed(a,b,oldComps),y=signed(na,nb,comps);
-      return Math.abs(x)>1e-7 && Math.abs(y)>1e-7 && x*y<0;
-    };
-    const seen=new Set();
-    for(const X of byCross.values()) for(let k=0;k<2;k++) {
-      const xa=before.get(keyOf(X,k)),xb=before.get(keyOf(X,1-k));
-      for(const ya of xa.neighbors) for(const zb of xb.neighbors) {
-        const Y=ya.X,Z=zb.X;
-        if(X===Y||X===Z||Y===Z||!byCross.has(Y.id)||!byCross.has(Z.id))continue;
-        const yc=before.get(keyOf(Y,1-ya.k)),zc=before.get(keyOf(Z,1-zb.k));
-        if(!yc.neighbors.some(e=>e.key===zc.key))continue;
-        if(!reversal(xa,ya)||!reversal(xb,zb)||!reversal(yc,zc))continue;
-        const key=[X.id,Y.id,Z.id].sort((a,b)=>a-b).join(',');
-        if(seen.has(key))continue;
-        // A above B, A above C, B above C must admit a consistent height order.
-        const ab=X.over===k,ac=Y.over===ya.k,bc=Z.over===zb.k;
-        if((ab&&bc&&!ac)||(!ab&&!bc&&ac))return {ok:false,reason:'R3'};
-        seen.add(key);ev.r3++;
+    // --- R3: crossings swapping order along a strand pass through a triple point; heights must not be cyclic
+    const keyOf = (X, k) => X.id + (k === X.over ? 'o' : 'u');
+    const seqOld = comps.map(() => []), seqNew = comps.map(() => []);
+    for (const [O, N] of mO) {
+      O.occ.forEach((o, k) => seqOld[o.c].push({ s: o.s, key: keyOf(O, k), X: O, k }));
+      N.occ.forEach((o, k) => seqNew[o.c].push({ s: o.s, key: keyOf(N, k), X: N, k }));
+    }
+    const matchedNew = raw.filter(N => mN.has(N));
+    const seen = new Set();
+    for (let c = 0; c < comps.length; c++) {
+      const A = seqOld[c].sort((p, q) => p.s - q.s), B = seqNew[c].sort((p, q) => p.s - q.s), m = A.length;
+      if (m < 3 || B.length !== m) continue;
+      const pos = new Map(); B.forEach((e, i) => pos.set(e.key, i));
+      const off = pos.get(A[0].key);
+      let same = off !== undefined;
+      if (same) for (let i = 0; i < m; i++) if (B[(off + i) % m].key !== A[i].key) { same = false; break; }
+      if (same) continue;
+      for (let i = 0; i < m; i++) {
+        const x = A[i], y = A[(i + 1) % m], px = pos.get(x.key), py = pos.get(y.key);
+        if (px === undefined || py === undefined || py !== (px - 1 + m) % m) continue;
+        const nx = B[px], ny = B[py], X = nx.X, Y = ny.X;
+        if (X === Y || Math.hypot(X.x - Y.x, X.y - Y.y) > 60) continue;
+        const P = X.occ[1 - nx.k], Q = Y.occ[1 - ny.k];
+        let bz = null;
+        for (const Z of matchedNew) {
+          if (Z === X || Z === Y || Math.hypot(Z.x - X.x, Z.y - X.y) > 80) continue;
+          for (let j = 0; j < 2; j++) {
+            const zp = Z.occ[j], zq = Z.occ[1 - j];
+            if (zp.c !== P.c || zq.c !== Q.c) continue;
+            const cost = sDist(comps[P.c], zp.s, P.s) + sDist(comps[Q.c], zq.s, Q.s);
+            if (cost < 160 && (!bz || cost < bz[0])) bz = [cost, Z, j];
+          }
+        }
+        if (!bz) continue;
+        const [, Z, j] = bz;
+        const a = nx.k === X.over, b = ny.k === Y.over, cc = Z.over === j;
+        if ((a && cc && !b) || (!a && !cc && b)) return { ok: false, reason: 'R3' };
+        const key = [X.id, Y.id, Z.id].sort((p, q) => p - q).join(',');
+        if (!seen.has(key)) { seen.add(key); ev.r3++; }
       }
     }
     return { ok: true, crossings: raw, ev };
   }
 
-  // Trace bounded faces of the embedded diagram. Each edge is the complete
-  // curved arc between consecutive crossing occurrences, not their chord.
-  function smallFaces(comps, crossings) {
-    const lists=comps.map(()=>[]), outgoing=new Map(), edges=[];
-    crossings.forEach(X=>{
-      outgoing.set(X.id,[]);
-      X.occ.forEach((o,k)=>lists[o.c].push({X,o,over:k===X.over,key:X.id+':'+(k===X.over?'o':'u')}));
-    });
-    lists.forEach((list,c)=>{
-      list.sort((a,b)=>a.o.s-b.o.s);
-      const cm=comps[c];
-      list.forEach((a,i)=>{
-        const b=list[(i+1)%list.length];
-        const span=i===list.length-1?cm.len+b.o.s-a.o.s:b.o.s-a.o.s;
-        const middle=cm.pts.map((p,j)=>({p,s:mod(cm.cum[j]-a.o.s,cm.len)}))
-          .filter(v=>v.s>1e-7 && v.s<span-1e-7).sort((a,b)=>a.s-b.s);
-        const points=[{x:a.X.x,y:a.X.y},...middle.map(v=>v.p),{x:b.X.x,y:b.X.y}];
-        const id=c+':'+a.key+'>'+b.key;
-        const alternating=a.over!==b.over;
-        const f={from:a.X.id,to:b.X.id,points,alternating,key:id+'+'};
-        const r={from:b.X.id,to:a.X.id,points:[...points].reverse(),alternating,key:id+'-'};
-        f.twin=r;r.twin=f;
-        for(const [e,occ,sign] of [[f,a.o,1],[r,b.o,-1]]) {
-          const q=e.points.find(p=>Math.hypot(p.x-e.points[0].x,p.y-e.points[0].y)>1e-8);
-          e.angle=q?Math.atan2(q.y-e.points[0].y,q.x-e.points[0].x):Math.atan2(sign*occ.dy,sign*occ.dx);
-          outgoing.get(e.from).push(e);edges.push(e);
-        }
-      });
-    });
-    outgoing.forEach(es=>es.sort((a,b)=>a.angle-b.angle||a.key.localeCompare(b.key)));
-    for(const e of edges) {
-      const es=outgoing.get(e.to),i=es.indexOf(e.twin);
-      e.next=es[(i+es.length-1)%es.length];
-    }
-    const seen=new Set(),faces=[];
-    for(const start of edges) {
-      if(seen.has(start))continue;
-      const cycle=[];let e=start;
-      while(!seen.has(e)) {seen.add(e);cycle.push(e);e=e.next;}
-      if(e!==start || cycle.length>2)continue;
-      if(cycle.length===2 && cycle[0].from===cycle[1].from)continue;
-      const points=cycle.flatMap(e=>e.points.slice(0,-1));
-      if(points.length<3)continue;
-      const origin=points[0];let twiceArea=0,perimeter=0;
-      points.forEach((a,i)=>{const b=points[(i+1)%points.length];
-        twiceArea+=(a.x-origin.x)*(b.y-origin.y)-(a.y-origin.y)*(b.x-origin.x);
-        perimeter+=Math.hypot(b.x-a.x,b.y-a.y);
-      });
-      // Clockwise exterior walks have negative area. Degenerate regions have
-      // no interior and are handled by the normal Reidemeister checks.
-      if(twiceArea<=0 || perimeter<=0)continue;
-      const type=cycle.length===1?'kink':'bigon',area=twiceArea/2;
-      const separation=type==='bigon'?Math.hypot(cycle[0].points[0].x-cycle[1].points[0].x,cycle[0].points[0].y-cycle[1].points[0].y):Infinity;
-      // Compare the actual boundary occurrences, including self-crossings:
-      // component IDs or raw crossing.over indices cannot identify an R2 pair.
-      const alternating=type==='bigon' && cycle.every(e=>e.alternating);
-      const crossingIds=[...new Set(cycle.map(e=>e.from))];
-      faces.push({key:cycle.map(e=>e.key).sort().join('|'),type,crossingId:type==='kink'?cycle[0].from:null,crossingIds,alternating,area,thickness:2*area/perimeter,separation});
-    }
-    return faces;
-  }
-
-  function faceSizeViolation(beforeComps,beforeX,afterComps,afterX,limits) {
-    if(!limits || (!limits.bigon && !limits.kink))return null;
-    const previous=new Map(smallFaces(beforeComps,beforeX).map(f=>[f.key,f]));
-    for(const face of smallFaces(afterComps,afterX)) {
-      // Same strand over at both ends: no size floor may obstruct R2 removal.
-      if(face.type==='bigon' && !face.alternating)continue;
-      const rule=limits[face.type];if(!rule)continue;
-      const old=previous.get(face.key);
-      // A valid R1 birth starts at zero area. Let it form before protecting
-      // its size on later steps; reconcile already checked the topology.
-      if(face.type==='kink' && !old && !beforeX.some(x=>x.id===face.crossingId))continue;
-      for(const metric of ['area','thickness','separation']) {
-        const minimum=rule[metric]||0;
-        // Existing small imported faces can expand without being locked in
-        // place. They cannot become still smaller; new faces obey the limit.
-        const floor=old?Math.min(minimum,old[metric]):minimum;
-        if(face[metric]+1e-7<floor)return face.type;
-      }
-    }
-    return null;
-  }
-
-  // A default, always-on floor beneath the optional bigon/kink protection:
-  // no two distinct crossings may collapse toward the same point unless
-  // they are a genuine R2-removable bigon (one strand over both times).
-  // That covers alternating bigons and any larger cluster (e.g. three arcs
-  // meeting near one spot) which cannot all cancel through a single move.
-  function crossingClearanceViolation(beforeComps,beforeX,afterComps,afterX,clearance) {
-    if(!clearance)return null;
-    const removable=new Set();
-    smallFaces(afterComps,afterX).forEach(f=>{
-      if(f.type==='bigon' && !f.alternating && f.crossingIds.length===2)
-        removable.add(f.crossingIds.slice().sort((a,b)=>a-b).join(':'));
-    });
-    const prevDist=new Map();
-    for(let i=0;i<beforeX.length;i++)for(let j=i+1;j<beforeX.length;j++) {
-      const a=beforeX[i],b=beforeX[j];
-      prevDist.set([a.id,b.id].sort((x,y)=>x-y).join(':'),Math.hypot(a.x-b.x,a.y-b.y));
-    }
-    for(let i=0;i<afterX.length;i++)for(let j=i+1;j<afterX.length;j++) {
-      const a=afterX[i],b=afterX[j],key=[a.id,b.id].sort((x,y)=>x-y).join(':');
-      if(removable.has(key))continue;
-      const d=Math.hypot(a.x-b.x,a.y-b.y);
-      // A pair already outside the clearance zone is free to move (even
-      // closer) so long as it does not cross below the floor. Already-close
-      // crossings (e.g. imported diagrams) may stay as they are or move
-      // apart, but a valid move cannot pull them closer still.
-      const before=prevDist.has(key)?prevDist.get(key):Infinity;
-      const floor=before<clearance?before:clearance;
-      if(d+1e-7<floor)return true;
-    }
-    return null;
-  }
-
   function attemptStep(S, mutator, opt) {
-    const backup = cloneComps(S.comps), next = S.nextId;
-    const baseline = S.moveCheckpoint || { comps:backup, crossings:cloneCrossings(S.crossings) };
+    const backup = cloneComps(S.comps);
     mutator(S.comps);
     S.comps.forEach(resampleComp);
     const raw = computeRaw(S.comps);
-    const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
-    if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
-    const smallFace=faceSizeViolation(backup,S.crossings,S.comps,r.crossings,opt?.faceLimits);
-    if (smallFace) {
-      S.comps = backup; S.nextId = next;
-      return { ok: false, reason: smallFace };
-    }
-    // A frame exactly on a triple point has no well-defined crossing order:
-    // crossings genuinely coincide there as the diagram passes through, most
-    // often mid-way through a valid R3 slide, so the clearance floor (below)
-    // does not apply to it. Keep the last regular diagram and classify once
-    // the strands separate.
-    const singular = raw.some((x,i) => raw.slice(i+1).filter(y=>Math.hypot(x.x-y.x,x.y-y.y)<1e-6).length>=2);
-    if (!singular && crossingClearanceViolation(backup,S.crossings,S.comps,r.crossings,opt?.crossingClearance)) {
-      S.comps = backup; S.nextId = next;
-      return { ok: false, reason: 'clearance' };
-    }
+    const r = reconcile(S.crossings, backup, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
+    if (!r.ok) { S.comps = backup; return r; }
     S.crossings = r.crossings;
-    if (singular) { S.moveCheckpoint = baseline; r.ev = {r1:0,r2:0,r3:0}; }
-    else S.moveCheckpoint = null;
     return r;
   }
+  // Auto-relax's step: the same attemptStep every other move goes through,
+  // so only real topology (reconcile) gates it. A blocked frame simply
+  // stops the run.
+  function relaxStep(S) {
+    return attemptStep(S, comps => relaxMutator(comps, 40, 1.0), {});
+  }
 
-  function adaptiveStep(S, mutate, opt) {
-    let result;
-    for(let scale=1;scale>=1/64;scale/=2) {
-      result=attemptStep(S,comps=>mutate(comps,scale),opt);
-      if(result.ok)return result;
+  function moveWeighted(comp, gi, ux, uy, sigma) {
+    const p = comp.pts, n = p.length, cum = comp.cum, L = comp.len, lim = 3 * sigma, half = Math.floor(n / 2);
+    const g2 = 2 * sigma * sigma;
+    p[gi].x += ux; p[gi].y += uy;
+    for (let k = 1; k < half; k++) {
+      const i = (gi + k) % n, d = mod(cum[i] - cum[gi], L);
+      if (d > lim) break;
+      const w = Math.exp(-d * d / g2); p[i].x += w * ux; p[i].y += w * uy;
     }
-    return result;
-  }
-  // Relaxation stops cleanly the moment a step would violate topology, as in
-  // the original relax, rather than creeping through via ever-smaller scales
-  // (that adaptive retry belongs to interactive crowded-crossing dragging).
-  // The same default crossing clearance used while dragging also applies
-  // here, so smoothing can never pile up crossings that a genuine
-  // Reidemeister move would not actually resolve.
-  function relaxStep(S, clearance) {
-    return attemptStep(S,comps=>relaxMutator(comps,40,1.0),{crossingClearance:clearance});
-  }
-
-  function moveWeighted(comp, gi, ux, uy, sigma, u=comp.pts[gi].u) {
-    const center=arcPosOfU(comp,u), g2=2*sigma*sigma;
-    // Include every vertex, including the opposite vertex on short loops.
-    comp.pts.forEach((p,i)=>{
-      const d=sDist(comp,comp.cum[i],center);
-      if(d>3*sigma)return;
-      const w=Math.exp(-d*d/g2);p.x+=w*ux;p.y+=w*uy;
-    });
+    for (let k = 1; k < half; k++) {
+      const i = mod(gi - k, n), d = mod(cum[gi] - cum[i], L);
+      if (d > lim) break;
+      const w = Math.exp(-d * d / g2); p[i].x += w * ux; p[i].y += w * uy;
+    }
   }
   function indexOfU(comp, u) {
     let best = 0, bd = 2;
@@ -979,121 +779,8 @@ const KC = (function () {
     return best;
   }
 
-  // A local R1 shortcut is safe only for an empty monogon. In particular, a
-  // crossing-free component inside the loop must not be swallowed by it.
-  function loosenR1(S, opt) {
-    if (S.moveCheckpoint) return null;
-    const cm = S.comps[opt.component];
-    if (!cm) return null;
-    const anchor = cm.pts[indexOfU(cm, opt.u)], anchorS = arcPosOfU(cm, opt.u);
-    for (const X of S.crossings) {
-      if(opt.eligibleIds && !opt.eligibleIds.has(X.id))continue;
-      const la = loopArc(X, S.comps);
-      if (!la || la.c !== opt.component || la.len <= 1e-6 || la.len > opt.maxLoopLength) continue;
-      if (!isSmallLoop(X, S.crossings, S.comps, opt.maxLoopLength)) continue;
-      if (Math.hypot(X.x-anchor.x, X.y-anchor.y) > opt.radius) continue;
-      const along = mod(anchorS-la.start, cm.len);
-      if (along > la.len && Math.min(along-la.len, cm.len-along) > opt.radius) continue;
-      const vertices = cm.pts.map((p,i)=>({p,s:mod(cm.cum[i]-la.start,cm.len)}));
-      const insideArc = vertices.filter(v=>v.s>1e-7 && v.s<la.len-1e-7).sort((a,b)=>a.s-b.s);
-      const polygon = [X, ...insideArc.map(v=>v.p)];
-      if (polygon.length < 3) continue;
-      const inside = (p, boundary=polygon) => {
-        let hit=false;
-        for(let i=0,j=boundary.length-1;i<boundary.length;j=i++) {
-          const a=boundary[i],b=boundary[j];
-          if((a.y>p.y)!==(b.y>p.y) && p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)hit=!hit;
-        }
-        return hit;
-      };
-      const loopPoints = new Set(insideArc.map(v=>v.p));
-      if (S.comps.some(c=>c.pts.some(p=>!loopPoints.has(p)&&inside(p)))) continue;
-      if ((S.open||[]).some(st=>st.pts.some(p=>inside(p)))) continue;
-      const margin = Math.min(SEG, la.len*0.12, (cm.len-la.len)/8);
-      if (margin < 1e-6) continue;
-      const start=mod(la.start-margin,cm.len), span=la.len+2*margin;
-      const at = s => {
-        const p=pointAtS(cm,s),i=p.seg,a=cm.pts[i],b=cm.pts[(i+1)%cm.pts.length];
-        const f=mod(s,cm.len)-cm.cum[i],len=cm.cum[i+1]-cm.cum[i];
-        return {x:p.x,y:p.y,u:mod(a.u+(len?f/len:0)*circSigned(a.u,b.u),1)};
-      };
-      const a=at(start),b=at(start+span),du=mod(b.u-a.u,1),bridge=[a];
-      const cap=[a,X,b];
-      if(S.comps.some(c=>c.pts.some(p=>!loopPoints.has(p)&&inside(p,cap))))continue;
-      const intersects=(a,b,c,d)=>{
-        const cross=(p,q,r)=>(q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x);
-        if(Math.max(a.x,b.x)<Math.min(c.x,d.x)-1e-8 || Math.max(c.x,d.x)<Math.min(a.x,b.x)-1e-8 ||
-           Math.max(a.y,b.y)<Math.min(c.y,d.y)-1e-8 || Math.max(c.y,d.y)<Math.min(a.y,b.y)-1e-8)return false;
-        return cross(a,b,c)*cross(a,b,d)<=1e-12 && cross(c,d,a)*cross(c,d,b)<=1e-12;
-      };
-      // Open strokes do not participate in computeRaw, so check their full
-      // segments explicitly, including strokes with both endpoints outside.
-      if((S.open||[]).some(st=>st.pts.some(p=>inside(p,cap)) || st.pts.some((p,i)=>i>0 &&
-        [polygon,cap].some(poly=>poly.some((q,j)=>intersects(st.pts[i-1],p,q,poly[(j+1)%poly.length]))))))continue;
-      // Retain material coordinates on the shortcut, including large u spans,
-      // so the grabbed point and the crossing matcher continue to track it.
-      const n=Math.max(1,Math.ceil(du/0.2));
-      for(let k=1;k<=n;k++) {const t=k/n;bridge.push({x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y),u:mod(a.u+t*du,1)});}
-      const rest=cm.pts.map((p,i)=>({p,s:mod(cm.cum[i]-start,cm.len)})).filter(v=>v.s>span+1e-7).sort((a,b)=>a.s-b.s);
-      const candidate=cloneComps(S.comps);
-      candidate[la.c].pts=[...bridge,...rest.map(v=>({...v.p}))];
-      if(candidate[la.c].pts.length<3)continue;
-      resampleComp(candidate[la.c]);
-      let next=S.nextId;
-      const r=reconcile(S.crossings,S.comps,candidate,computeRaw(candidate),{nextId:()=>next++});
-      if(!r.ok || r.ev.r1!==1 || r.ev.r2 || r.ev.r3 || r.crossings.length!==S.crossings.length-1)continue;
-      const surviving=new Map(S.crossings.filter(c=>c.id!==X.id).map(c=>[c.id,c]));
-      if(r.crossings.some(c=>{
-        const old=surviving.get(c.id);
-        if(!old || Math.hypot(c.x-old.x,c.y-old.y)>1e-6)return true;
-        // Rotating the polyline start can swap occurrence indices. Compare
-        // the actual over/under strands, not the numeric over index.
-        return [0,1].some(k=>{const a=c.occ[(c.over+k)%2],b=old.occ[(old.over+k)%2];
-          return a.c!==b.c || circD(a.u,b.u)>1e-6 || a.dx*b.dx+a.dy*b.dy<0.999999;});
-      }))continue;
-      S.comps=candidate;S.crossings=r.crossings;S.nextId=next;S.moveCheckpoint=null;
-      return r;
-    }
-    return null;
-  }
-
-  // On release, a tiny genuine bigon (two crossings of the same strand pair,
-  // one strand over both times — the inverse of an R2 removal) is kept, not
-  // deleted, but nudged apart to a small visible gap rather than left pinned
-  // near-coincident. Only a bigon this drag actually tightened is touched —
-  // either newly born this gesture, or measurably closer than it was when
-  // the drag started — so unrelated pre-existing geometry is left alone.
-  // Blocked attempts (no room to separate without another topology change)
-  // are simply left as they are.
-  function separateTinyBigons(S, opt) {
-    const clearance = opt.clearance, before = opt.before;
-    if (!clearance || !before) return null;
-    let ev = { r1: 0, r2: 0, r3: 0 }, changed = false;
-    for (let guard = 0; guard < 8; guard++) {
-      const face = smallFaces(S.comps, S.crossings).find(f => {
-        if (f.type !== 'bigon' || f.alternating || f.crossingIds.length !== 2 || f.separation >= clearance - 1e-7) return false;
-        const prior = before.get(f.crossingIds.slice().sort((a, b) => a - b).join(':'));
-        return prior === undefined || prior > f.separation + 1e-6;
-      });
-      if (!face) break;
-      const Xa = S.crossings.find(x => x.id === face.crossingIds[0]), Xb = S.crossings.find(x => x.id === face.crossingIds[1]);
-      if (!Xa || !Xb) break;
-      const dx = Xb.x - Xa.x, dy = Xb.y - Xa.y, d = Math.hypot(dx, dy);
-      if (d < 1e-6) break; // no well-defined direction to separate along
-      const ux = dx / d, uy = dy / d, push = (clearance - d) / 2 + clearance * 0.05, sigma = Math.max(6, Math.min(clearance, d) * 0.6);
-      const r = adaptiveStep(S, (comps, scale) => {
-        const s = push * scale;
-        [[Xa, -1], [Xb, 1]].forEach(([X, sign]) => X.occ.forEach(o => moveWeighted(comps[o.c], 0, sign * ux * s, sign * uy * s, sigma, o.u)));
-      }, {});
-      if (!r.ok) break;
-      ev.r1 += r.ev.r1; ev.r2 += r.ev.r2; ev.r3 += r.ev.r3; changed = true;
-    }
-    return changed ? { ev } : null;
-  }
-
-  // Energy-style relaxation: short-range repulsion between distant parts of the curve + smoothing.
-  // This is the original relaxation exactly (raw point repulsion, immediate-neighbor
-  // corner smoothing) — restored as-is rather than the later, more aggressive rework.
+  // Energy-style relaxation: short-range repulsion between distant parts of
+  // the curve + smoothing toward the immediate-neighbor midpoint.
   function relaxMutator(comps, R, strength) {
     const CELL = R, grid = new Map();
     comps.forEach((cm, c) => cm.pts.forEach((q, i) => {
@@ -1121,7 +808,7 @@ const KC = (function () {
         disp[c][i].y = strength * fy + 0.3 * ((a.y + b.y) / 2 - q.y);
       }
     });
-    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2*strength) { x *= 1.2*strength / m; y *= 1.2*strength / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
+    comps.forEach((cm, c) => { cm.pts = cm.pts.map((q, i) => { let { x, y } = disp[c][i]; const m = Math.hypot(x, y); if (m > 1.2) { x *= 1.2 / m; y *= 1.2 / m; } return { x: q.x + x, y: q.y + y, u: q.u }; }); });
   }
 
 
@@ -1333,7 +1020,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, adaptiveStep, relaxStep, smallFaces, faceSizeViolation, crossingClearanceViolation, moveWeighted, relaxMutator, smoothCorners, indexOfU, loosenR1, separateTinyBigons, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1347,22 +1034,16 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  const stats = { r1: 0, r2: 0, r3: 0, flips: 0 };
-  const opts = { sigma: 40, under: false, protectBigons: true, protectKinks: false, bigonArea: 400, kinkArea: 180, loosenR1: true, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 80, under: false, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
   let prevTool = 'draw', redoStack = [], sel = null, lasso = null, clip = null, penTap = null, lastPenTap = null, pasteAt = null;
   const SNAP = 16;
-  // Minimum on-screen gap kept between protected crossings (drag, release
-  // correction, auto-relax). Comfortably larger than the ~16px double gap
-  // drawn at each crossing so separated crossings read as clearly apart.
-  const CROSSING_CLEARANCE = 32;
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
   let invariantKey=null,invariantWorker=null,invariantJob=0;
-  const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],stats:{r1:0,r2:0,r3:0,flips:0},moveCheckpoint:null});
-  const cleanStats = value => Object.fromEntries(['r1','r2','r3','flips'].map(k=>[k,Number.isSafeInteger(value?.[k])&&value[k]>=0?value[k]:0]));
+  const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],moveCheckpoint:null});
 
   const $ = id => document.getElementById(id);
   const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -1395,10 +1076,10 @@ const KC = (function () {
   // ---------- state management ----------
   function snapshot() {
     return { comps: KC.cloneComps(S.comps), crossings: KC.cloneCrossings(S.crossings), nextId: S.nextId,
-      open: S.open.map(st => ({ pts: st.pts.map(q => ({ x: q.x, y: q.y })) })), memory: S.memory.map(m => ({ ...m })), stats:{...stats},
+      open: S.open.map(st => ({ pts: st.pts.map(q => ({ x: q.x, y: q.y })) })), memory: S.memory.map(m => ({ ...m })),
       moveCheckpoint:S.moveCheckpoint ? {comps:KC.cloneComps(S.moveCheckpoint.comps),crossings:KC.cloneCrossings(S.moveCheckpoint.crossings)} : null };
   }
-  function restore(s) { S.comps = s.comps; S.crossings = s.crossings; S.nextId = s.nextId; S.open = s.open || []; S.memory = s.memory || []; S.moveCheckpoint=s.moveCheckpoint || null; Object.assign(stats,cleanStats(s.stats)); }
+  function restore(s) { S.comps = s.comps; S.crossings = s.crossings; S.nextId = s.nextId; S.open = s.open || []; S.memory = s.memory || []; S.moveCheckpoint=s.moveCheckpoint || null; }
   function pushUndo() { stopRelax(); undoStack.push(snapshot()); if (undoStack.length > 60) undoStack.shift(); redoStack = []; }
   function undo() {
     if (active) return;
@@ -1415,7 +1096,6 @@ const KC = (function () {
   function load(obj, keepView) {
     pushUndo();
     S.comps = obj.comps; S.crossings = obj.crossings; S.nextId = obj.nextId; S.open = []; S.memory = []; S.moveCheckpoint=null;
-    stats.r1 = stats.r2 = stats.r3 = stats.flips = 0;
     changed(); if (!keepView) fitView();
     clearSel(); if (tool === 'draw' || tool === 'erase' || tool === 'lasso') setTool('move');
   }
@@ -1427,18 +1107,17 @@ const KC = (function () {
 
   // ---------- save / open ----------
   const FORMAT = 'knot-lab', AUTOSAVE_KEY = 'knot-lab:autosave', WORKSPACE_KEY = 'knot-lab:workspace';
-  function serializeState(state, counts) {
+  function serializeState(state) {
     return {
       format:FORMAT,version:1,savedAt:new Date().toISOString(),
       comps:state.comps.map(cm=>cm.pts.map(q=>[q.x,q.y])),
       crossings:state.crossings.map(X=>{const o=X.occ[X.over];return [X.x,X.y,o.dx,o.dy];}),
       open:state.open.map(st=>st.pts.map(q=>[q.x,q.y])),
       crossingMemory:(state.memory||[]).map(m=>[m.x,m.y,m.ox,m.oy]),
-      pd:KC.analyze(state.comps,state.crossings).pd,
-      stats:cleanStats(counts)
+      pd:KC.analyze(state.comps,state.crossings).pd
     };
   }
-  function serialize() { return serializeState(S,stats); }
+  function serialize() { return serializeState(S); }
   function deserialize(data) {
     if (!data || data.format !== FORMAT || !Array.isArray(data.comps)) throw new Error('This is not a Knot Diagram Lab file');
     const toPts = a => {
@@ -1459,7 +1138,7 @@ const KC = (function () {
     });
     const open = (Array.isArray(data.open) ? data.open : []).map(toPts).filter(p => p.length >= 2).map(pts => ({ pts }));
     const memory=(Array.isArray(data.crossingMemory)?data.crossingMemory:[]).filter(m=>Array.isArray(m)&&m.length===4&&m.every(Number.isFinite)&&Math.hypot(m[2],m[3])>1e-8).slice(-800).map(([x,y,ox,oy])=>({x,y,ox,oy}));
-    return { comps, crossings: raw, nextId: id, open, memory, stats:cleanStats(data.stats) };
+    return { comps, crossings: raw, nextId: id, open, memory };
   }
   function defaultName() {
     const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -1504,7 +1183,7 @@ const KC = (function () {
     try {
       const data={format:'knot-lab-workspace',version:1,activeId:activeTabId,tabs:tabs.map(t=>({
         id:t.id,title:t.title,fileName:t.fileName,dirty:t.dirty,view:t.view,viewMode:t.viewMode,pdInput:t.pdInput,
-        document:serializeState(t.state,t.state.stats)
+        document:serializeState(t.state)
       }))};
       localStorage.setItem(WORKSPACE_KEY,JSON.stringify(data));
       localStorage.removeItem(AUTOSAVE_KEY);
@@ -1610,7 +1289,7 @@ const KC = (function () {
   function openTab(obj=blankState(), name='', dirty=false) {
     finishTabInteraction();stashTab();
     const id=String(nextTabId++),title=name || 'New diagram '+id;
-    const tab={id,title,fileName:name,pdInput:'',dirty,state:{...obj,stats:cleanStats(obj.stats),memory:obj.memory || [],moveCheckpoint:null},undo:[],redo:[],view:null,viewMode:'diagram'};
+    const tab={id,title,fileName:name,pdInput:'',dirty,state:{...obj,memory:obj.memory || [],moveCheckpoint:null},undo:[],redo:[],view:null,viewMode:'diagram'};
     tabs.push(tab);activateTab(id,false,false);return id;
   }
   function closeTab(id) {
@@ -1637,7 +1316,10 @@ const KC = (function () {
   $('fileName').addEventListener('input',()=>{const tab=currentTab();if(tab){tab.fileName=$('fileName').value;tab.title=tab.fileName.trim()||'New diagram '+tab.id;updateTabLabel(tab);scheduleAutosave();}});
 
   // ---------- braid import ----------
-  function relaxed(obj, iters) { for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj, CROSSING_CLEARANCE); if (!r.ok) break; } return obj; }
+  function relaxed(obj, iters) {
+    for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj); if (!r.ok) break; }
+    return obj;
+  }
   $('braidGo').onclick = () => {
     const word = $('braidIn').value.trim();
     if (!/^-?\d+(?:[\s,]+-?\d+)*$/.test(word)) { toast('Enter integers separated by spaces or commas', true); return; }
@@ -1770,48 +1452,65 @@ const KC = (function () {
     if(!result.ok){toast('Could not make this crossing order alternating. Check for overlapping or degenerate crossings.',true);return;}
     if(!result.flips){toast(S.crossings.length?'The closed diagram is already alternating':'No closed crossings to change');return;}
     stopRelax();pushUndo();S.moveCheckpoint=null;
-    S.crossings.forEach((X,i)=>X.over=result.over[i]);stats.flips+=result.flips;
+    S.crossings.forEach((X,i)=>X.over=result.over[i]);
     changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
   };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
-  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); stats.r1 = stats.r2 = stats.r3 = stats.flips = 0; changed(); setTool('draw'); };
+  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); changed(); setTool('draw'); };
   let relaxing = 0, relaxEpoch = 0;
+  const relaxLabel = text => { $('smoothBtn').textContent = text; $('relaxMove').textContent = text; };
   function stopRelax() {
     relaxing=0;relaxEpoch++;
-    $('smoothBtn').textContent='Auto-relax';
+    relaxLabel('Auto-relax');
   }
   function relaxFrames(total) {
     relaxing = total; let blockedOnce = false; const ownerTab=activeTabId, epoch=++relaxEpoch;
-    $('smoothBtn').textContent='Stop relaxing';
+    relaxLabel('Stop relaxing');
     const frame = () => {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S, CROSSING_CLEARANCE/view.s);
+        const r = KC.relaxStep(S);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
-        addEvents(r.ev);
       }
       changed();
-      if (relaxing > 0) requestAnimationFrame(frame); else {stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');}
+      if (relaxing > 0) requestAnimationFrame(frame); else {
+        stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
+      }
     };
     requestAnimationFrame(frame);
   }
-  $('cornerBtn').onclick = () => {
-    if (!S.comps.length && !S.open.length) return;
-    pushUndo(); let blocked = false, moved = 0;
+  // Round off sharp corners in place. The caller owns the undo step, so a
+  // drag can fold this into its own instead of adding a second one. Purely
+  // cosmetic: a pass that would add or remove a crossing is rolled back, so
+  // tidying up never quietly undoes the curl the user just made.
+  function smoothSharpCorners() {
+    let blocked = false, moved = 0;
     S.open.forEach(st => { moved += KC.smoothCorners(st.pts, false, { angle: 0.45, iters: 40, strength: 0.5 }); });
     for (let it = 0; it < 40; it++) {
       let m = 0;
+      const before = { comps: KC.cloneComps(S.comps), crossings: KC.cloneCrossings(S.crossings), nextId: S.nextId };
       const r = KC.attemptStep(S, comps => comps.forEach(cm => { m += KC.smoothCorners(cm.pts, true, { angle: 0.45, iters: 1, strength: 0.5 }); }), {});
-      if (!r.ok) { blocked = true; break; }
-      addEvents(r.ev); moved += m;
+      if (!r.ok || r.ev.r1 || r.ev.r2 || r.ev.r3 || S.crossings.length !== before.crossings.length) {
+        S.comps = before.comps; S.crossings = before.crossings; S.nextId = before.nextId;
+        blocked = true; break;
+      }
+      moved += m;
       if (!m) break;
     }
+    return { blocked, moved };
+  }
+  $('cornerBtn').onclick = () => {
+    if (!S.comps.length && !S.open.length) return;
+    pushUndo();
+    const { blocked, moved } = smoothSharpCorners();
     changed();
     toast(blocked ? 'Some corners were smoothed; further smoothing would require a blocked move' : moved ? 'Sharp corners smoothed' : 'No sharp corners to smooth', blocked);
   };
   $('cornerFix').onchange = e => { opts.cornerFix = e.target.checked; };
-  $('smoothBtn').onclick = () => { if(relaxing){stopRelax();return;} if (!S.comps.length) return; pushUndo(); relaxFrames(150); };
+  function toggleRelax() { if(relaxing){stopRelax();return;} if (!S.comps.length) return; pushUndo(); relaxFrames(150); }
+  $('smoothBtn').onclick = toggleRelax;
+  $('relaxMove').onclick = toggleRelax;
   $('undo').onclick = undo;
   $('redo').onclick = redo;
   $('fit').onclick = fitView;
@@ -1827,6 +1526,12 @@ const KC = (function () {
     if (t !== 'lasso') clearSel();
     tool = t; document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t));
     hoverX = hoverPt = hoverErase = hoverSnap = null;
+    // Hover state otherwise only updates on pointermove: switching to the
+    // Flip tool by keyboard while the cursor sits over a crossing (holding
+    // C, or pressing X) would show no highlight at all until the pointer
+    // physically moves. Recompute it immediately from the last known
+    // cursor position instead of waiting for that next move.
+    if (t === 'flip' && cursor) hoverX = nearestCrossing(cursor, 13 / view.s * 1.4);
     $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso'; $('optMove').hidden = t !== 'move';
     $('toolopts').hidden = !['draw', 'erase', 'lasso', 'move'].includes(t);
     updateHint(); render();
@@ -1853,11 +1558,6 @@ const KC = (function () {
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   $('sigma').oninput = e => { opts.sigma = +e.target.value; $('sigmaV').textContent = opts.sigma; };
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
-  ['protectBigons','protectKinks'].forEach((id,i)=>$(id).onchange=e=>{
-    opts[id]=e.target.checked; $(['bigonArea','kinkArea'][i]).disabled=!opts[id];
-  });
-  ['bigonArea','kinkArea'].forEach(id=>$(id).oninput=e=>{opts[id]=+e.target.value;$(id+'V').textContent=opts[id]+' px²';});
-  $('loosenR1').onchange = e => { opts.loosenR1 = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
 
@@ -1880,6 +1580,7 @@ const KC = (function () {
     // Momentary crossing-switch: held C acts like the Flip tool without
     // replacing whichever tool was active, and releasing C restores it.
     if (k === 'c') { if (!e.repeat && momentaryFlipTool === null) { momentaryFlipTool = tool; setTool('flip'); } return; }
+    if (k === 'a') { if (!e.repeat) toggleRelax(); return; }
     if (k === 'v') setTool('move'); else if (k === 'd') setTool('draw'); else if (k === 'x') setTool('flip'); else if (k === 'l') setTool('lasso');
     else if (k === 'e') { if (tool === 'erase') setEraseMode(opts.eraseMode === 'strand' ? 'precise' : 'strand'); else setTool('erase'); }
     else if (k === '1') setView('diagram'); else if (k === '2') setView('A'); else if (k === '3') setView('B'); else if (k === '4') setView('S');
@@ -1972,17 +1673,17 @@ const KC = (function () {
     }
     if (t === 'flip') {
       const X = nearestCrossing(w, tol * 1.4);
-      if (X) { pushUndo(); S.moveCheckpoint=null; X.over = 1 - X.over; stats.flips++; changed(); active = { ...base, kind: 'flip' }; }
+      if (X) { pushUndo(); S.moveCheckpoint=null; X.over = 1 - X.over; changed(); active = { ...base, kind: 'flip' }; }
       else startPan(e, base);
       return;
     }
     const hit = nearestPoint(w, tol);
     if (hit) {
       pushUndo();
-      const initialBigonSeparations = new Map(KC.smallFaces(S.comps, S.crossings)
-        .filter(f => f.type === 'bigon' && f.crossingIds.length === 2)
-        .map(f => [f.crossingIds.slice().sort((a, b) => a - b).join(':'), f.separation]));
-      drag = { c: hit.c, u: hit.u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under, initialCrossingIds: new Set(S.crossings.map(x=>x.id)), initialBigonSeparations };
+      // Snap the grab onto the vertex the drag will actually move, so the
+      // strand starts moving from exactly where the pointer is holding it.
+      const grabbed = S.comps[hit.c];
+      drag = { c: hit.c, u: grabbed.pts[KC.indexOfU(grabbed, hit.u)].u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
       if (!looping) { looping = true; requestAnimationFrame(tick); }
@@ -2035,15 +1736,10 @@ const KC = (function () {
     const a = active; active = null;
     if (!a) return;
     if (a.kind === 'drag') {
-      if (drag.changed) {
-        // A tiny bigon this drag tightened (born now, or shrunk from where it
-        // started) is kept but nudged apart on release so it is not left
-        // pinned near-coincident. Bundled into the drag's own undo step, not
-        // a separate one.
-        const sep = KC.separateTinyBigons(S, { clearance: CROSSING_CLEARANCE / view.s, before: drag.initialBigonSeparations });
-        if (sep) addEvents(sep.ev);
-      }
-      if (!drag.changed) undoStack.pop(); drag = null; cv.style.cursor = 'grab'; changed();
+      // Tidy up the kinks the gesture left behind, inside the drag's own undo
+      // step so one undo takes back both.
+      if (drag.changed) smoothSharpCorners(); else undoStack.pop();
+      drag = null; cv.style.cursor = 'grab'; changed();
     }
     else if (a.kind === 'pan') pan = null;
     else if (a.kind === 'draw') { const st = stroke; stroke = null; hoverSnap = null; finishStroke(st); }
@@ -2070,6 +1766,12 @@ const KC = (function () {
   const localXY = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 
   cv.addEventListener('pointerdown', e => {
+    // The canvas itself isn't focusable, so a lingering focus left on a
+    // text field (PD code, braid word, a tab rename, ...) would otherwise
+    // keep receiving key events after the user has moved on to the
+    // diagram — silently swallowing every single-letter shortcut, since
+    // they're deliberately suppressed while a text field looks focused.
+    if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur();
     if (e.pointerType === 'pen') {
       if (!input.penSeen) {
         input.penSeen = true; $('penStatus').textContent = 'Pen detected';
@@ -2178,31 +1880,40 @@ const KC = (function () {
     let steps = 0, blocked = null;
     const sig = opts.sigma;
     while (steps < 18) {
-      const cm = S.comps[drag.c], g = KC.pointAtS(cm,KC.arcPosOfU(cm,drag.u));
+      // Measure the distance left to travel on the very vertex the mutator is
+      // about to move. Measuring the interpolated position at drag.u instead
+      // left the two up to half a segment apart, so the strand was pulled from
+      // beside the grabbed point and the loop could keep stretching it while
+      // the pointer stood still.
+      const cm = S.comps[drag.c], g = cm.pts[KC.indexOfU(cm, drag.u)];
       const dx = drag.mx - g.x, dy = drag.my - g.y, d = Math.hypot(dx, dy);
       if (d < 0.8) break;
       const st = Math.min(2.5, d), c = drag.c, u = drag.u;
-      const r = KC.adaptiveStep(S, (comps,scale) => {
+      const r = KC.attemptStep(S, comps => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
-        KC.moveWeighted(cm, gi, dx / d * st * scale, dy / d * st * scale, sig, u);
+        KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
+        // Take up the slack around the grip as it moves: one smoothing pass
+        // over the vertices within reach of the grabbed one pulls each toward
+        // its neighbours' midpoint, so pulling on an already-stretched strand
+        // draws it back in instead of only ever paying out more of it.
+        if (opts.cornerFix) {
+          const gs = cm.cum[gi], lim = 3 * sig;
+          KC.smoothCorners(cm.pts, true, { angle: 0.5, iters: 1, strength: 0.5, mask: i => KC.sDist(cm, cm.cum[i], gs) < lim ? 1 : 0 });
+        }
       }, {
         under: drag.under,
-        faceLimits: {
-          bigon: opts.protectBigons ? {area:opts.bigonArea/(view.s*view.s),thickness:8/view.s,separation:16/view.s} : null,
-          kink: opts.protectKinks ? {area:opts.kinkArea/(view.s*view.s),thickness:6/view.s} : null
-        },
-        crossingClearance: CROSSING_CLEARANCE/view.s,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
       if (!r.ok) { blocked = r.reason; break; }
-      drag.changed = true; addEvents(r.ev); steps++;
-    }
-    if (opts.loosenR1 && (steps || blocked)) {
-      const simplified=KC.loosenR1(S,{component:drag.c,u:drag.u,radius:60/view.s,maxLoopLength:120/view.s,eligibleIds:drag.initialCrossingIds});
-      if(simplified) {drag.changed=true;addEvents(simplified.ev);steps++;blocked=null;}
+      // Re-anchor onto the vertex that just moved: resampling inserts points
+      // whose material coordinate can land nearer to drag.u than the grabbed
+      // one, which otherwise walks the grab backwards along a stretched strand.
+      const held = S.comps[drag.c];
+      drag.u = held.pts[KC.indexOfU(held, drag.u)].u;
+      drag.changed = true; steps++;
     }
     if (steps) changed();
-    if (blocked && blocked !== drag.lastBlocked) toast({ bigon: 'This non-R2 bigon is too small or thin. Adjust Protect non-R2 bigons in settings to allow it to shrink.', kink: 'This R1 kink is too small or thin. Adjust Protect R1 kinks in settings to allow it to shrink.', R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand would pass through another strand', clearance: 'These crossings cannot pass each other. Drag away to separate them.' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }
@@ -2397,7 +2108,7 @@ const KC = (function () {
     S.comps.push(comp);
     const ci = S.comps.length - 1, firstNew = S.nextId;
     const raw = KC.computeRaw(S.comps);
-    const r = KC.reconcile(S.crossings, S.comps, S.comps, raw, { nextId: () => S.nextId++, allowUnclassifiedBirths:true });
+    const r = KC.reconcile(S.crossings, S.comps, S.comps, raw, { nextId: () => S.nextId++ });
     const all = r.ok ? r.crossings : raw.map(X => (X.id = S.nextId++, X));
     const fresh = all.filter(X => X.id >= firstNew), self = [];
     fresh.forEach(X => {
@@ -2770,10 +2481,6 @@ const KC = (function () {
     if (did) { erasing && (erasing.changed = true); hoverErase = null; changed(); } else render();
   }
 
-  function addEvents(ev) {
-    ['r1', 'r2', 'r3'].forEach(k => { if (ev[k]) { stats[k] += ev[k]; const el = $('m' + k.toUpperCase()); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); } });
-  }
-
   // ---------- toast / hint / panel ----------
   let toastTimer = null;
   function toast(msg, warn) {
@@ -2856,8 +2563,6 @@ const KC = (function () {
     $('gTcalc').textContent = S.comps.length ? `(${a.k > 1 ? '2·' + a.k : '2'} + ${a.c} − ${a.sA.count} − ${a.sB.count}) / 2 = ${fmt(a.gT)}` : '';
     setText('vc', a.c); setText('vsA', a.sA.count); setText('vsB', a.sB.count);
     setText('vw', (a.writhe > 0 ? '+' : '') + a.writhe); setText('vmu', a.mu); setText('vs', a.sS.count); setText('vg', fmt(a.gSeif));
-    ['r1', 'r2', 'r3'].forEach(k => $('m' + k.toUpperCase()).querySelector('.n').textContent = stats[k]);
-    setText('nflip', stats.flips);
     $('makeAlternating').disabled=!a.c || a.alternating;
     const flags = [];
     if (a.c) {
@@ -3119,7 +2824,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos() };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos() };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };
