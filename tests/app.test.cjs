@@ -207,8 +207,9 @@ console.log('New R1 self-crossing, move count, undo and redo: PASS');
 }
 console.log('Shift held during a drag reverses underneath for that gesture only: PASS');
 
-// The move tool's own options bar carries drag radius and underneath, so
-// they are reachable without opening settings. Drag radius defaults to 80.
+// The move tool's own options bar carries drag radius, underneath and its own
+// Auto-relax button, so they are reachable without opening settings. Drag
+// radius defaults to 80.
 {
  const p=boot(),api=p.ctx.knotLab;
  assert.equal(p.ids.get('sigma').value,'80');
@@ -219,8 +220,65 @@ console.log('Shift held during a drag reverses underneath for that gesture only:
  assert(!p.ids.get('optMove').hidden);assert(!p.ids.get('toolopts').hidden);
  assert.equal(p.ids.get('optDraw').hidden,true);assert.equal(p.ids.get('optErase').hidden,true);assert.equal(p.ids.get('optLasso').hidden,true);
  p.ids.get('sigma').oninput({target:{value:'80'}});assert.equal(p.ids.get('sigmaV').textContent,'80');
+ assert(p.ids.has('relaxMove'),'The move options bar carries its own Auto-relax button');
 }
-console.log('The move tool options bar shows drag radius and underneath: PASS');
+console.log('The move tool options bar shows drag radius, underneath and Auto-relax: PASS');
+
+// Auto-relax is reachable from the move options bar and from the A shortcut,
+// and both track the same run: either one stops it again, and both labels
+// follow along.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ const geometry=()=>JSON.stringify(api.serialize().comps);
+ const labels=()=>[p.ids.get('smoothBtn').textContent,p.ids.get('relaxMove').textContent];
+ const before=geometry();
+ p.ids.get('relaxMove').onclick();p.step();
+ assert.notEqual(geometry(),before,'The options bar button must start relaxing');
+ assert.deepEqual(labels(),['Stop relaxing','Stop relaxing'],'Both buttons show the running state');
+ p.key('keydown',{key:'a'});p.flush();
+ assert.deepEqual(labels(),['Auto-relax','Auto-relax'],'A stops a run started from the options bar');
+ const stopped=geometry();
+ p.key('keydown',{key:'a'});p.step();
+ assert.notEqual(geometry(),stopped,'A starts a run as well');
+ assert.deepEqual(labels(),['Stop relaxing','Stop relaxing']);
+ p.ids.get('smoothBtn').onclick();p.flush();
+ assert.deepEqual(labels(),['Auto-relax','Auto-relax']);
+ // A typed into a text field must stay text, not a shortcut.
+ const quiet=geometry();
+ p.key('keydown',{key:'a',target:p.ids.get('pdInput')});p.step();
+ assert.equal(geometry(),quiet,'A inside a text field must not start relaxing');
+}
+console.log('Auto-relax from the move options bar and the A shortcut: PASS');
+
+// A drag tidies up the kinks it leaves behind when it ends, in the same undo
+// step, without changing the diagram's topology.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ api.importPD(pd);api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ const maxTurn=()=>Math.max(...api.state.comps.flatMap(c=>c.pts.map((q,i,a)=>{
+  const prev=a[(i+a.length-1)%a.length],next=a[(i+1)%a.length];
+  const ux=q.x-prev.x,uy=q.y-prev.y,vx=next.x-q.x,vy=next.y-q.y;
+  return Math.abs(Math.atan2(ux*vy-uy*vx,ux*vx+uy*vy));
+ })));
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ p.ids.get('sigma').oninput({target:{value:'10'}});
+ const hit=api.state.comps[0].pts[10],crossingsBefore=api.analysis.c;
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:31,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(hit.x,hit.y,'pointerdown'));
+ p.fire(canvas,'pointermove',ev(hit.x+70,hit.y+50,'pointermove'));
+ for(let i=0;i<12;i++)p.step();
+ const kinkedWhileHeld=maxTurn();
+ p.fire(canvas,'pointerup',ev(hit.x+70,hit.y+50,'pointerup'));p.flush();
+ assert(maxTurn()<=kinkedWhileHeld,'Releasing the strand must not leave it sharper than it was mid-drag');
+ assert.equal(api.analysis.c,crossingsBefore,'Tidying up must not add or remove a crossing');
+ const settled=JSON.stringify(api.serialize().comps);
+ p.ids.get('undo').click();
+ assert.equal(api.analysis.c,crossingsBefore);
+ assert.notEqual(JSON.stringify(api.serialize().comps),settled,'One undo takes back the drag and its tidy-up together');
+ p.ids.get('redo').click();
+ assert.equal(JSON.stringify(api.serialize().comps),settled);
+}
+console.log('A finished drag smooths its own sharp corners inside the drag undo step: PASS');
 
 // Momentary crossing-switch: holding C acts like the Flip tool without
 // discarding whichever tool was active, and releasing C restores it.

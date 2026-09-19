@@ -6,6 +6,13 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Stop blocking strand pass-throughs, fix the stretched-drag grab, auto-smooth after a drag (Claude Code, unreleased)
+
+- Remove the "a strand would pass through another strand" rejection. A step that carries a strand clean across another one — too wide a jump for the two births/deaths to pair up as an R2 — is just the reverse of the R2 that would undo it, so it is now accepted and simply left uncounted. A contradictory height order (R2 with different overstrands, cyclic R3) is still rejected. `reconcile`'s `allowUnclassifiedBirths` escape hatch is gone with it, since that is now the only behavior.
+- Fix a drag pulling the strand from beside the grabbed point: `tick()` measured the distance still to travel on the interpolated position at the grabbed material coordinate, but the mutator moved the *nearest vertex* to it — up to half a segment apart (measured 3.4px on a fresh curve, more once stretched, and multiplied by zoom on screen). Both now use the same vertex, and the grab is re-anchored to it after each step so the points resampling inserts into a stretched segment cannot walk the grab backwards along the strand. Verified over repeated stretch cycles in a browser: the curve stays within 0.03px of the pointer and stops creeping entirely while the pointer is held still.
+- Smooth sharp corners automatically when a drag ends, folded into the drag's own undo step. The pass is cosmetic only: a smoothing step that would add or remove a crossing is rolled back, so it cannot quietly undo a curl the drag just made. The manual "Smooth sharp corners" action gets the same guard.
+- Add <kbd>A</kbd> as the Auto-relax shortcut, and an Auto-relax button in the Drag strand tool's own options bar. Both share the main button's run state and label.
+
 ## Go all the way to the reference build's drawing engine, including computeRaw/reconcile/resampleComp (Claude Code, unreleased)
 
 The previous entry below kept this branch's `computeRaw`, `reconcile`, and `resampleComp` deliberately unreverted, for their correctness fixes. The project owner asked to drop that distinction and switch "drawing" to the reference build's code across the board instead, adding fixes back later only as actually needed:

@@ -53,6 +53,23 @@ const death=KC.reconcile(x,a,b,KC.computeRaw(b),{nextId:()=>id++});assert(death.
 const birth=KC.reconcile([],b,a,KC.computeRaw(a),{nextId:()=>id++});assert(birth.ok);assert.deepEqual(birth.ev,{r1:0,r2:1,r3:0});
 x[0].over=1-x[0].over;assert.equal(KC.reconcile(x,a,b,KC.computeRaw(b),{}).reason,'R2');
 console.log('R3 forward/reverse, cyclic-height rejection, no-op resampling, R2 birth/death and invalid R2: PASS');
+
+// Carrying a strand clean across another one in a single step is the reverse
+// of the R2 that would undo it, so it is accepted rather than rejected for
+// "passing through"; only a genuinely contradictory height order still is.
+{
+ const barLong=()=>poly([[-200,0],[200,0],[200,-60],[-200,-60]]);
+ const upright=()=>poly([[-100,-300],[-100,300],[-160,300],[-160,-300]]);
+ const s=state([barLong(),upright()]);
+ assert.equal(s.crossings.length,4);
+ const r=KC.attemptStep(s,cm=>{cm[1].pts.forEach(p=>{p.x+=900;});},{});
+ assert(r.ok,'A wide step carrying a strand past another must not be blocked');
+ assert.equal(s.crossings.length,0);
+ const back=state([barLong(),upright()]);
+ const rb=KC.attemptStep(back,cm=>{cm[1].pts.forEach(p=>{p.x-=900;});},{});
+ assert(rb.ok);assert.equal(back.crossings.length,0);
+}
+console.log('A strand carried across another in one step is allowed, not blocked as a pass-through: PASS');
 const curled=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat=poly([[-20,0],[20,0],[20,20],[-20,20]]);
 const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});

@@ -59,7 +59,8 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 ## Geometry and editing behavior
 
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
-- Dragging does not automatically round corners. Separate smoothing actions are available.
+- A drag rounds off its own sharp corners when it ends; the standalone smoothing actions remain available for everything else.
+- A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
 - R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle; a step sampled so that it lands exactly on an R3 slide's triple point can count that R3 twice (once approaching it, once leaving) rather than once for the whole slide — a move-count quirk, not a topology error.
 - Undo and redo restore move counts as well as geometry.
 - Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
@@ -99,7 +100,9 @@ When a drawn stroke starts or ends at an existing open endpoint, its new connect
 
 The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. The draw hint explains the joining rule in English. Free strokes and the separate drag-under setting keep their existing defaults.
 
-Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way — existing topology checks still reject invalid R2/R3 moves and unclassified strand passages that could change the knot type.
+Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way. A step that carries a strand clean across another one is accepted too, since it is just the reverse of the R2 that would undo it; only a contradictory height order (R2 with different overstrands, or a cyclic R3) is still rejected.
+
+When a drag ends, the strand's sharp corners are smoothed automatically, inside the drag's own undo step. That pass is cosmetic only — any smoothing that would add or remove a crossing is rolled back, so it never quietly undoes a curl that was just made.
 
 ## No size or distance floor on dragging or auto-relax
 
