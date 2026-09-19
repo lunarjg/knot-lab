@@ -60,6 +60,7 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
 - A drag rounds off its own sharp corners when it ends, and takes up the slack around the grip while it is in progress; the standalone smoothing actions remain available for everything else.
+- A drag that pushed crossings into each other eases them back apart when it ends, unless that is switched off in Settings.
 - A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
 - R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle. The classification decides only whether a step is accepted; it is not displayed, so a step sampled exactly on an R3 slide's triple point being classified as two R3s rather than one has no visible effect.
 - Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
@@ -89,7 +90,7 @@ The owning account manages source editing and publication through Sites. Visitor
 ## Interaction update
 
 - Open files is next to the document tabs. Each selected JSON opens in its own tab; invalid files do not replace existing documents or prevent subsequent files from opening.
-- Only real topology (Reidemeister validity) gates a drag or auto-relax step — there is no separate size or distance floor on bigons, kinks, or crossing spacing. Crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.
+- Only real topology (Reidemeister validity) gates a drag or auto-relax step — there is no separate size or distance floor on bigons, kinks, or crossing spacing. Crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid; the optional release-time separation is the one correction that can follow, after the gesture is over.
 - The precise eraser outline follows pointer-down, drag, coalesced samples, and release coordinates. One erase gesture remains one undo step.
 - Regression checks cover batch file opening, selected tabs, mouse/pen/touch erasing, crossing proximity, and the original Reidemeister classification.
 
@@ -107,7 +108,19 @@ While a drag is in progress, the same smoothing runs each step over the stretch 
 
 ## No size or distance floor on dragging or auto-relax
 
-A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move; whatever the diagram is left holding when the gesture ends is exactly what stays, with no automatic separation or correction afterward.
+A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move. Nothing gates or corrects the geometry while the gesture is in progress; the one correction that can follow is the release-time separation below, and switching it off restores exactly the old behavior of keeping whatever the gesture left.
+
+## Separating overlapping crossings
+
+**Separate overlapping crossings** (Settings → Dragging, on by default) runs once a drag ends. Any two crossings the drag pushed into each other repel slightly, like weak magnets, until they clear 24 world units — far enough that their drawn undercrossing breaks (which reach `min(12, 8/view.s)` either side) cannot touch at any zoom, while staying a few segments (`SEG` is 7) of nudge rather than a rearrangement.
+
+Three properties keep it from acting behind the user's back:
+
+- **Only pairs the gesture tightened move.** Pairwise crossing distances are snapshotted by id when the drag starts; a pair is eligible only if it is newly formed, or measurably closer than it was then. A diagram that was already drawn tight — an import, or a deliberately crowded region — is left exactly as it is.
+- **It cannot change the topology.** Every nudge goes through the same `attemptStep` as any other move and is rolled back unless the crossing count and the Reidemeister event counters both come back untouched. Separating can never add, remove, or reorder a crossing.
+- **A pair with nowhere to go is skipped, not forced.** It is recorded as stuck and the pass moves on to the pairs that can still separate, so one wedged pair does not stop the rest.
+
+The nudge rides the drag's own undo step, so one undo takes back the drag and the separation together. It runs before the drag-end corner smoothing, not after: smoothing first pulls a squeezed bigon tighter, and measured on a tight fixture that ordering ends at a 5.2-unit gap instead of 27.2.
 
 ## Make an alternating diagram
 

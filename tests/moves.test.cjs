@@ -70,6 +70,44 @@ console.log('R3 forward/reverse, cyclic-height rejection, no-op resampling, R2 b
  assert(rb.ok);assert.equal(back.crossings.length,0);
 }
 console.log('A strand carried across another in one step is allowed, not blocked as a pass-through: PASS');
+
+// Release-time crossing separation only touches pairs the gesture tightened,
+// never pre-existing tight geometry, and never changes the topology.
+{
+ // A tight two-crossing bigon: both crossings sit well inside the 24 gap.
+ const bigon=()=>[
+  [[-80,-40],[-6,0],[0,4],[6,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-6,0],[0,-4],[6,0],[80,40],[80,100],[-80,100]]
+ ].map(poly);
+ // Untouched by any gesture: `before` already records today's distance, so
+ // nothing about the pair counts as tightened and it must be left alone.
+ const kept=state(bigon());
+ assert.equal(kept.crossings.length,2);
+ const wasKept=Math.hypot(kept.crossings[0].x-kept.crossings[1].x,kept.crossings[0].y-kept.crossings[1].y);
+ assert(wasKept<24,'The fixture must start inside the separation gap');
+ const noop=KC.separateCrossings(kept,{gap:24,before:KC.crossingDistances(kept.crossings)});
+ assert.equal(noop,0,'Pre-existing tight crossings must not be rearranged');
+ const stillKept=Math.hypot(kept.crossings[0].x-kept.crossings[1].x,kept.crossings[0].y-kept.crossings[1].y);
+ assert.equal(stillKept.toFixed(6),wasKept.toFixed(6));
+
+ // Same geometry, but `before` says the pair used to be far apart, i.e. this
+ // gesture is what squeezed them together. Now it separates.
+ const moved=state(bigon());
+ const far=new Map([[moved.crossings[0].id+':'+moved.crossings[1].id,500]]);
+ const n=KC.separateCrossings(moved,{gap:24,before:far});
+ assert(n>0,'A pair the gesture tightened must be separated');
+ assert.equal(moved.crossings.length,2,'Separation must not add or remove a crossing');
+ const after=Math.hypot(moved.crossings[0].x-moved.crossings[1].x,moved.crossings[0].y-moved.crossings[1].y);
+ assert(after>wasKept,'Separation must increase the distance');
+ assert(after>=24,'Separation must reach the requested gap');
+ assert.equal(KC.analyze(moved.comps,moved.crossings).c,2);
+
+ // Switched off at the call site (no gap, or no before snapshot) it is inert.
+ const inert=state(bigon());
+ assert.equal(KC.separateCrossings(inert,{gap:0,before:far}),0);
+ assert.equal(KC.separateCrossings(inert,{gap:24,before:null}),0);
+}
+console.log('Release-time separation moves only the crossings a gesture tightened, and preserves topology: PASS');
 const curled=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat=poly([[-20,0],[20,0],[20,20],[-20,20]]);
 const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});

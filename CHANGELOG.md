@@ -6,6 +6,15 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Separate overlapping crossings when a drag ends (Claude Code, unreleased)
+
+- Add **Separate overlapping crossings** (Settings → Dragging, on by default). When a drag ends, any two crossings the drag pushed into each other repel slightly, like weak magnets, until they clear 24 world units — enough that their drawn undercrossing breaks (`min(12, 8/view.s)` either side) cannot touch at any zoom, while staying a few segments (`SEG` is 7) of nudge rather than a rearrangement.
+- Only pairs the gesture actually tightened move. `KC.crossingDistances` snapshots pairwise distances by crossing id when the drag starts, and `KC.separateCrossings` skips any pair that is neither newly formed nor measurably closer than it was then — so an import, or a region deliberately drawn tight, is left exactly as it is.
+- The pass cannot change the topology: every nudge goes through the same `attemptStep` as any other move and is rolled back unless the crossing count and the R1/R2/R3 event counters both come back untouched. A pair with nowhere to go is recorded as stuck and skipped, so one wedged pair does not stop the pass for the rest.
+- It rides the drag's own undo step, so one undo takes back the drag and the separation together, and it runs *before* the drag-end corner smoothing rather than after — smoothing first pulls a squeezed bigon tighter, and on a tight fixture that ordering settles at a 5.2-unit gap instead of 27.2. The push overshoots the gap by 15% to absorb the few percent the following smoothing pulls back.
+- Rewrote the test that previously asserted the opposite ("no release correction", from when the old clearance machinery was removed) to run the same squeeze both ways: the drag is still never blocked and both crossings still survive, the setting off leaves them where the drag left them, and the setting on separates them. Added core coverage that a pre-existing tight pair is not rearranged, that a tightened pair is, and that neither changes the crossing count.
+- Verified in a browser on an imported trefoil by dragging one crossing directly onto another: the closest pair goes to 0.0 while held either way, and on release stays 0.0 with the setting off versus 21.8 with it on, with no console or page errors.
+
 ## Remove the Reidemeister move counters (Claude Code, unreleased)
 
 - Remove the inspector's "Reidemeister move counts" section entirely: the R1/R2/R3 tiles, their pulse-on-change animation, and the "Crossing changes" tally that lived in the same section. The `stats` object and all of its plumbing go with them — undo/redo snapshots, `serializeState`, saved JSON, workspace autosave, and per-tab state no longer carry counts.

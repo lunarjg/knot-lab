@@ -434,28 +434,46 @@ for(const fix of [false,true])for(const horizontalFirst of [false,true]) {
 }
 console.log('Arc connectors pass under existing open/closed/self arcs, visual gaps, both closure orders, JSON/autosave, tabs and undo/redo: PASS');
 
-// Squeezing a bigon down to a tiny gap must not be blocked mid-drag, and on
-// release the crossings are kept exactly where the drag left them — no
-// separate size or distance floor of any kind gates or corrects the result.
+// Squeezing a bigon down to a tiny gap must not be blocked mid-drag. On
+// release, "Separate overlapping crossings" eases the two crossings the drag
+// pushed together back apart; with the setting off they stay exactly where
+// the drag left them. Either way both crossings survive and undo restores.
 {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
- const d=api.serialize();d.comps=[
- [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
- [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
- ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
- api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
- for(let i=0;i<8;i++)p.step();
- p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
- assert.equal(api.state.crossings.length,2,'A tiny genuine bigon must keep both crossings, not collapse');
- const [a,b]=api.state.crossings;
- assert(Math.hypot(a.x-b.x,a.y-b.y)<16,'Nothing nudges the crossings back apart on release');
- p.ids.get('undo').click();
- assert.equal(api.state.crossings.length,2);
+ const squeeze=separate=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+  const d=api.serialize();d.comps=[
+  [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
+  ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
+  api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
+  p.ids.get('separate').onchange({target:{checked:separate}});
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
+  for(let i=0;i<8;i++)p.step();
+  const held=api.state.crossings.map(X=>({x:X.x,y:X.y}));
+  assert.equal(held.length,2,'The squeeze itself must not be blocked or collapse the bigon');
+  const squeezed=Math.hypot(held[0].x-held[1].x,held[0].y-held[1].y);
+  p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
+  assert.equal(api.state.crossings.length,2,'A tiny genuine bigon must keep both crossings, not collapse');
+  const [a,b]=api.state.crossings;
+  return {p,api,squeezed,released:Math.hypot(a.x-b.x,a.y-b.y)};
+ };
+ const off=squeeze(false);
+ assert(off.squeezed<16,'The drag must be able to squeeze the bigon tight in the first place');
+ assert(off.released<16,'With separation off, nothing may nudge the crossings back apart on release');
+ const on=squeeze(true);
+ assert(on.released>off.released,'Separation must push the squeezed crossings apart');
+ assert(on.released>=20,'Separation must clear the drawn undercrossing breaks');
+ // The nudge rides the drag's own undo step, and cannot change the topology.
+ on.p.ids.get('undo').click();
+ assert.equal(on.api.state.crossings.length,2);
+ const [ua,ub]=on.api.state.crossings;
+ assert(Math.hypot(ua.x-ub.x,ua.y-ub.y)>on.released,'Undo must restore the pre-drag geometry, not the separated one');
+ off.p.ids.get('undo').click();
+ assert.equal(off.api.state.crossings.length,2);
 }
-console.log('Tiny genuine R2-birth bigons are kept exactly where a drag leaves them, no release correction: PASS');
+console.log('A drag that squeezes a bigon is not blocked, and release-time crossing separation can be switched off: PASS');
 
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
