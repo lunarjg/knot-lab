@@ -58,11 +58,9 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 
 ## Geometry and editing behavior
 
-- Resampling preserves corners that affect crossings, preventing crossings from disappearing and being counted as R2 moves without an actual movement.
+- Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
 - Dragging does not automatically round corners. Separate smoothing actions are available.
-- R2 validation checks whether adjacent crossings on both strands bound an empty bigon.
-- R3 validation checks crossing-order reversals on all three sides of an empty triangle and verifies a consistent height order.
-- Intermediate frames at an exact triple point are compared with the last regular diagram to avoid counting a move twice.
+- R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle; a step sampled so that it lands exactly on an R3 slide's triple point can count that R3 twice (once approaching it, once leaving) rather than once for the whole slide — a move-count quirk, not a topology error.
 - Undo and redo restore move counts as well as geometry.
 - Document tabs support multiple-file opening, workspace autosave, and migration from older single-document saves.
 
@@ -105,7 +103,7 @@ Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand 
 
 ## No size or distance floor on dragging or auto-relax
 
-A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move; whatever the diagram is left holding when the gesture ends is exactly what stays, with no automatic separation or correction afterward. A tangential touch that never actually crosses to the other side still does not register as a crossing at all.
+A drag or an auto-relax step is gated only by real topology (Reidemeister validity, via `reconcile`) — there is no separate size floor on bigons or kinks, and no minimum distance floor between crossings. Crossings are free to pass arbitrarily close together, or briefly overlap, for as long as the move stays a valid Reidemeister move; whatever the diagram is left holding when the gesture ends is exactly what stays, with no automatic separation or correction afterward.
 
 ## Make an alternating diagram
 

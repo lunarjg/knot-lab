@@ -542,48 +542,16 @@ const KC = (function () {
       const kept = [out[0]];
       for (let i = 1; i < out.length; i++) {
         const q = kept[kept.length - 1];
-        const b = out[(i + 1) % out.length], a = out[i];
-        const vx = b.x - q.x, vy = b.y - q.y, len2 = vx * vx + vy * vy;
-        const along = (a.x-q.x)*vx + (a.y-q.y)*vy;
-        const deviation = Math.abs((a.x-q.x)*vy - (a.y-q.y)*vx);
-        // Removing a corner can create/delete crossings without any user movement.
-        // Only remove a point lying on the unchanged straight segment.
-        if (Math.hypot(a.x-q.x,a.y-q.y) < 0.45*SEG && len2 > 0 && along >= 0 && along <= len2 && deviation < 1e-10*Math.sqrt(len2)) continue;
+        if (Math.hypot(out[i].x - q.x, out[i].y - q.y) < 0.45 * SEG) continue;
         kept.push(out[i]);
       }
       while (kept.length > 16) {
         const l = kept[kept.length - 1], f = kept[0];
-        if (Math.hypot(l.x-f.x,l.y-f.y) < 1e-10) kept.pop(); else break;
+        if (Math.hypot(l.x - f.x, l.y - f.y) < 0.45 * SEG) kept.pop(); else break;
       }
       comp.pts = kept;
     } else comp.pts = out;
     updateGeom(comp);
-  }
-
-  // resampleComp only ever splits segments that grew too long; a point is
-  // dropped only when it sits (to within floating-point noise) exactly on
-  // the straight chord between its neighbors, so that removing it can never
-  // change which crossings exist. That guarantee makes it effectively
-  // one-directional once every point is nudged by a force each step (as
-  // relaxation does): points accumulate every step and are almost never
-  // removed, so the curve grows without bound over repeated relaxation.
-  // Rebuild the point list at even arc-length spacing instead, preserving
-  // material (u) coordinates by interpolation exactly as resampleComp does;
-  // the caller is expected to verify this did not change the topology
-  // (see compactStep) before keeping it, since unlike resampleComp this can
-  // shift a vertex that happens to sit at a crossing.
-  function compactPts(pts, spacing) {
-    const n = pts.length, cum = [0];
-    for (let i = 0; i < n; i++) { const a = pts[i], b = pts[(i + 1) % n]; cum.push(cum[i] + Math.hypot(b.x - a.x, b.y - a.y)); }
-    const L = cum[n], m = Math.max(16, Math.round(L / spacing)), out = [];
-    let j = 0;
-    for (let k = 0; k < m; k++) {
-      const s = k * L / m;
-      while (j < n - 1 && cum[j + 1] < s) j++;
-      const a = pts[j], b = pts[(j + 1) % n], f = (s - cum[j]) / ((cum[j + 1] - cum[j]) || 1), du = circSigned(a.u, b.u);
-      out.push({ x: a.x + f * (b.x - a.x), y: a.y + f * (b.y - a.y), u: mod(a.u + f * du, 1) });
-    }
-    return out;
   }
 
   function mkOcc(comps, c, i, t) {
@@ -595,18 +563,12 @@ const KC = (function () {
   // All transverse self/mutual intersections of the closed polylines
   function computeRaw(comps) {
     const CELL = 24, grid = new Map();
-    // The same intersection can round to opposite sides of a grid boundary.
-    // Use one canonical cell for both segment bounds and intersection ownership.
-    const cellOf = v => {
-      const q=v/CELL, nearest=Math.round(q);
-      return Math.abs(q-nearest)<1e-12 ? nearest : Math.floor(q);
-    };
     comps.forEach((cm, c) => {
       const p = cm.pts, n = p.length;
       for (let i = 0; i < n; i++) {
         const a = p[i], b = p[(i + 1) % n];
-        const x0 = cellOf(Math.min(a.x, b.x)), x1 = cellOf(Math.max(a.x, b.x));
-        const y0 = cellOf(Math.min(a.y, b.y)), y1 = cellOf(Math.max(a.y, b.y));
+        const x0 = Math.floor(Math.min(a.x, b.x) / CELL), x1 = Math.floor(Math.max(a.x, b.x) / CELL);
+        const y0 = Math.floor(Math.min(a.y, b.y) / CELL), y1 = Math.floor(Math.max(a.y, b.y) / CELL);
         for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
           const key = (cx + 32768) * 65536 + (cy + 32768);
           let l = grid.get(key); if (!l) { l = []; grid.set(key, l); }
@@ -628,26 +590,10 @@ const KC = (function () {
           const den = rx * sy - ry * sx;
           if (Math.abs(den) < 1e-12) continue;
           const qx = b1.x - a1.x, qy = b1.y - a1.y;
-          const endpoint = t => Math.abs(t)<1e-12 ? 0 : Math.abs(t-1)<1e-12 ? 1 : t;
-          const t = endpoint((qx * sy - qy * sx) / den), w = endpoint((qx * ry - qy * rx) / den);
+          const t = (qx * sy - qy * sx) / den, w = (qx * ry - qy * rx) / den;
           if (t < 0 || t >= 1 || w < 0 || w >= 1) continue;
-          // A touch landing exactly on a curve's own vertex is shared between that
-          // vertex's two segments. Only count it if the curve actually crosses to
-          // the other side there; a tangential graze that stays on one side (or
-          // merely reaches the other curve and backs off) is not a real crossing.
-          const side = (ox, oy, dx, dy, px, py) => dx * (py - oy) - dy * (px - ox);
-          if (t === 0) {
-            const prev = P[(i - 1 + n1) % n1];
-            const s1 = side(b1.x, b1.y, sx, sy, prev.x, prev.y), s2 = side(b1.x, b1.y, sx, sy, a2.x, a2.y);
-            if (s1 * s2 > 1e-9) continue;
-          }
-          if (w === 0) {
-            const prev2 = Q[(j - 1 + n2) % n2];
-            const p1 = side(a1.x, a1.y, rx, ry, prev2.x, prev2.y), p2 = side(a1.x, a1.y, rx, ry, b2.x, b2.y);
-            if (p1 * p2 > 1e-9) continue;
-          }
           const x = a1.x + t * rx, y = a1.y + t * ry;
-          if (cellOf(x) !== cx || cellOf(y) !== cy) continue;
+          if (Math.floor(x / CELL) !== cx || Math.floor(y / CELL) !== cy) continue;
           res.push({ x, y, id: 0, over: 0, occ: [mkOcc(comps, c1, i, t), mkOcc(comps, c2, j, w)] });
         }
       }
@@ -712,21 +658,6 @@ const KC = (function () {
       return sDist(cm[a.c], a.s, na.s) + sDist(cm[b.c], b.s, nb.s) + 0.5 * Math.hypot(A.x - B.x, A.y - B.y);
     };
 
-    const isBigon = (A,B,perm,cm,all) => {
-      const det=(a,b)=>a.dx*b.dy-a.dy*b.dx;
-      if(det(A.occ[0],A.occ[1])*det(B.occ[perm],B.occ[1-perm])>=0)return false;
-      for(let k=0;k<2;k++) {
-        const a=A.occ[k],b=B.occ[k^perm];
-        if(a.c!==b.c)return false;
-        const L=cm[a.c].len,forward=mod(b.s-a.s,L);
-        const start=forward<=L/2?a.s:b.s,span=Math.min(forward,L-forward);
-        for(const X of all)for(const o of X.occ)if(o!==a&&o!==b&&o.c===a.c) {
-          const d=mod(o.s-start,L);if(d>1e-7&&d<span-1e-7)return false;
-        }
-      }
-      return true;
-    };
-
     // --- deaths: must be R1 (tiny empty loop) or a valid R2 pair (same strand on top in both)
     const doneD = new Set();
     for (const d of deaths) {
@@ -736,7 +667,7 @@ const KC = (function () {
         if (e === d || doneD.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
           const c = pairCost(d, e, perm, oldComps);
-          if (c < 70 && isBigon(d,e,perm,oldComps,oldX) && (!best || c < best[0])) best = [c, e, perm];
+          if (c < 70 && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       if (best) {
@@ -766,7 +697,7 @@ const KC = (function () {
         if (e === b || doneB.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
           const c = pairCost(b, e, perm, comps);
-          if (c < 60 && isBigon(b,e,perm,comps,raw) && (!best || c < best[0])) best = [c, e, perm];
+          if (c < 60 && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       b.id = nextId(); b.over = decide(b); doneB.add(b);
@@ -777,45 +708,45 @@ const KC = (function () {
       else if (!opt.allowUnclassifiedBirths) return {ok:false,reason:'pass'};
     }
 
-    // R3 changes the order on all three sides of one empty triangular region.
-    // Use occurrence adjacency, including the cyclic seam and two-crossing components.
-    const keyOf = (X,k) => X.id + ':' + (k === X.over ? 'o' : 'u');
-    const before = new Map(), after = new Map(), byCross = new Map();
-    const build = (xs, cm, table) => {
-      const lists = cm.map(() => []);
-      xs.forEach(X => X.occ.forEach((o,k) => {
-        const e={X,k,o,key:keyOf(X,k),neighbors:[]}; table.set(e.key,e);lists[o.c].push(e);
-      }));
-      lists.forEach(list => {
-        list.sort((a,b)=>a.o.s-b.o.s);
-        if(list.length<2)return;
-        list.forEach((e,i)=>e.neighbors=[list[(i+list.length-1)%list.length],list[(i+1)%list.length]]);
-      });
-    };
-    build(oldX, oldComps, before);build(raw, comps, after);
-    for(const O of mO.keys()) byCross.set(O.id,O);
-    const signed = (a,b,cm) => circSigned(a.o.s/cm[a.o.c].len,b.o.s/cm[b.o.c].len)*cm[a.o.c].len;
-    const reversal = (a,b) => {
-      const na=after.get(a.key),nb=after.get(b.key);
-      if(!na||!nb||!na.neighbors.some(e=>e.key===nb.key))return false;
-      const x=signed(a,b,oldComps),y=signed(na,nb,comps);
-      return Math.abs(x)>1e-7 && Math.abs(y)>1e-7 && x*y<0;
-    };
-    const seen=new Set();
-    for(const X of byCross.values()) for(let k=0;k<2;k++) {
-      const xa=before.get(keyOf(X,k)),xb=before.get(keyOf(X,1-k));
-      for(const ya of xa.neighbors) for(const zb of xb.neighbors) {
-        const Y=ya.X,Z=zb.X;
-        if(X===Y||X===Z||Y===Z||!byCross.has(Y.id)||!byCross.has(Z.id))continue;
-        const yc=before.get(keyOf(Y,1-ya.k)),zc=before.get(keyOf(Z,1-zb.k));
-        if(!yc.neighbors.some(e=>e.key===zc.key))continue;
-        if(!reversal(xa,ya)||!reversal(xb,zb)||!reversal(yc,zc))continue;
-        const key=[X.id,Y.id,Z.id].sort((a,b)=>a-b).join(',');
-        if(seen.has(key))continue;
-        // A above B, A above C, B above C must admit a consistent height order.
-        const ab=X.over===k,ac=Y.over===ya.k,bc=Z.over===zb.k;
-        if((ab&&bc&&!ac)||(!ab&&!bc&&ac))return {ok:false,reason:'R3'};
-        seen.add(key);ev.r3++;
+    // --- R3: crossings swapping order along a strand pass through a triple point; heights must not be cyclic
+    const keyOf = (X, k) => X.id + (k === X.over ? 'o' : 'u');
+    const seqOld = comps.map(() => []), seqNew = comps.map(() => []);
+    for (const [O, N] of mO) {
+      O.occ.forEach((o, k) => seqOld[o.c].push({ s: o.s, key: keyOf(O, k), X: O, k }));
+      N.occ.forEach((o, k) => seqNew[o.c].push({ s: o.s, key: keyOf(N, k), X: N, k }));
+    }
+    const matchedNew = raw.filter(N => mN.has(N));
+    const seen = new Set();
+    for (let c = 0; c < comps.length; c++) {
+      const A = seqOld[c].sort((p, q) => p.s - q.s), B = seqNew[c].sort((p, q) => p.s - q.s), m = A.length;
+      if (m < 3 || B.length !== m) continue;
+      const pos = new Map(); B.forEach((e, i) => pos.set(e.key, i));
+      const off = pos.get(A[0].key);
+      let same = off !== undefined;
+      if (same) for (let i = 0; i < m; i++) if (B[(off + i) % m].key !== A[i].key) { same = false; break; }
+      if (same) continue;
+      for (let i = 0; i < m; i++) {
+        const x = A[i], y = A[(i + 1) % m], px = pos.get(x.key), py = pos.get(y.key);
+        if (px === undefined || py === undefined || py !== (px - 1 + m) % m) continue;
+        const nx = B[px], ny = B[py], X = nx.X, Y = ny.X;
+        if (X === Y || Math.hypot(X.x - Y.x, X.y - Y.y) > 60) continue;
+        const P = X.occ[1 - nx.k], Q = Y.occ[1 - ny.k];
+        let bz = null;
+        for (const Z of matchedNew) {
+          if (Z === X || Z === Y || Math.hypot(Z.x - X.x, Z.y - X.y) > 80) continue;
+          for (let j = 0; j < 2; j++) {
+            const zp = Z.occ[j], zq = Z.occ[1 - j];
+            if (zp.c !== P.c || zq.c !== Q.c) continue;
+            const cost = sDist(comps[P.c], zp.s, P.s) + sDist(comps[Q.c], zq.s, Q.s);
+            if (cost < 160 && (!bz || cost < bz[0])) bz = [cost, Z, j];
+          }
+        }
+        if (!bz) continue;
+        const [, Z, j] = bz;
+        const a = nx.k === X.over, b = ny.k === Y.over, cc = Z.over === j;
+        if ((a && cc && !b) || (!a && !cc && b)) return { ok: false, reason: 'R3' };
+        const key = [X.id, Y.id, Z.id].sort((p, q) => p - q).join(',');
+        if (!seen.has(key)) { seen.add(key); ev.r3++; }
       }
     }
     return { ok: true, crossings: raw, ev };
@@ -823,21 +754,12 @@ const KC = (function () {
 
   function attemptStep(S, mutator, opt) {
     const backup = cloneComps(S.comps);
-    const next = S.nextId;
-    const baseline = S.moveCheckpoint || { comps:backup, crossings:cloneCrossings(S.crossings) };
     mutator(S.comps);
     S.comps.forEach(resampleComp);
     const raw = computeRaw(S.comps);
-    const r = reconcile(baseline.crossings, baseline.comps, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
-    if (!r.ok) { S.comps = backup; S.nextId = next; return r; }
+    const r = reconcile(S.crossings, backup, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
+    if (!r.ok) { S.comps = backup; return r; }
     S.crossings = r.crossings;
-    // A frame exactly on a triple point has no well-defined crossing order:
-    // crossings genuinely coincide there as the diagram passes through, most
-    // often mid-way through a valid R3 slide. Keep the last regular diagram
-    // and classify once the strands separate.
-    const singular = raw.some((x,i) => raw.slice(i+1).filter(y=>Math.hypot(x.x-y.x,x.y-y.y)<1e-6).length>=2);
-    if (singular) { S.moveCheckpoint = baseline; r.ev = {r1:0,r2:0,r3:0}; }
-    else S.moveCheckpoint = null;
     return r;
   }
   // Auto-relax's step: the same attemptStep every other move goes through,
@@ -845,15 +767,6 @@ const KC = (function () {
   // stops the run.
   function relaxStep(S) {
     return attemptStep(S, comps => relaxMutator(comps, 40, 1.0), {});
-  }
-  // Rebuild every component at even spacing to undo the one-directional
-  // point growth from repeated relaxation (see compactPts). Routed through
-  // attemptStep so the usual topology check rejects (and rolls back) the
-  // rare case where compaction would itself shift a crossing's parameter
-  // enough to look like a move; skipping is always safe, just leaves the
-  // extra points until the next attempt.
-  function compactStep(S) {
-    return attemptStep(S, comps => comps.forEach(cm => { cm.pts = compactPts(cm.pts, SEG); }), {});
   }
 
   function moveWeighted(comp, gi, ux, uy, sigma) {
@@ -1118,7 +1031,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, relaxStep, compactStep, compactPts, moveWeighted, relaxMutator, smoothCorners, indexOfU, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1419,11 +1332,7 @@ const KC = (function () {
 
   // ---------- braid import ----------
   function relaxed(obj, iters) {
-    for (let i = 0; i < iters; i++) {
-      const r = KC.relaxStep(obj); if (!r.ok) break;
-      if ((i+1) % 30 === 0) KC.compactStep(obj);
-    }
-    KC.compactStep(obj);
+    for (let i = 0; i < iters; i++) { const r = KC.relaxStep(obj); if (!r.ok) break; }
     return obj;
   }
   $('braidGo').onclick = () => {
@@ -1569,7 +1478,7 @@ const KC = (function () {
     $('smoothBtn').textContent='Auto-relax';
   }
   function relaxFrames(total) {
-    relaxing = total; let blockedOnce = false, sinceCompact = 0; const ownerTab=activeTabId, epoch=++relaxEpoch;
+    relaxing = total; let blockedOnce = false; const ownerTab=activeTabId, epoch=++relaxEpoch;
     $('smoothBtn').textContent='Stop relaxing';
     const frame = () => {
       if(epoch!==relaxEpoch)return;
@@ -1577,17 +1486,10 @@ const KC = (function () {
       for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
         const r = KC.relaxStep(S);
         if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
-        addEvents(r.ev); sinceCompact++;
+        addEvents(r.ev);
       }
-      // Relaxation nudges every point each step, and resampling can only
-      // split segments that grew too long, not merge ones that stayed
-      // short — left alone, the point count (and eventually drag/render
-      // speed) grows without bound over a long or repeated relax. Rebuild
-      // each component's sampling back to even spacing periodically.
-      if (sinceCompact >= 30) { KC.compactStep(S); sinceCompact = 0; }
       changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
-        if (sinceCompact > 0) KC.compactStep(S);
         stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
       }
     };

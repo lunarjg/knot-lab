@@ -6,6 +6,14 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Go all the way to the reference build's drawing engine, including computeRaw/reconcile/resampleComp (Claude Code, unreleased)
+
+The previous entry below kept this branch's `computeRaw`, `reconcile`, and `resampleComp` deliberately unreverted, for their correctness fixes. The project owner asked to drop that distinction and switch "drawing" to the reference build's code across the board instead, adding fixes back later only as actually needed:
+
+- `computeRaw`, `reconcile`, and `resampleComp` now match the reference build exactly. This drops: grid-boundary cell-ownership stability (a crossing could very rarely go missing when it fell exactly on a spatial-hash cell boundary), the tangential-touch fix (a curve vertex merely touching another strand without crossing to the other side can now register as a false crossing), the requirement that an R2 pairing be a genuine adjacent bigon (matching is now by proximity only, within a fixed distance threshold), and the exact-triple-point handling in `attemptStep` (`moveCheckpoint`) that existed to stop the old `reconcile` from double-counting an R3 slide sampled exactly at its coincidence point — sampled that way, R3 can now count twice for one slide (a move-count quirk, not a topology error). `compactStep`/`compactPts` are removed again along with them, since the reference build's `resampleComp` doesn't grow the point count the same way.
+- Updated or removed the moves.test.cjs coverage that exercised the dropped fixes directly (subpixel/grid-boundary crossing stability, the tangential-touch distinction, the exact double-count suppression), and rescaled a couple of small-coordinate fixtures that turned out to depend on the stricter `resampleComp` merely to keep their crossings.
+- Updated the README's "Geometry and editing behavior" and "No size or distance floor" sections to describe the reference build's simpler, threshold-based matching accurately instead of the dropped guarantees.
+
 ## Rebuild the engine directly against the project owner's reference build; drop Assisted R1 and the drag perf shortcut (Claude Code, unreleased)
 
 The project owner supplied a second, different reference build (an earlier, minimal prototype with no PD import, invariants, tabs or offline support) and asked to rebuild the drawing/dragging/relax engine directly from its code, keeping this branch's other structural features (PD import, tabs, invariants, offline install). Compared line-by-line against that file:
