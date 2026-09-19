@@ -2,8 +2,7 @@
 
 A static web app for drawing and analyzing knot diagrams with pen, touch, and mouse input, including on iPad.
 
-- [Live site](https://jgkim.piano5788.chatgpt.site), deployed through Sites.
-- [GitHub Pages mirror](https://lunarjg.github.io/knot-lab/), auto-deployed from `dist/` on every push to `main` by `.github/workflows/pages.yml`.
+- Live site: [Sites](https://jgkim.piano5788.chatgpt.site), deployed through Sites, and its [GitHub Pages mirror](https://lunarjg.github.io/knot-lab/), auto-deployed from `dist/` on every push to `main` by `.github/workflows/pages.yml`.
 - [Private source backup](https://github.com/lunarjg/knot-lab).
 - The application UI and repository documentation are in English.
 
