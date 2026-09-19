@@ -6,6 +6,12 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Take up a stretched strand's slack while dragging it (Claude Code, unreleased)
+
+- Port the reference build's slack-absorbing drag from `knot-lab.html`: each drag step now also runs one corner-smoothing pass over the stretch of strand around the grip (out to three drag radii), so re-pulling an already-stretched strand draws it back in a little instead of only ever lengthening it. It runs inside the drag's own validated `attemptStep`, so it cannot change the topology, and it is gated on the existing **Smooth corners** setting rather than a new one.
+- Verified in a browser on an imported trefoil (drag radius 25, one hard stretch then five whips back and forth): with the pass on, each re-pull shortens the strand (4843 → 4801 → 4749 → 4719) and it stays rounded at 3 crossings; with it off, the length only oscillates upward (5065 → 5050 → 5038), the tongue folds into a spike (max turn angle 2.39 rad vs 0.62), and two spurious crossings are left behind.
+- One deliberate behavior change falls out of this: the pass rounds off the very tight curl a grip would otherwise leave right at the grabbed point, so forming a tiny self-crossing directly under the cursor now needs **Smooth corners** off. Crossings between different strands, and self-crossings between arcs further apart than the smoothing reach, are unaffected — checked both ways in the tests.
+
 ## Stop blocking strand pass-throughs, fix the stretched-drag grab, auto-smooth after a drag (Claude Code, unreleased)
 
 - Remove the "a strand would pass through another strand" rejection. A step that carries a strand clean across another one — too wide a jump for the two births/deaths to pair up as an R2 — is just the reverse of the R2 that would undo it, so it is now accepted and simply left uncounted. A contradictory height order (R2 with different overstrands, cyclic R3) is still rejected. `reconcile`'s `allowUnclassifiedBirths` escape hatch is gone with it, since that is now the only behavior.

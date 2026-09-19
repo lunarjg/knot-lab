@@ -163,23 +163,53 @@ console.log('Precise eraser cursor, click/drag/coalesced/up samples, empty-space
  console.log('File picker batch opens, failed-file isolation, visible selected tabs and New tab: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1});
 
-// A user can create a self-crossing by dragging a strand over itself.
+// Curling a strand over its own immediate neighbourhood is the slack the
+// in-drag smoothing exists to absorb, so it only forms a new self-crossing
+// with "Smooth corners" off; crossing a strand somewhere else is unaffected
+// (covered below). Move counts, undo and redo follow the curl either way.
 {
- const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
- d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
- api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
- p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
- p.ids.get('sigma').oninput({target:{value:'10'}});
- const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
- p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
- for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
- p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+ const curl=(cornerFix)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+  d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
+  api.openTab(api.deserialize(d),'new self-crossing');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();assert.equal(api.analysis.c,0);
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  p.ids.get('sigma').oninput({target:{value:'10'}});
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(395,215,'pointerdown'));p.fire(canvas,'pointermove',ev(465,185,'pointermove'));
+  for(let i=0;i<20;i++){p.step();if(api.analysis.c>=1)break;}
+  p.fire(canvas,'pointerup',ev(465,185,'pointerup'));p.flush();
+  return p;
+ };
+ assert.equal(curl(true).ctx.knotLab.analysis.c,0,'With Smooth corners on, the grip takes up that slack instead of curling');
+ const p=curl(false),api=p.ctx.knotLab;
  const finalC=api.analysis.c,finalR1=api.serialize().stats.r1;
  assert(finalC>=1,'A self-crossing must form');assert(finalR1>=1);
  p.ids.get('undo').click();assert.equal(api.analysis.c,0);assert.equal(api.serialize().stats.r1,0);
  p.ids.get('redo').click();assert.equal(api.analysis.c,finalC);assert.equal(api.serialize().stats.r1,finalR1);
 }
-console.log('New R1 self-crossing, move count, undo and redo: PASS');
+console.log('New R1 self-crossing with Smooth corners off, move count, undo and redo: PASS');
+
+// Crossing a different strand, or a part of the same strand far enough away
+// along its length, is untouched by the in-drag smoothing: its reach is
+// measured along the strand, so only the slack beside the grip is absorbed.
+for(const cornerFix of [true,false]) {
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
+ const ring=(cx,cy)=>{const o=[];for(let i=0;i<60;i++){const t=2*Math.PI*i/60;o.push([cx+90*Math.cos(t),cy+90*Math.sin(t)]);}return o;};
+ d.comps=[ring(200,300),ring(600,300)];
+ api.openTab(api.deserialize(d),'two rings');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ assert.equal(api.analysis.c,0);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+ p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:18,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(290,300,'pointerdown'));p.fire(canvas,'pointermove',ev(640,300,'pointermove'));
+ for(let i=0;i<40;i++){p.step();if(api.analysis.c>=2)break;}
+ p.fire(canvas,'pointerup',ev(640,300,'pointerup'));p.flush();
+ assert(api.analysis.c>=2,`Dragging one strand across another must still make crossings (cornerFix=${cornerFix})`);
+}
+console.log('Dragging one strand across another still makes crossings either way: PASS');
 
 // Holding Shift while dragging reverses underneath for that gesture only,
 // live for as long as it is held, without changing the base setting.
@@ -188,6 +218,8 @@ console.log('New R1 self-crossing, move count, undo and redo: PASS');
   const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv'),d=api.serialize();
   d.comps=[[[-20,0],[-2,0],[-1,3],[1,3],[2,0],[20,0],[20,20],[-20,20]].map(([x,y])=>[400+5*x,200+5*y])];
   api.openTab(api.deserialize(d),'shift drag');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:false}});   // let the curl form
   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
   p.ids.get('sigma').oninput({target:{value:'10'}});
   const ev=(x,y,type)=>({pointerType:'mouse',pointerId:12,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
@@ -279,6 +311,33 @@ console.log('Auto-relax from the move options bar and the A shortcut: PASS');
  assert.equal(JSON.stringify(api.serialize().comps),settled);
 }
 console.log('A finished drag smooths its own sharp corners inside the drag undo step: PASS');
+
+// Working an already-stretched strand takes up its slack: the smoothing pass
+// that runs around the grip while dragging draws the strand back in instead
+// of only ever paying out more of it. "Smooth corners" turns it off.
+{
+ const whip=(cornerFix)=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+  api.importPD(pd);api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
+  p.ids.get('cornerFix').onchange({target:{checked:cornerFix}});
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  const total=()=>api.state.comps.reduce((a,c)=>a+c.len,0);
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:44,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  const hit=api.state.comps[0].pts[10];
+  p.fire(canvas,'pointerdown',ev(hit.x,hit.y,'pointerdown'));
+  // stretch a finger out, then whip it around so the strand folds up
+  for(const [dx,dy] of [[260,40],[120,220],[-140,90],[60,-180]]) {
+   p.fire(canvas,'pointermove',ev(hit.x+dx,hit.y+dy,'pointermove'));
+   for(let i=0;i<12;i++)p.step();
+  }
+  p.fire(canvas,'pointerup',ev(hit.x+60,hit.y-180,'pointerup'));p.flush();
+  return total();
+ };
+ const loose=whip(false), takenUp=whip(true);
+ assert(takenUp<loose,`Dragging with Smooth corners on must take up slack (${takenUp.toFixed(0)} vs ${loose.toFixed(0)})`);
+}
+console.log('Dragging an already-stretched strand takes up its slack, and Smooth corners switches that off: PASS');
 
 // Momentary crossing-switch: holding C acts like the Flip tool without
 // discarding whichever tool was active, and releasing C restores it.

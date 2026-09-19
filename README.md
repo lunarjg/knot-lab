@@ -59,7 +59,7 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 ## Geometry and editing behavior
 
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
-- A drag rounds off its own sharp corners when it ends; the standalone smoothing actions remain available for everything else.
+- A drag rounds off its own sharp corners when it ends, and takes up the slack around the grip while it is in progress; the standalone smoothing actions remain available for everything else.
 - A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
 - R2 and R3 validation matches crossings between the before and after geometry by proximity (within a fixed distance threshold), not by requiring an exact empty bigon or triangle; a step sampled so that it lands exactly on an R3 slide's triple point can count that R3 twice (once approaching it, once leaving) rather than once for the whole slide — a move-count quirk, not a topology error.
 - Undo and redo restore move counts as well as geometry.
@@ -103,6 +103,8 @@ The crossing choices survive later joins and closure, either closure order, undo
 Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way. A step that carries a strand clean across another one is accepted too, since it is just the reverse of the R2 that would undo it; only a contradictory height order (R2 with different overstrands, or a cyclic R3) is still rejected.
 
 When a drag ends, the strand's sharp corners are smoothed automatically, inside the drag's own undo step. That pass is cosmetic only — any smoothing that would add or remove a crossing is rolled back, so it never quietly undoes a curl that was just made.
+
+While a drag is in progress, the same smoothing runs each step over the stretch of strand around the grip (out to three drag radii), so pulling on a strand that is already stretched takes up its slack and draws it back in instead of letting it fold into a sharp spike. The pass shares the **Smooth corners** setting: turning that off restores the plain behavior, where re-pulling a stretched strand only ever lengthens it. Because it runs inside the same validated step as the movement itself, it cannot change the topology — but it does round off the very tight curl a grip would otherwise leave right at the grabbed point, so a deliberate tiny self-crossing made exactly under the cursor wants **Smooth corners** off.
 
 ## No size or distance floor on dragging or auto-relax
 

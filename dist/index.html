@@ -427,7 +427,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <p><b>Draw</b> Turn Auto-close off for open arcs. Joining an endpoint passes under existing arcs.</p>
       <p><b>Drag</b> Move strands with Reidemeister moves. Drag empty space to pan; pinch or scroll to zoom.</p>
       <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
-      <p><b>Smoothing</b> Pen “Smooth corners” applies to new strokes. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
+      <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
       <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
       </details>
@@ -1912,6 +1912,14 @@ const KC = (function () {
       const r = KC.attemptStep(S, comps => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
         KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
+        // Take up the slack around the grip as it moves: one smoothing pass
+        // over the vertices within reach of the grabbed one pulls each toward
+        // its neighbours' midpoint, so pulling on an already-stretched strand
+        // draws it back in instead of only ever paying out more of it.
+        if (opts.cornerFix) {
+          const gs = cm.cum[gi], lim = 3 * sig;
+          KC.smoothCorners(cm.pts, true, { angle: 0.5, iters: 1, strength: 0.5, mask: i => KC.sDist(cm, cm.cum[i], gs) < lim ? 1 : 0 });
+        }
       }, {
         under: drag.under,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
