@@ -63,6 +63,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .toolopts[hidden]{display:none}
 .toolopt{display:inline-flex;align-items:center;gap:10px}
 .toolopt .iconbtn{white-space:nowrap;padding:4px 10px}
+.toolopt .iconbtn.danger{color:var(--warn)}
 .toolopt[hidden]{display:none}
 .inline{display:inline-flex;align-items:center;gap:7px;color:var(--muted);white-space:nowrap}
 .inline[hidden]{display:none}
@@ -293,6 +294,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
               <button data-erase="precise" aria-pressed="false">Erase segment</button>
             </div>
             <label class="inline" id="eraseSizeWrap" hidden>Size <input type="range" id="eraseSize" min="6" max="80" value="24"></label>
+            <button class="iconbtn danger" id="clearErase" title="Clear all">Clear all</button>
           </div>
           <div class="toolopt" id="optLasso" hidden>
             <div class="seg sub lassomodes" id="lassoModes" role="group" aria-label="Lasso mode">
@@ -396,8 +398,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     </section>
     <section>
       <h2>Display</h2>
-      <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
-      <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
+      <label class="chk"><input type="checkbox" id="arrows"><span>Orientation arrows</span></label>
+      <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
     </section>
     <section>
@@ -413,6 +415,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <details><summary>Controls &amp; shortcuts</summary>
       <p><b>Draw</b> Turn Auto-close off for open arcs. Joining an endpoint passes under existing arcs.</p>
       <p><b>Drag</b> Move strands with Reidemeister moves. Drag empty space to pan; pinch or scroll to zoom.</p>
+      <p><b>Erase</b> “Erase strand” removes one strand between crossings or endpoints; “Erase segment” rubs out just what the cursor covers. “Clear all” empties the diagram in one undo step.</p>
       <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
       <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
       <p><b>Lasso</b> Enclose curves to select them. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
@@ -1197,7 +1200,7 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  const opts = { sigma: 40, sepGap: 10, under: false, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true, separate: true };
+  const opts = { sigma: 40, sepGap: 10, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1619,7 +1622,13 @@ const KC = (function () {
     changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
   };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
-  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); changed(); setTool('draw'); };
+  function clearAll() {
+    if (!S.comps.length && !S.open.length) return;
+    pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint = null;
+    clearSel(); changed(); setTool('draw');
+  }
+  $('clearBtn').onclick = clearAll;
+  $('clearErase').onclick = clearAll;
   let relaxing = 0, relaxEpoch = 0;
   const relaxLabel = text => { $('smoothBtn').textContent = text; $('relaxMove').textContent = text; };
   function stopRelax() {

@@ -573,6 +573,28 @@ console.log('Separation distance is adjustable, and separated crossings keep a r
 }
 console.log('The lasso resizes a selection, uniformly and in place, with one undo step: PASS');
 
+// Display defaults, and Clear all reachable from the eraser's own options bar.
+{
+ const p=boot(),api=p.ctx.knotLab;
+ assert.equal(api.opts.arrows,false,'Orientation arrows default off');
+ assert.equal(api.opts.grid,true,'Background grid defaults on');
+ assert.equal(p.ids.get('arrows').checked,false);
+ assert.equal(p.ids.get('grid').checked,true);
+ api.importPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]');p.flush();
+ assert.equal(api.analysis.c,3);
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ assert(!p.ids.get('optErase').hidden,'The eraser options bar should be showing');
+ p.ids.get('clearErase').click();p.flush();
+ assert.equal(api.state.comps.length,0,'Clear all in the eraser bar must empty the diagram');
+ assert.equal(api.analysis.c,0);
+ p.ids.get('undo').click();p.flush();
+ assert.equal(api.analysis.c,3,'Clear all must be one undo step');
+ // and the inspector's own Clear all still works
+ p.ids.get('clearBtn').click();p.flush();
+ assert.equal(api.state.comps.length,0);
+}
+console.log('Arrows default off, grid default on, and Clear all works from the eraser bar: PASS');
+
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
  const workers=[];class FakeWorker{

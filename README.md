@@ -52,6 +52,10 @@ For other static hosting providers, publish the contents of `dist` at the site r
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
 - Use the arrow on the right edge to reopen the inspector.
 
+The Eraser's options bar carries **Clear all** beside its two modes, so emptying the canvas does not need the inspector. It is one undo step, the same as the inspector's button.
+
+Display defaults: orientation arrows are **off** and the background grid is **on**; both are in Settings → Display.
+
 Selections made with the lasso can be moved (drag inside the box), rotated (the handle above it) and resized (the grip at the bottom-right corner). Resizing is uniform — a non-uniform scale would distort the strands without making the diagram easier to work with — and keeps the selection centred, so the diagram grows in place. Like moving and rotating, the whole resize is one undo step.
 
 PD input accepts `[[a,b,c,d], ...]` or `PD[X[a,b,c,d], ...]`. The first label is the incoming understrand; the remaining labels proceed counterclockwise. Each arc label must appear twice. Import supports up to 80 crossings. If a layout is too crowded to construct reliably, an error is shown and the existing diagram is preserved. Crossing-free components cannot be represented by PD code alone.

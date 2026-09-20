@@ -6,6 +6,12 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Eraser gets Clear all; flip the arrow and grid defaults (Claude Code, unreleased)
+
+- Add **Clear all** to the Eraser tool's options bar, beside "Erase strand" and "Erase segment", so emptying the canvas no longer means opening the inspector. Both buttons now call one `clearAll()`, so they behave identically and stay one undo step. Styled with the warn colour via a new `.toolopt .iconbtn.danger` rule, since `.danger` was only defined inside `.selmenu`.
+- **Orientation arrows now default off** and the **background grid defaults on** (Settings → Display), matching how the diagrams are normally read.
+- Bump the service-worker cache to `knot-lab-v21-topology-fix` so installed clients pick up this round.
+
 ## Resize a lasso selection (Claude Code, unreleased)
 
 - Add a resize grip to the lasso's selection box, at its bottom-right corner, alongside the existing move and rotate. Dragging it scales the selection about its centre by the ratio of the pointer's distance from that centre to where the grab started, clamped to 0.1x–12x and snapping to quarter steps (hold <kbd>Shift</kbd> to force the snap). The live percentage is drawn above the grip.
