@@ -633,6 +633,40 @@ console.log('Arrows default off, grid default on, and Clear all works from the e
 }
 console.log('Copy and paste leaves the existing diagram untouched: PASS');
 
+// Saving must never dead-end. Desktop Chrome and Edge report canShare({files})
+// as true, so preferring the share sheet there sent every save into an OS
+// dialog instead of a download: a share that failed lost the export, one that
+// hung looked like a freeze, and a cancelled one did nothing at all.
+(async()=>{
+ const run=async(navPatch)=>{
+  const p=boot(),api=p.ctx.knotLab;
+  api.importPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]');p.flush();
+  let shared=0;
+  Object.assign(p.ctx.navigator,navPatch(()=>shared++));
+  const got=[],realCreate=p.doc.createElement;
+  p.doc.createElement=t=>{const e=realCreate(t);if(t==='a')e.click=()=>got.push(e.download);return e;};
+  await p.ids.get('saveBtn').onclick();
+  return {shared,got};
+ };
+ const failing=bump=>({canShare:()=>true,
+   share:()=>{bump();return Promise.reject(Object.assign(new Error('x'),{name:'NotAllowedError'}));}});
+ // desktop: canShare says yes, but the share sheet must not be used at all
+ const desk=await run(failing);
+ assert.equal(desk.shared,0,'Desktop must not open a share sheet');
+ assert.equal(desk.got.length,1,'Desktop must download the file');
+ assert(/\.json$/.test(desk.got[0]),'The download must be a .json file');
+ // iPad: the share sheet is tried first, and a failed share still downloads
+ const ipad=await run(bump=>Object.assign({userAgent:'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Safari/604.1'},failing(bump)));
+ assert.equal(ipad.shared,1,'iPad should try the share sheet first');
+ assert.equal(ipad.got.length,1,'A failed share must fall back to a download, not lose the export');
+ // iPad: a share the user cancels is deliberate, so it must not also download
+ const cancelled=await run(bump=>({userAgent:'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Safari/604.1',
+   canShare:()=>true,share:()=>{bump();return Promise.reject(Object.assign(new Error('x'),{name:'AbortError'}));}}));
+ assert.equal(cancelled.shared,1);
+ assert.equal(cancelled.got.length,0,'Cancelling the share sheet must not force a download');
+ console.log('Saving downloads on desktop, shares only on iPhone/iPad, and never dead-ends: PASS');
+})().catch(e=>{console.error(e);process.exitCode=1;});
+
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
  const workers=[];class FakeWorker{
@@ -690,7 +724,9 @@ console.log('Copy and paste leaves the existing diagram untouched: PASS');
 // A pending native share must not replace a newer document name or clear newer edits.
 (async()=>{
  const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
- let finish;p.ctx.navigator.canShare=()=>true;p.ctx.navigator.share=()=>new Promise(resolve=>finish=resolve);
+ // the share sheet is only used on iPhone/iPad, so present as one to reach it
+ let finish;p.ctx.navigator.userAgent='Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Safari/604.1';
+ p.ctx.navigator.canShare=()=>true;p.ctx.navigator.share=()=>new Promise(resolve=>finish=resolve);
  const saving=p.ids.get('saveBtn').onclick();
  const item=p.ids.get('documentTabs').children[0];item.children[0].click();const field=item.children[0];
  field.value='Renamed during export';p.fire(field,'blur',{});p.ids.get('mirrorBtn').click();
