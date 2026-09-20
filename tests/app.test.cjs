@@ -477,6 +477,40 @@ console.log('Arc connectors pass under existing open/closed/self arcs, visual ga
 }
 console.log('A drag that squeezes a bigon is not blocked, and release-time crossing separation can be switched off: PASS');
 
+// The Separation distance slider sets how far apart the release pass pushes
+// crossings, and the crossings it moves are left at a readable angle rather
+// than stretched flat.
+{
+ const squeeze=gap=>{
+  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+  const d=api.serialize();d.comps=[
+  [[-80,-40],[-40,0],[0,20],[40,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-40,0],[0,-20],[40,0],[80,40],[80,100],[-80,100]]
+  ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
+  api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
+  p.ids.get('sepGap').oninput({target:{value:String(gap)}});
+  assert.equal(p.ids.get('sepGapV').textContent,String(gap),'The slider must show its value');
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+  const ev=(y,type)=>({pointerType:'mouse',pointerId:21,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
+  for(let i=0;i<8;i++)p.step();
+  p.fire(canvas,'pointerup',ev(182,'pointerup'));p.flush();
+  assert.equal(api.state.crossings.length,2);
+  const [a,b]=api.state.crossings;
+  const deg=X=>{const [u,v]=X.occ;const n1=Math.hypot(u.dx,u.dy)||1,n2=Math.hypot(v.dx,v.dy)||1;
+   return Math.acos(Math.min(1,Math.abs((u.dx*v.dx+u.dy*v.dy)/(n1*n2))))*180/Math.PI;};
+  return {apart:Math.hypot(a.x-b.x,a.y-b.y),minAngle:Math.min(deg(a),deg(b))};
+ };
+ const near=squeeze(14), far=squeeze(50);
+ assert(far.apart>near.apart+10,`A larger separation distance must push further (${near.apart.toFixed(1)} vs ${far.apart.toFixed(1)})`);
+ assert(near.apart>=12,`Separation must roughly reach the requested 14 (got ${near.apart.toFixed(1)})`);
+ assert(far.apart>=45,`Separation must roughly reach the requested 50 (got ${far.apart.toFixed(1)})`);
+ // the wider push is what flattens crossings, so it is the one that matters here
+ assert(far.minAngle>=30,`Separated crossings must stay readable, not flat (got ${far.minAngle.toFixed(0)} degrees)`);
+ assert(near.minAngle>=30,`Separated crossings must stay readable, not flat (got ${near.minAngle.toFixed(0)} degrees)`);
+}
+console.log('Separation distance is adjustable, and separated crossings keep a readable angle: PASS');
+
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
  const workers=[];class FakeWorker{

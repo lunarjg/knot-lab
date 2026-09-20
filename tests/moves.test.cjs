@@ -147,6 +147,43 @@ console.log('Dragging can never change the knot type, at any drag radius: PASS')
  assert.equal(KC.separateCrossings(inert,{gap:24,before:null}),0);
 }
 console.log('Release-time separation moves only the crossings a gesture tightened, and preserves topology: PASS');
+
+// Separating a pair stretches the arcs between them, which leaves both strands
+// running nearly parallel through each crossing. openCrossings turns them back
+// apart about the crossing without moving the crossing or the topology.
+{
+ const deg=X=>KC.crossingAngle(X)*180/Math.PI;
+ const bigon=()=>[
+  [[-80,-40],[-6,0],[0,4],[6,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-6,0],[0,-4],[6,0],[80,40],[80,100],[-80,100]]
+ ].map(poly);
+ const MIN=40*Math.PI/180;
+ for(const gap of [24,40,60]){
+  const s=state(bigon());
+  const far=new Map([[s.crossings[0].id+':'+s.crossings[1].id,500]]);
+  const touched=new Set();
+  KC.separateCrossings(s,{gap,before:far,touched});
+  const flat=s.crossings.map(deg),apart=Math.hypot(s.crossings[0].x-s.crossings[1].x,s.crossings[0].y-s.crossings[1].y);
+  assert(Math.min(...flat)<40,`separation at gap ${gap} should have flattened a crossing (got ${flat.map(a=>a.toFixed(0))})`);
+  const n=KC.openCrossings(s,touched,{minAngle:MIN,sigma:18});
+  assert(n>0,'openCrossings must open something at gap '+gap);
+  const opened=s.crossings.map(deg);
+  assert(Math.min(...opened)>Math.min(...flat),`angles must improve at gap ${gap}: ${flat.map(a=>a.toFixed(0))} -> ${opened.map(a=>a.toFixed(0))}`);
+  assert(Math.min(...opened)>=35,`every crossing should end near the minimum at gap ${gap} (got ${opened.map(a=>a.toFixed(0))})`);
+  // the separation it just achieved must survive, and so must the topology
+  const now=Math.hypot(s.crossings[0].x-s.crossings[1].x,s.crossings[0].y-s.crossings[1].y);
+  assert(now>apart-2,`opening must not undo the separation at gap ${gap} (${apart.toFixed(1)} -> ${now.toFixed(1)})`);
+  assert.equal(s.crossings.length,2,'opening must not add or remove a crossing');
+ }
+ // a crossing that is already square is left exactly alone
+ const sq=state(bigon());
+ const ids=new Set(sq.crossings.map(X=>X.id));
+ const geom=JSON.stringify(sq.comps.map(c=>c.pts.map(q=>[q.x.toFixed(6),q.y.toFixed(6)])));
+ assert(Math.min(...sq.crossings.map(deg))>=40,'fixture should start open enough');
+ assert.equal(KC.openCrossings(sq,ids,{minAngle:MIN,sigma:18}),0,'Nothing to open on an already-square crossing');
+ assert.equal(JSON.stringify(sq.comps.map(c=>c.pts.map(q=>[q.x.toFixed(6),q.y.toFixed(6)]))),geom,'Geometry must be untouched');
+}
+console.log('Crossings flattened by separation are turned back open, without moving them or the topology: PASS');
 const curled=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat=poly([[-20,0],[20,0],[20,20],[-20,20]]);
 const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});
