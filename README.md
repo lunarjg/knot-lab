@@ -46,7 +46,7 @@ For other static hosting providers, publish the contents of `dist` at the site r
 - **Open files**: open JSON files in new tabs. Multiple files can be selected at once.
 - Each document tab has its own diagram, zoom/pan position, and undo/redo history.
 - Tap the active tab's name to rename it. Select an inactive tab first, then tap its name again. Enter or tapping outside saves the name; Escape cancels. F2 also starts editing. Names and suggested export filenames are autosaved without changing diagram undo history.
-- **Save**: export the current tab as JSON.
+- **Save**: export the current tab as JSON. On iPhone and iPad this offers the native share sheet; every other platform downloads the file directly, and a share that fails falls back to a download so an export is never lost.
 - **Autosave**: restore open tabs and diagrams on the next visit. Undo stacks last only for the current session.
 - **Import PD**: replace the current diagram with a PD code; Undo restores the previous diagram.
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.

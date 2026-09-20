@@ -1332,14 +1332,27 @@ const KC = (function () {
     n = n.replace(/[\\/:*?"<>|]+/g, '-').replace(/\.json$/i, '');
     return n + '.json';
   }
+  // The share sheet is only the better way to save on iPhone and iPad, where a
+  // blob download is awkward. Desktop Chrome and Edge also report
+  // canShare({files}) as true, so preferring it there sent every desktop save
+  // into an OS dialog instead of a download -- and with no fallback, a share
+  // that failed lost the export outright, one that hung left the app looking
+  // frozen, and a cancelled one did nothing at all. Download everywhere else,
+  // and treat a failed share as a reason to download rather than a dead end.
+  const applePortable = () => /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   async function saveFile() {
     if (!S.comps.length && !S.open.length) { toast('No diagram to save', true); return; }
     const name = fileName(), text = JSON.stringify(serialize()), exportingTab=activeTabId, exportingRevision=currentTab()?.revision || 0, exportingName={title:currentTab()?.title,fileName:$('fileName').value};
     const file = new File([text], name, { type: 'application/json' });
-    if (navigator.canShare?.({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: 'Knot diagram' }); markExported(exportingTab,name,exportingRevision,exportingName); toast('Export complete'); }
-      catch (e) { if (e.name !== 'AbortError') toast('Could not export the file. Please try again', true); }
-      return;
+    if (applePortable() && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'Knot diagram' });
+        markExported(exportingTab,name,exportingRevision,exportingName); toast('Export complete'); return;
+      } catch (e) {
+        // Cancelling is a deliberate choice; anything else falls back below.
+        if (e && e.name === 'AbortError') return;
+      }
     }
     const url = URL.createObjectURL(file), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();

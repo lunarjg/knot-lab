@@ -6,6 +6,24 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Fix Save failing on desktop (Claude Code, unreleased)
+
+Saving a diagram on desktop Chrome or Edge either showed "Could not export the file. Please try again", or appeared to freeze, and in both cases nothing was saved.
+
+`saveFile` preferred the native share sheet whenever `navigator.canShare({files})` returned true, falling back to a download otherwise. That reads as an iPad-first choice, but **desktop Chrome and Edge support Web Share too**, so on Windows every desktop save was routed into an OS share dialog instead of a plain download — and the share branch `return`ed unconditionally, so there was no fallback. Reproduced all three outcomes by stubbing `canShare`/`share`:
+
+| share outcome | what the user saw |
+| --- | --- |
+| rejects | "Could not export the file. Please try again", export lost |
+| never settles | no download, no toast — looks frozen |
+| cancelled | nothing at all |
+
+- The share sheet is now used **only on iPhone and iPad**, where a blob download is genuinely awkward; every other platform downloads directly. Detection is `/iP(hone|ad|od)/` on the user agent, plus `platform === 'MacIntel' && maxTouchPoints > 1` for iPadOS, which reports itself as a Mac.
+- A share that fails for any reason other than the user cancelling now **falls back to the download** instead of dead-ending. Cancelling stays a no-op, since that is a deliberate choice.
+- Verified in a browser under a desktop UA (all three share outcomes now download) and under an iPad UA (share is tried first; a failed share still downloads; a cancelled one does not).
+- Tests: a new case covering all three paths, which fails on the unfixed code ("Desktop must not open a share sheet"). The existing async export rename/edit race test relied on the share path, so it now presents an iPad user agent to reach it — and while fixing that, a stray top-level `return` in a test block turned out to be silently skipping every test after it, so the app suite goes from 29 reported tests to 30.
+- Service-worker cache bumped to `knot-lab-v23-save-fix`.
+
 ## Fix pasting rewriting the crossings of the diagram already on the canvas (Claude Code, unreleased)
 
 Copying a diagram and pasting it changed the **original** diagram's crossings: on a 20-crossing diagram supplied by the project owner, only 10 of the 20 survived a paste with their over/under intact, and the writhe stayed at 20 instead of doubling to 40. Drawing a new closed loop over an existing diagram, and dropping a moved partial selection, were hit the same way.
