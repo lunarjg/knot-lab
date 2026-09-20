@@ -52,6 +52,8 @@ For other static hosting providers, publish the contents of `dist` at the site r
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
 - Use the arrow on the right edge to reopen the inspector.
 
+Selections made with the lasso can be moved (drag inside the box), rotated (the handle above it) and resized (the grip at the bottom-right corner). Resizing is uniform — a non-uniform scale would distort the strands without making the diagram easier to work with — and keeps the selection centred, so the diagram grows in place. Like moving and rotating, the whole resize is one undo step.
+
 PD input accepts `[[a,b,c,d], ...]` or `PD[X[a,b,c,d], ...]`. The first label is the incoming understrand; the remaining labels proceed counterclockwise. Each arc label must appear twice. Import supports up to 80 crossings. If a layout is too crowded to construct reliably, an error is shown and the existing diagram is preserved. Crossing-free components cannot be represented by PD code alone.
 
 The displayed Turaev genus is the value for the current diagram, not the minimum over all diagrams of the knot.
@@ -61,6 +63,7 @@ The displayed Turaev genus is the value for the current diagram, not the minimum
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
 - A drag rounds off its own sharp corners when it ends, and takes up the slack around the grip while it is in progress; the standalone smoothing actions remain available for everything else.
 - A drag that pushed crossings into each other eases them back apart when it ends, by an adjustable distance, and turns each one back open so the strands still meet at a readable angle. Both are switched off together in Settings.
+- A lasso selection can be resized by its corner grip, as well as moved and rotated. Auto-relax shrinks a diagram as it runs — measured at about 12% of its span over 600 steps, with no floor — and a small diagram is harder to edit precisely, so the grip is how you scale it back up without redrawing it.
 - A drag can never change the knot type. That is covered by a test that drags four knots across the canvas at three drag radii from four grab points and requires the Jones polynomial to be unchanged every time.
 - The exported PD code is verified against the drawn diagram by a test that computes the Kauffman bracket from the PD integers alone and compares it with the geometry, with the PD read back through the independent importer, and with published polynomials.
 - A drag holds the vertex it grabbed: the distance still to travel is measured on that same vertex, and the grab is re-anchored to it after each step so resampling cannot walk it backwards along a stretched strand.
@@ -114,7 +117,7 @@ A drag or an auto-relax step is gated only by real topology (Reidemeister validi
 
 ## Separating overlapping crossings
 
-**Separate overlapping crossings** (Settings → Dragging, on by default) runs once a drag ends. Any two crossings the drag pushed into each other repel slightly, like weak magnets, until they clear the **Separation distance** — a slider in the same section, 10 to 60, default 24. The default is far enough that their drawn undercrossing breaks (which reach `min(12, 8/view.s)` either side) cannot touch at any zoom, while staying a few segments (`SEG` is 7) of nudge rather than a rearrangement.
+**Separate overlapping crossings** (Settings → Dragging, on by default) runs once a drag ends. Any two crossings the drag pushed into each other repel slightly, like weak magnets, until they clear the **Separation distance** — a slider in the same section, 10 to 60, default 10. Raising it to about 24 is where the two crossings' drawn undercrossing breaks (which reach `min(12, 8/view.s)` either side) can no longer touch at any zoom; the default deliberately sits at the bottom of the range, nudging only enough to pull a genuine overlap apart.
 
 Pushing a pair apart stretches the arcs between them, which leaves both strands running nearly parallel through each crossing — separated, but too flat to read. At a 60-unit gap the crossing angles collapse from 67° to 15°. So a second pass turns each crossing the gesture flattened back open to at least 40°, by displacing the strand along `u(s) = A·s·exp(−s²/2σ²)` times the normal: `u(0) = 0`, so the crossing itself does not move, while the tangent there turns by `A` and the effect dies away within a couple of σ. It costs almost nothing in distance (measured 70.8 → 70.9 units) and, like the separation, is rolled back if it would change the topology. Only crossings this gesture created or made shallower are touched; one that was already flat is left as it was drawn.
 

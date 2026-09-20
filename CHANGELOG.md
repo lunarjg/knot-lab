@@ -6,6 +6,14 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Resize a lasso selection (Claude Code, unreleased)
+
+- Add a resize grip to the lasso's selection box, at its bottom-right corner, alongside the existing move and rotate. Dragging it scales the selection about its centre by the ratio of the pointer's distance from that centre to where the grab started, clamped to 0.1x–12x and snapping to quarter steps (hold <kbd>Shift</kbd> to force the snap). The live percentage is drawn above the grip.
+- Scaling is uniform only: a non-uniform scale would distort the strands without making the diagram easier to work with. It reuses the existing lift/transform/drop machinery, so it composes into the same `sel.xf` affine as move and rotate, rides one undo step, and re-integrates through `integrateClosed`. The crossing-memory directions carried through `xf` stay correct because they are only ever compared against each other, so a uniform factor cancels.
+- The motivation is measured: auto-relax shrinks a diagram monotonically as it runs, with no floor — over 600 steps a trefoil goes from 420 to 367 units of span (88%), a figure-eight to 90%, a torus(3,4) to 91%, and it keeps going. A small diagram is harder to edit precisely, which is the "strands don't move the way I want" complaint. The grip scales it back up without redrawing.
+- Browser-verified end to end: after 250 relax steps, lasso everything and drag the grip — span 798 → 1755 with the crossing count and writhe unchanged, and no console errors. The grip's glyph is two corner brackets facing apart rather than a full diagonal, which inside a circle reads as a "no entry" sign.
+- **Change the Separation distance default from 24 to 10**, the bottom of its range. The tests that exercised separation now set the slider explicitly instead of relying on the default.
+
 ## Keep separated crossings readable, and make the separation distance adjustable (Claude Code, unreleased)
 
 - **Crossings no longer end up flat.** Pushing a pair apart stretches the arcs between them, so both strands ran nearly parallel through each crossing: measured on a squeezed bigon, the angles collapsed from 67°/57° to 33°/56° at a 24-unit gap and to 15°/22° at 60. A new `KC.openCrossings` turns each crossing the gesture flattened back open to at least 40°. It displaces the strand by `u(s) = A·s·exp(−s²/2σ²)` along the normal, so `u(0) = 0` — the crossing itself does not move — while the tangent there turns by `A` and the effect fades within a couple of σ. The largest displacement is about `0.6·A·σ`, a couple of units, so it opens the angle without redrawing the curve. Like the separation it goes through `attemptStep` and is rolled back if it would change the topology.

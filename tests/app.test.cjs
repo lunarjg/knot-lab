@@ -449,6 +449,8 @@ console.log('Arc connectors pass under existing open/closed/self arcs, visual ga
   ].map(ps=>ps.map(([x,y])=>[x+200,y+200]));
   api.openTab(api.deserialize(d),'bigon');api.view.s=1;api.view.ox=0;api.view.oy=0;
   p.ids.get('separate').onchange({target:{checked:separate}});
+  // pin the distance so this tests the mechanism, not whatever the default is
+  p.ids.get('sepGap').oninput({target:{value:'24'}});
   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
   const ev=(y,type)=>({pointerType:'mouse',pointerId:20,clientX:200,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
   p.fire(canvas,'pointerdown',ev(220,'pointerdown'));p.fire(canvas,'pointermove',ev(182,'pointermove'));
@@ -510,6 +512,66 @@ console.log('A drag that squeezes a bigon is not blocked, and release-time cross
  assert(near.minAngle>=30,`Separated crossings must stay readable, not flat (got ${near.minAngle.toFixed(0)} degrees)`);
 }
 console.log('Separation distance is adjustable, and separated crossings keep a readable angle: PASS');
+
+// The lasso can resize a selection. Auto-relax slowly shrinks a diagram (about
+// 12% over 600 steps, with no floor), and a small diagram is harder to edit, so
+// scaling it back up has to be available without redrawing it.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();
+ // a plain square loop and a second one beside it, both well inside the canvas
+ d.comps=[[[120,120],[320,120],[320,320],[120,320]],[[360,140],[520,140],[520,300],[360,300]]];
+ api.openTab(api.deserialize(d),'scale');api.view.s=1;api.view.ox=0;api.view.oy=0;
+ const span=()=>{let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;
+  api.state.comps.forEach(c=>c.pts.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);}));
+  return {x0,x1,y0,y1,w:x1-x0,h:y1-y0};};
+ const start=span();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+ const ev=(x,y,type,extra)=>({pointerType:'mouse',pointerId:77,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){},...extra});
+ // lasso a rectangle around whatever is currently on the canvas
+ const lassoAll=()=>{
+  const b=span(),m=40;
+  const ring=[[b.x0-m,b.y0-m],[b.x1+m,b.y0-m],[b.x1+m,b.y1+m],[b.x0-m,b.y1+m],[b.x0-m,b.y0-m]];
+  p.fire(canvas,'pointerdown',ev(ring[0][0],ring[0][1],'pointerdown'));
+  for(const [x,y] of ring.slice(1))p.fire(canvas,'pointermove',ev(x,y,'pointermove'));
+  p.fire(canvas,'pointerup',ev(ring[4][0],ring[4][1],'pointerup'));p.flush();
+ };
+ lassoAll();
+ const handle=api.__sh();
+ assert(handle,'The lasso must have a selection with a resize handle');
+ assert(!p.ids.get('selmenu').hidden,'The selection menu should be showing');
+ // drag the handle away from the selection centre to roughly double the size
+ const c={x:(start.x0+start.x1)/2,y:(start.y0+start.y1)/2};
+ const d0=Math.hypot(handle.x-c.x,handle.y-c.y);
+ p.fire(canvas,'pointerdown',ev(handle.x,handle.y,'pointerdown'));
+ const tx=c.x+(handle.x-c.x)*2, ty=c.y+(handle.y-c.y)*2;
+ p.fire(canvas,'pointermove',ev(tx,ty,'pointermove'));
+ p.fire(canvas,'pointerup',ev(tx,ty,'pointerup'));p.flush();
+ const big=span();
+ const k=big.w/start.w;
+ assert(k>1.6&&k<2.4,`The selection should have roughly doubled (got ${k.toFixed(2)}x)`);
+ assert(Math.abs(big.h/start.h-k)<0.05,'Scaling must be uniform, not stretched');
+ // the centre stays put, so the diagram grows in place rather than walking off
+ assert(Math.abs((big.x0+big.x1)/2-c.x)<6&&Math.abs((big.y0+big.y1)/2-c.y)<6,'Scaling should keep the selection centred');
+ assert.equal(api.state.comps.length,2,'Both components must survive');
+ // one undo takes the whole resize back
+ p.ids.get('undo').click();
+ const back=span();
+ assert(Math.abs(back.w-start.w)<2&&Math.abs(back.h-start.h)<2,`Undo must restore the original size (${back.w.toFixed(0)} vs ${start.w.toFixed(0)})`);
+ p.ids.get('redo').click();
+ assert(Math.abs(span().w-big.w)<2,'Redo must bring the resize back');
+ // shrinking works the same way (undo/redo clears the selection, so re-lasso)
+ lassoAll();
+ const h2=api.__sh();
+ assert(h2,'Re-lassoing must give a selection again');
+ const c2={x:(big.x0+big.x1)/2,y:(big.y0+big.y1)/2};
+ p.fire(canvas,'pointerdown',ev(h2.x,h2.y,'pointerdown'));
+ const sx=c2.x+(h2.x-c2.x)*0.5, sy=c2.y+(h2.y-c2.y)*0.5;
+ p.fire(canvas,'pointermove',ev(sx,sy,'pointermove'));
+ p.fire(canvas,'pointerup',ev(sx,sy,'pointerup'));p.flush();
+ assert(span().w<big.w*0.7,'Dragging the handle inward must shrink the selection');
+}
+console.log('The lasso resizes a selection, uniformly and in place, with one undo step: PASS');
 
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
