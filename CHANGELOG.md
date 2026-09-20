@@ -6,6 +6,13 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Drag radius on +/-, and new defaults (Claude Code, unreleased)
+
+- **Drag radius defaults to 60** (was 40) and **Separation distance to 30** (was 10).
+- <kbd>+</kbd> and <kbd>−</kbd> step the drag radius by 10 from any tool, clamped to the slider's own 10–160 range. `setSigma` is now the single way the radius changes, so the slider, the readout and the keys cannot drift apart. Since the options bar is only on screen for the Drag strand tool, the keys report the new value in a toast — including "(minimum)" / "(maximum)" at the ends — rather than silently changing a number nobody can see. `=` and `_` are accepted alongside `+` and `−` so the unshifted keys work too, and a `+` typed into a text field stays text.
+- Tests: the keys move the radius and the slider and readout follow, the unshifted forms work, the value clamps at both ends, and a keystroke aimed at an input is not stolen. The mock DOM does not expose `min`/`max` on a range input, so `setSigma` falls back to the same bounds rather than clamping to `NaN`.
+- Service-worker cache bumped to `knot-lab-v26-drag-radius-keys`.
+
 ## Stop refusing legitimate R2 moves in crowded diagrams (Claude Code, unreleased)
 
 Dragging a strand down onto another one kept being refused with "Blocked: a strand cannot pass through another strand", on moves that were plainly ordinary R2s. Instrumenting `reconcile` on a seven-component diagram supplied by the project owner caught it exactly: a step with **2 births and 0 deaths**, the two new crossings **14.6 units apart**, matching components, pairing cost 36.8 against a limit of 224 — a textbook R2 birth, refused only because the empty-bigon test said the bigon was not empty.

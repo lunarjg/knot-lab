@@ -243,11 +243,11 @@ console.log('Shift held during a drag reverses underneath for that gesture only:
 
 // The move tool's own options bar carries drag radius, underneath and its own
 // Auto-relax button, so they are reachable without opening settings. Drag
-// radius defaults to 40.
+// radius defaults to 60.
 {
  const p=boot(),api=p.ctx.knotLab;
- assert.equal(p.ids.get('sigma').value,'40');
- assert.equal(api.opts.sigma,40);
+ assert.equal(p.ids.get('sigma').value,'60');
+ assert.equal(api.opts.sigma,60);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
  assert(p.ids.get('optMove').hidden);
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
@@ -666,6 +666,37 @@ console.log('Erase curve removes one whole component of a link, and undo restore
  assert(api.__sh(),'Freehand selection must still work');
 }
 console.log('The lasso selects with a dragged rectangle as well as a freehand loop: PASS');
+
+// + and - step the drag radius from anywhere, and the slider follows.
+{
+ const p=boot(),api=p.ctx.knotLab;
+ assert.equal(api.opts.sepGap,30,'Separation distance defaults to 30');
+ assert.equal(p.ids.get('sepGap').value,'30');
+ assert.equal(api.opts.sigma,60);
+ p.key('keydown',{key:'+',preventDefault(){}});
+ assert.equal(api.opts.sigma,70,'+ raises the radius');
+ assert.equal(p.ids.get('sigma').value,'70','the slider must follow the keys');
+ assert.equal(p.ids.get('sigmaV').textContent,70,'the readout must follow too');
+ p.key('keydown',{key:'-',preventDefault(){}});
+ p.key('keydown',{key:'-',preventDefault(){}});
+ assert.equal(api.opts.sigma,50,'- lowers it');
+ // the unshifted keys work as well
+ p.key('keydown',{key:'=',preventDefault(){}});
+ assert.equal(api.opts.sigma,60);
+ p.key('keydown',{key:'_',preventDefault(){}});
+ assert.equal(api.opts.sigma,50);
+ // and it clamps to the slider's own range rather than running off
+ for(let i=0;i<40;i++)p.key('keydown',{key:'-',preventDefault(){}});
+ assert.equal(api.opts.sigma,10,'must stop at the slider minimum');
+ for(let i=0;i<40;i++)p.key('keydown',{key:'+',preventDefault(){}});
+ assert.equal(api.opts.sigma,160,'must stop at the slider maximum');
+ // typing into a text field must not be stolen
+ api.opts.sigma=60;
+ const field=p.ids.get('fileName');
+ p.key('keydown',{key:'+',target:{tagName:'INPUT'},preventDefault(){}});
+ assert.equal(api.opts.sigma,60,'+ typed into a field must stay text');
+}
+console.log('Plus and minus step the drag radius, clamped to the slider range: PASS');
 
 // Copy and paste must leave the diagram that was already on the canvas exactly
 // as it was. Pasting integrates a whole curve, which is not a Reidemeister
