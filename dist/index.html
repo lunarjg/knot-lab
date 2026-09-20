@@ -63,6 +63,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .toolopts[hidden]{display:none}
 .toolopt{display:inline-flex;align-items:center;gap:10px}
 .toolopt .iconbtn{white-space:nowrap;padding:4px 10px}
+.toolopt .iconbtn.danger{color:var(--warn)}
 .toolopt[hidden]{display:none}
 .inline{display:inline-flex;align-items:center;gap:7px;color:var(--muted);white-space:nowrap}
 .inline[hidden]{display:none}
@@ -293,6 +294,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
               <button data-erase="precise" aria-pressed="false">Erase segment</button>
             </div>
             <label class="inline" id="eraseSizeWrap" hidden>Size <input type="range" id="eraseSize" min="6" max="80" value="24"></label>
+            <button class="iconbtn danger" id="clearErase" title="Clear all">Clear all</button>
           </div>
           <div class="toolopt" id="optLasso" hidden>
             <div class="seg sub lassomodes" id="lassoModes" role="group" aria-label="Lasso mode">
@@ -301,7 +303,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
             </div>
           </div>
           <div class="toolopt" id="optMove" hidden>
-            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="80"><output id="sigmaV" for="sigma">80</output></label>
+            <label class="inline">Drag radius <input type="range" id="sigma" min="10" max="160" value="40"><output id="sigmaV" for="sigma">40</output></label>
             <label class="inline"><input type="checkbox" id="under"> Pass underneath</label>
             <button class="iconbtn" id="relaxMove" title="Auto-relax (A)">Auto-relax</button>
           </div>
@@ -390,12 +392,14 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div id="pageSettings" hidden>
     <section>
       <h2>Dragging</h2>
-      <p class="small">Drag radius and Pass underneath are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture. Only real topology (Reidemeister validity) gates a move — crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid.</p>
+      <label class="chk"><input type="checkbox" id="separate" checked><span>Separate overlapping crossings<small>When a drag ends, crossings it pushed into each other repel slightly, like weak magnets, until they no longer overlap. Crossings that were already close are left alone, and a nudge that would change the topology is discarded. Each one is then turned back open, so the two strands still meet at a readable angle instead of lying flat.</small></span></label>
+      <div class="row"><label for="sepGap">Separation distance</label><input type="range" id="sepGap" min="10" max="60" value="10"><output id="sepGapV" for="sepGap">10</output></div>
+      <p class="small">Drag radius and Pass underneath are in the Drag strand tool's options bar below the canvas. Hold Shift while dragging to reverse underneath for that gesture. Only real topology (Reidemeister validity) gates a move — while the gesture is in progress crossings are free to pass arbitrarily close together, or briefly overlap, as long as the move is valid; separating them, if at all, happens once on release. A strand still cannot be pulled through another strand: every crossing that appears or disappears has to be a genuine R1 or R2, so dragging can never change the knot.</p>
     </section>
     <section>
       <h2>Display</h2>
-      <label class="chk"><input type="checkbox" id="arrows" checked><span>Orientation arrows</span></label>
-      <label class="chk"><input type="checkbox" id="grid"><span>Background grid</span></label>
+      <label class="chk"><input type="checkbox" id="arrows"><span>Orientation arrows</span></label>
+      <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
     </section>
     <section>
@@ -411,8 +415,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <details><summary>Controls &amp; shortcuts</summary>
       <p><b>Draw</b> Turn Auto-close off for open arcs. Joining an endpoint passes under existing arcs.</p>
       <p><b>Drag</b> Move strands with Reidemeister moves. Drag empty space to pan; pinch or scroll to zoom.</p>
+      <p><b>Erase</b> “Erase strand” removes one strand between crossings or endpoints; “Erase segment” rubs out just what the cursor covers. “Clear all” empties the diagram in one undo step.</p>
       <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
       <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
+      <p><b>Lasso</b> Enclose curves to select them. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
+      <p><b>Crossing overlap</b> “Separate overlapping crossings” (Settings) eases apart any crossings a drag pushed into each other, once the drag ends, and turns them back open so the strands meet at a readable angle. “Separation distance” sets how far. Crossings that were already close stay put.</p>
       <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
       </details>
@@ -467,6 +474,13 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 // ===== Knot core: geometry, crossing tracking, Reidemeister validity, state analysis =====
 const KC = (function () {
   const SEG = 7; // target segment length (world units)
+  // How far apart the two halves of an R2 pair may be and still be matched.
+  // The structural work is done by the empty-bigon test in pairCost; this is
+  // only a sanity cap, so it is generous. It has to clear a bigon that a
+  // single rigid step collapses all at once (a paste or a nudge of a whole
+  // component), not just the tiny one an incremental drag leaves: the old
+  // values of 70/60 rejected a legitimate separation costing ~153.
+  const R2_REACH = 32 * SEG;
 
   function circD(a, b) { let d = Math.abs(a - b) % 1; return d > 0.5 ? 1 - d : d; }
   function circSigned(a, b) { let d = (b - a) % 1; if (d > 0.5) d -= 1; else if (d <= -0.5) d += 1; return d; }
@@ -639,16 +653,36 @@ const KC = (function () {
     pass(45); pass(500);
 
     const births = raw.filter(N => !mN.has(N)), deaths = oldX.filter(O => !mO.has(O));
-    const pairCost = (A, B, perm, cm) => {
+    // An R2 pair has to bound a genuine *empty* bigon: the two crossings must
+    // be adjacent along both strands, with no third crossing in between. Two
+    // crossings that merely happen to land near each other are not an R2, and
+    // pairing them as one is how a strand gets to slide through another strand
+    // while the step still looks like a legal move.
+    const arcEmpty = (cm, s0, s1, all, A, B, c) => {
+      const L = cm.len, fwd = mod(s1 - s0, L), bwd = mod(s0 - s1, L);
+      const span = Math.min(fwd, bwd), start = fwd <= bwd ? s0 : s1;
+      for (const X of all) {
+        if (X === A || X === B) continue;
+        for (const o of X.occ) {
+          if (o.c !== c) continue;
+          const t = mod(o.s - start, L);
+          if (t > 1e-9 && t < span - 1e-9) return false;
+        }
+      }
+      return true;
+    };
+    const pairCost = (A, B, perm, cm, all) => {
       const a = A.occ[0], b = A.occ[1], na = B.occ[perm], nb = B.occ[1 - perm];
       if (a.c !== na.c || b.c !== nb.c) return Infinity;
+      if (all && !(arcEmpty(cm[a.c], a.s, na.s, all, A, B, a.c) && arcEmpty(cm[b.c], b.s, nb.s, all, A, B, b.c))) return Infinity;
       return sDist(cm[a.c], a.s, na.s) + sDist(cm[b.c], b.s, nb.s) + 0.5 * Math.hypot(A.x - B.x, A.y - B.y);
     };
 
-    // --- deaths: an R2 pair must agree on which strand is on top; a pair that
-    // does not match up as R2 or R1 is simply left uncounted rather than
-    // rejected, since a wide step can carry a strand across another one in one
-    // go and that is still just the reverse of the R2 it would undo.
+    // --- deaths: a crossing can only disappear through a move that is allowed
+    // to remove it -- an R2 bigon collapse (both crossings agreeing on which
+    // strand is on top) or an R1 kink. A death that matches neither is not a
+    // Reidemeister move at all: it is a strand that slid through another one,
+    // which changes the knot. Those are rejected, and the step is rolled back.
     const doneD = new Set();
     for (const d of deaths) {
       if (doneD.has(d)) continue;
@@ -656,8 +690,8 @@ const KC = (function () {
       for (const e of deaths) {
         if (e === d || doneD.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
-          const c = pairCost(d, e, perm, oldComps);
-          if (c < 70 && (!best || c < best[0])) best = [c, e, perm];
+          const c = pairCost(d, e, perm, oldComps, oldX);
+          if (c < R2_REACH && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       if (best) {
@@ -667,7 +701,7 @@ const KC = (function () {
         ev.r2++; continue;
       }
       if (isSmallLoop(d, oldX, oldComps, 16 * SEG)) { doneD.add(d); ev.r1++; continue; }
-      doneD.add(d);
+      return { ok: false, reason: 'pass' };
     }
 
     // --- births: the dragged strand goes on top (or below in "under" mode)
@@ -686,8 +720,8 @@ const KC = (function () {
       for (const e of births) {
         if (e === b || doneB.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
-          const c = pairCost(b, e, perm, comps);
-          if (c < 60 && (!best || c < best[0])) best = [c, e, perm];
+          const c = pairCost(b, e, perm, comps, raw);
+          if (c < R2_REACH && (!best || c < best[0])) best = [c, e, perm];
         }
       }
       b.id = nextId(); b.over = decide(b); doneB.add(b);
@@ -695,6 +729,9 @@ const KC = (function () {
         const [, e, perm] = best;
         e.id = nextId(); e.over = perm ? 1 - b.over : b.over; doneB.add(e); ev.r2++;
       } else if (isSmallLoop(b, raw, comps, 16 * SEG)) ev.r1++;
+      // A birth that is neither half of an R2 bigon nor an R1 kink means the
+      // strand arrived on the far side of another one: not a legal move.
+      else return { ok: false, reason: 'pass' };
     }
 
     // --- R3: crossings swapping order along a strand pass through a triple point; heights must not be cyclic
@@ -777,6 +814,135 @@ const KC = (function () {
     let best = 0, bd = 2;
     comp.pts.forEach((q, i) => { const d = circD(q.u, u); if (d < bd) { bd = d; best = i; } });
     return best;
+  }
+  const pairKey = (a, b) => a < b ? a + ':' + b : b + ':' + a;
+  // The angle the two strands make at a crossing, measured between lines
+  // rather than directions: pi/2 is a square crossing, 0 is flat.
+  function crossingAngle(X) {
+    const [p, q] = X.occ;
+    const n1 = Math.hypot(p.dx, p.dy) || 1, n2 = Math.hypot(q.dx, q.dy) || 1;
+    return Math.acos(Math.min(1, Math.abs((p.dx * q.dx + p.dy * q.dy) / (n1 * n2))));
+  }
+  const crossingAngles = crossings => new Map(crossings.map(X => [X.id, crossingAngle(X)]));
+  // Pairwise crossing distances, for separateCrossings' "was it already like
+  // that?" comparison. Keyed by crossing id, so it survives a gesture that
+  // renumbers nothing but moves everything.
+  function crossingDistances(crossings) {
+    const m = new Map();
+    for (let i = 0; i < crossings.length; i++) for (let j = i + 1; j < crossings.length; j++) {
+      const a = crossings[i], b = crossings[j];
+      m.set(pairKey(a.id, b.id), Math.hypot(a.x - b.x, a.y - b.y));
+    }
+    return m;
+  }
+  // Weak-magnet separation, run once a gesture finishes: two crossings the
+  // gesture pushed into each other are eased back apart until they clear
+  // `gap`, so an overlapped pair reads as two crossings instead of one blot.
+  //
+  // Only pairs the gesture actually tightened are touched -- newly formed, or
+  // measurably closer than they were at `before` -- so a diagram that was
+  // already drawn tight (an import, or a deliberately crowded region) is left
+  // exactly as it is rather than rearranged behind the user's back.
+  //
+  // Every nudge goes through attemptStep and is rolled back unless it leaves
+  // the topology untouched, so separating can never add, remove or reorder a
+  // crossing. A pair with nowhere to go is recorded as stuck and skipped,
+  // rather than stopping the pass for the pairs that can still move.
+  function separateCrossings(S, opt) {
+    const gap = opt.gap, before = opt.before;
+    if (!(gap > 0) || !before) return 0;
+    const stuck = new Set();
+    const touched = opt.touched;
+    let moved = 0;
+    for (let guard = 0; guard < 24; guard++) {
+      const X = S.crossings;
+      let worst = null;
+      for (let i = 0; i < X.length; i++) for (let j = i + 1; j < X.length; j++) {
+        const a = X[i], b = X[j], key = pairKey(a.id, b.id);
+        if (stuck.has(key)) continue;
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d >= gap) continue;
+        const prior = before.get(key);
+        if (prior !== undefined && prior <= d + 1e-6) continue;
+        if (!worst || d < worst.d) worst = { a, b, d, key };
+      }
+      if (!worst) break;
+      const { a, b, d, key } = worst;
+      // Exactly coincident crossings have no separation axis of their own;
+      // push them apart along one of the strands running through them.
+      let ux, uy;
+      if (d > 1e-6) { ux = (b.x - a.x) / d; uy = (b.y - a.y) / d; }
+      else { const o = a.occ[0], t = Math.hypot(o.dx, o.dy) || 1; ux = o.dx / t; uy = o.dy / t; }
+      // Overshoot the gap a little: the corner smoothing that follows a drag
+      // pulls the fresh bend back in by a few percent, and this is what keeps
+      // the settled result at the gap rather than just under it.
+      const push = (gap - d) / 2 + gap * 0.15, sigma = Math.max(10, gap * 0.6);
+      const backup = { comps: cloneComps(S.comps), crossings: cloneCrossings(S.crossings), nextId: S.nextId };
+      const before2 = S.crossings.length;
+      const r = attemptStep(S, comps => {
+        [[a, -1], [b, 1]].forEach(([Xc, sign]) => Xc.occ.forEach(o => {
+          const cm = comps[o.c];
+          moveWeighted(cm, indexOfU(cm, o.u), sign * ux * push, sign * uy * push, sigma);
+        }));
+      }, {});
+      if (!r.ok || r.ev.r1 || r.ev.r2 || r.ev.r3 || S.crossings.length !== before2) {
+        S.comps = backup.comps; S.crossings = backup.crossings; S.nextId = backup.nextId;
+        stuck.add(key); continue;
+      }
+      const na = S.crossings.find(Xc => Xc.id === a.id), nb = S.crossings.find(Xc => Xc.id === b.id);
+      if (!na || !nb || Math.hypot(na.x - nb.x, na.y - nb.y) <= d + 1e-6) stuck.add(key);
+      else { moved++; if (touched) { touched.add(a.id); touched.add(b.id); } }
+    }
+    return moved;
+  }
+
+  // Pushing two crossings apart stretches the arcs between them, which leaves
+  // both strands running nearly parallel through each crossing -- separated,
+  // but flat enough that you cannot read which strand is which. This turns the
+  // two strands apart again about the crossing they share.
+  //
+  // The displacement along a strand is u(s) = A * s * exp(-s^2 / 2 sigma^2)
+  // times the normal. u(0) = 0, so the crossing itself does not move, while
+  // du/ds at the crossing is A -- the tangent there turns by A radians and the
+  // effect dies away within a couple of sigma. The largest displacement is only
+  // about 0.6 * A * sigma, so this opens the angle without redrawing the curve.
+  function openCrossings(S, ids, opt) {
+    const minAngle = opt.minAngle, sigma = opt.sigma || 18;
+    if (!(minAngle > 0) || !ids || !ids.size) return 0;
+    let opened = 0;
+    for (const id of ids) {
+      const X = S.crossings.find(c => c.id === id);
+      if (!X) continue;
+      const [p, q] = X.occ;
+      const n1 = Math.hypot(p.dx, p.dy) || 1, n2 = Math.hypot(q.dx, q.dy) || 1;
+      const t1x = p.dx / n1, t1y = p.dy / n1, t2x = q.dx / n2, t2y = q.dy / n2;
+      // signed angle from strand 1 to strand 2
+      const th = Math.atan2(t1x * t2y - t1y * t2x, t1x * t2x + t1y * t2y);
+      const abs = Math.abs(th);
+      if (crossingAngle(X) >= minAngle) continue;
+      // turn them apart until the lines meet at minAngle, from whichever side
+      // they are already on, so a crossing never flips through square
+      const target = abs <= Math.PI / 2 ? minAngle : Math.PI - minAngle;
+      const half = (target - abs) * Math.sign(th || 1) / 2;
+      const backup = { comps: cloneComps(S.comps), crossings: cloneCrossings(S.crossings), nextId: S.nextId };
+      const n = S.crossings.length;
+      const turn = (comps, o, A) => {
+        const cm = comps[o.c], L = cm.len, g2 = 2 * sigma * sigma;
+        const m = Math.hypot(o.dx, o.dy) || 1, nx = -o.dy / m, ny = o.dx / m;
+        cm.pts.forEach((pt, i) => {
+          let ds = mod(cm.cum[i] - o.s, L); if (ds > L / 2) ds -= L;
+          const w = A * ds * Math.exp(-ds * ds / g2);
+          pt.x += w * nx; pt.y += w * ny;
+        });
+      };
+      const r = attemptStep(S, comps => { turn(comps, p, -half); turn(comps, q, half); }, {});
+      if (!r.ok || r.ev.r1 || r.ev.r2 || r.ev.r3 || S.crossings.length !== n) {
+        S.comps = backup.comps; S.crossings = backup.crossings; S.nextId = backup.nextId;
+        continue;
+      }
+      opened++;
+    }
+    return opened;
   }
 
   // Energy-style relaxation: short-range repulsion between distant parts of
@@ -1020,7 +1186,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod
   };
 })();
@@ -1034,7 +1200,7 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  const opts = { sigma: 80, under: false, arrows: true, signs: false, grid: false, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true };
+  const opts = { sigma: 40, sepGap: 10, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1456,7 +1622,13 @@ const KC = (function () {
     changed();toast('Made alternating · '+result.flips+' crossing'+(result.flips===1?'':'s')+' changed');
   };
   $('mirrorBtn').onclick = () => { if (!S.crossings.length) return; pushUndo(); S.moveCheckpoint=null; S.crossings.forEach(x => x.over = 1 - x.over); changed(); toast('Diagram mirrored'); };
-  $('clearBtn').onclick = () => { if (!S.comps.length && !S.open.length) return; pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint=null; clearSel(); changed(); setTool('draw'); };
+  function clearAll() {
+    if (!S.comps.length && !S.open.length) return;
+    pushUndo(); S.comps = []; S.crossings = []; S.open = []; S.memory = []; S.moveCheckpoint = null;
+    clearSel(); changed(); setTool('draw');
+  }
+  $('clearBtn').onclick = clearAll;
+  $('clearErase').onclick = clearAll;
   let relaxing = 0, relaxEpoch = 0;
   const relaxLabel = text => { $('smoothBtn').textContent = text; $('relaxMove').textContent = text; };
   function stopRelax() {
@@ -1500,6 +1672,40 @@ const KC = (function () {
     }
     return { blocked, moved };
   }
+  // The slider's default sits at the bottom of its range: just enough to pull a
+  // genuine overlap apart. Around 24 is where the two crossings' drawn
+  // undercrossing breaks can no longer touch at any zoom -- the break reaches
+  // min(12, 8/view.s) world units either side of a crossing -- and even that is
+  // only a few segments (SEG = 7) of nudge rather than a rearrangement.
+  //
+  // Separating stretches the arcs between the pair, which leaves both strands
+  // running nearly parallel through each crossing: at a 60-unit gap the
+  // crossing angles collapse from 67 degrees to 15. So every crossing the
+  // separation moved is turned back open to at least MIN_CROSSING_ANGLE, which
+  // costs almost nothing in distance (measured 70.8 -> 70.9 units).
+  const MIN_CROSSING_ANGLE = 40 * Math.PI / 180;
+  function separateCrowdedCrossings(before) {
+    if (!opts.separate || !before) return 0;
+    return KC.separateCrossings(S, { gap: opts.sepGap, before });
+  }
+  // Open up every crossing this gesture is responsible for flattening: the ones
+  // it created, and the ones whose angle it made shallower than it was --
+  // separating a pair stretches the arcs between them, and that squashes nearby
+  // crossings too, not just the pair being moved. A crossing that was already
+  // shallow before the gesture is left as the user had it.
+  //
+  // This runs after the corner smoothing, not before: smoothing straightens the
+  // curve, and on a tightly separated pair that flattens the crossings straight
+  // back to where they started (measured 40 degrees back down to 11).
+  function openFlattenedCrossings(beforeAngles) {
+    if (!opts.separate || !beforeAngles) return 0;
+    const ids = new Set();
+    S.crossings.forEach(X => {
+      const was = beforeAngles.get(X.id);
+      if (was === undefined || KC.crossingAngle(X) < was - 1e-3) ids.add(X.id);
+    });
+    return KC.openCrossings(S, ids, { minAngle: MIN_CROSSING_ANGLE, sigma: 18 });
+  }
   $('cornerBtn').onclick = () => {
     if (!S.comps.length && !S.open.length) return;
     pushUndo();
@@ -1508,6 +1714,8 @@ const KC = (function () {
     toast(blocked ? 'Some corners were smoothed; further smoothing would require a blocked move' : moved ? 'Sharp corners smoothed' : 'No sharp corners to smooth', blocked);
   };
   $('cornerFix').onchange = e => { opts.cornerFix = e.target.checked; };
+  $('separate').onchange = e => { opts.separate = e.target.checked; };
+  $('sepGap').oninput = e => { opts.sepGap = +e.target.value; setText('sepGapV', opts.sepGap); };
   function toggleRelax() { if(relaxing){stopRelax();return;} if (!S.comps.length) return; pushUndo(); relaxFrames(150); }
   $('smoothBtn').onclick = toggleRelax;
   $('relaxMove').onclick = toggleRelax;
@@ -1650,6 +1858,11 @@ const KC = (function () {
     const t = forced || tool;
     if (t === 'lasso') {
       hideMenu();
+      if (sel && onScaleHandle(e)) {
+        const b = selBox(), c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+        const d0 = Math.max(1e-6, Math.hypot(w.x - c.x, w.y - c.y));
+        pushUndo(); active = { ...base, kind: 'selscale', c, d0, applied: 1, lifted: false }; return;
+      }
       if (sel && onRotateHandle(e)) {
         const b = selBox(), c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
         pushUndo(); active = { ...base, kind: 'selrotate', c, last: Math.atan2(w.y - c.y, w.x - c.x), total: 0, applied: 0, lifted: false, w }; return;
@@ -1683,7 +1896,8 @@ const KC = (function () {
       // Snap the grab onto the vertex the drag will actually move, so the
       // strand starts moving from exactly where the pointer is holding it.
       const grabbed = S.comps[hit.c];
-      drag = { c: hit.c, u: grabbed.pts[KC.indexOfU(grabbed, hit.u)].u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under };
+      drag = { c: hit.c, u: grabbed.pts[KC.indexOfU(grabbed, hit.u)].u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under,
+        before: KC.crossingDistances(S.crossings), beforeAngles: KC.crossingAngles(S.crossings) };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
       if (!looping) { looping = true; requestAnimationFrame(tick); }
@@ -1727,6 +1941,16 @@ const KC = (function () {
       rotateSel(target - active.applied, active.c.x, active.c.y); active.applied = target;
       render(); return;
     }
+    if (active.kind === 'selscale') {
+      // distance from the selection centre against where the grab started
+      let k = Math.hypot(w.x - active.c.x, w.y - active.c.y) / active.d0;
+      const step = 0.25, snapped = Math.round(k / step) * step;
+      if (e.shiftKey || Math.abs(k - snapped) < 0.02) k = snapped;
+      k = Math.max(0.1, Math.min(12, k));
+      if (!active.lifted) { if (Math.abs(k - 1) < 0.02) return; liftSelection(); active.lifted = true; hideMenu(); }
+      scaleSel(k / active.applied, active.c.x, active.c.y); active.applied = k;
+      render(); return;
+    }
     if (active.kind === 'selmove') {
       if (!active.lifted) { if (Math.hypot(e.clientX - active.sx, e.clientY - active.sy) < 4) return; liftSelection(); active.lifted = true; }
       translateSel(w.x - active.last.x, w.y - active.last.y); active.last = w; render();
@@ -1736,16 +1960,19 @@ const KC = (function () {
     const a = active; active = null;
     if (!a) return;
     if (a.kind === 'drag') {
-      // Tidy up the kinks the gesture left behind, inside the drag's own undo
-      // step so one undo takes back both.
-      if (drag.changed) smoothSharpCorners(); else undoStack.pop();
+      // Tidy up what the gesture left behind, inside the drag's own undo step
+      // so one undo takes back all of it: first ease apart any crossings the
+      // drag pushed into each other, then smooth the kinks -- including any
+      // the separation itself introduced.
+      if (drag.changed) { separateCrowdedCrossings(drag.before); smoothSharpCorners(); openFlattenedCrossings(drag.beforeAngles); }
+      else undoStack.pop();
       drag = null; cv.style.cursor = 'grab'; changed();
     }
     else if (a.kind === 'pan') pan = null;
     else if (a.kind === 'draw') { const st = stroke; stroke = null; hoverSnap = null; finishStroke(st); }
     else if (a.kind === 'erase') { if (!erasing.changed) undoStack.pop(); erasing = null; changed(); }
     else if (a.kind === 'lasso') { const pts = lasso.pts; lasso = null; finishLasso(pts); }
-    else if (a.kind === 'selmove' || a.kind === 'selrotate') { if (a.lifted) dropSelection(); else undoStack.pop(); showMenu(); render(); }
+    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') { if (a.lifted) dropSelection(); else undoStack.pop(); showMenu(); render(); }
   }
   // Undo whatever a (touch) action did — used when a palm started it
   function cancelAction() {
@@ -1757,7 +1984,7 @@ const KC = (function () {
     else if (a.kind === 'erase') { erasing = null; const s = undoStack.pop(); if (s) restore(s); changed(); }
     else if (a.kind === 'flip') { const s = undoStack.pop(); if (s) { restore(s); } changed(); }
     else if (a.kind === 'lasso') { lasso = null; render(); }
-    else if (a.kind === 'selmove' || a.kind === 'selrotate') { const s = undoStack.pop(); if (a.lifted && s) { restore(s); clearSel(); changed(); } }
+    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') { const s = undoStack.pop(); if (a.lifted && s) { restore(s); clearSel(); changed(); } }
   }
   function pinchState() {
     const [p, q] = [...touches.values()];
@@ -1833,7 +2060,7 @@ const KC = (function () {
     if (tool === 'flip') { const X = nearestCrossing(w, tol * 1.4); if (X !== hoverX) { hoverX = X; render(); } cv.style.cursor = X ? 'pointer' : 'default'; }
     else if (tool === 'move') { const p = nearestPoint(w, tol); cv.style.cursor = p ? 'grab' : 'default'; }
     else if (tool === 'erase') { cv.style.cursor = opts.eraseMode === 'precise' ? 'none' : 'cell'; hoverErase = opts.eraseMode === 'strand' ? hitStrand(w, tol, strandModel()) : null; render(); }
-    else if (tool === 'lasso') { cv.style.cursor = sel && onRotateHandle(e) ? 'grab' : sel && inBox(w, selBox(), 14 / view.s) ? 'move' : 'crosshair'; }
+    else if (tool === 'lasso') { cv.style.cursor = sel && onScaleHandle(e) ? 'nwse-resize' : sel && onRotateHandle(e) ? 'grab' : sel && inBox(w, selBox(), 14 / view.s) ? 'move' : 'crosshair'; }
     else { cv.style.cursor = 'crosshair'; const s = nearestEndpoint(w, SNAP / view.s); if ((s && s.p) !== (hoverSnap && hoverSnap.p)) { hoverSnap = s; render(); } }
   });
 
@@ -1913,7 +2140,7 @@ const KC = (function () {
       drag.changed = true; steps++;
     }
     if (steps) changed();
-    if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move' }[blocked] || 'Blocked', true);
+    if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand cannot pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     requestAnimationFrame(tick);
   }
@@ -2286,6 +2513,32 @@ const KC = (function () {
     const m = sel.xf;
     sel.xf = { a: cs * m.a - sn * m.b, b: sn * m.a + cs * m.b, c: cs * m.c - sn * m.d, d: sn * m.c + cs * m.d, e: cs * (m.e - cx) - sn * (m.f - cy) + cx, f: sn * (m.e - cx) + cs * (m.f - cy) + cy };
   }
+  // Uniform only: a non-uniform scale would distort the strands without making
+  // the diagram any easier to work with, and the crossing-memory directions
+  // carried in sel.xf stay meaningful under a uniform scale (they are only ever
+  // compared against each other, so a common factor cancels).
+  function scaleSel(k, cx, cy) {
+    if (!(k > 0) || Math.abs(k - 1) < 1e-9) return;
+    const sc = q => { q.x = cx + (q.x - cx) * k; q.y = cy + (q.y - cy) * k; };
+    sel.items.forEach(it => it.ref.pts.forEach(sc));
+    (sel.floating || []).forEach(p => p.forEach(sc));
+    const m = sel.xf;
+    sel.xf = { a: k * m.a, b: k * m.b, c: k * m.c, d: k * m.d, e: k * (m.e - cx) + cx, f: k * (m.f - cy) + cy };
+  }
+  // screen position of the resize handle: just outside the selection's
+  // bottom-right corner, kept clear of the dock and the canvas edges
+  function scaleHandlePos() {
+    const b = selBox(), dockH = ($('toolopts').hidden ? 60 : 102) + 16;
+    return {
+      x: Math.max(24, Math.min(W - 24, b.x1 * view.s + view.ox + 20)),
+      y: Math.max(dockH + 12, Math.min(H - 34, b.y1 * view.s + view.oy + 20))
+    };
+  }
+  function onScaleHandle(e) {
+    if (!sel || sel.floating) return false;
+    const r = cv.getBoundingClientRect(), h = scaleHandlePos();
+    return Math.hypot(e.clientX - r.left - h.x, e.clientY - r.top - h.y) < (e.pointerType === 'touch' ? 24 : 16);
+  }
   // screen position of the rotation handle: above the selection, or below it when the top is hidden by the toolbar
   function rotateHandlePos() {
     const b = selBox(), top = b.y0 * view.s + view.oy - 10, bottom = b.y1 * view.s + view.oy + 10;
@@ -2491,7 +2744,7 @@ const KC = (function () {
     const penNote = input.penOnly ? ' Pan with one finger; zoom with two.' : '';
     $('hint').textContent = tool === 'move' ? (opts.under ? 'Drag a strand to move it. It passes under at new crossings (hold Shift to pass over).' : 'Drag a strand to move it. It passes over at new crossings (hold Shift to pass under).')
       : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join it; connecting segments pass under existing arcs.' : 'Strokes remain open. Join endpoints to complete a loop; connecting segments pass under existing arcs.')
-        : tool === 'lasso' ? (opts.lassoMode === 'curve' ? 'Enclose curves to select them. Drag to move, or use the menu to copy, cut, or delete. Tap an empty area to paste.' : 'Select only the enclosed region. Curves are cut at the boundary; you can rejoin their endpoints to close them.')
+        : tool === 'lasso' ? (opts.lassoMode === 'curve' ? 'Enclose curves to select them. Drag to move, the corner grip to resize, the top handle to rotate, or use the menu to copy, cut, or delete. Tap an empty area to paste.' : 'Select only the enclosed region. Curves are cut at the boundary; you can rejoin their endpoints to close them.')
         : tool === 'erase' ? (opts.eraseMode === 'strand' ? 'Erase one strand between crossings or endpoints. Rejoin the remaining endpoints to close the curve.' : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
           : 'Tap a crossing to swap its over/under strands.';
     if (penNote) $('hint').textContent += penNote;
@@ -2647,10 +2900,32 @@ const KC = (function () {
         ctx.globalAlpha = 1; ctx.strokeStyle = cssv('--ink'); ctx.lineWidth = 3 / view.s; ctx.stroke();
       });
       const rotating = active && active.kind === 'selrotate';
+      const scaling = active && active.kind === 'selscale';
       ctx.setLineDash([6 / view.s, 5 / view.s]); ctx.lineWidth = 1.5 / view.s; ctx.strokeStyle = cssv('--accent');
       if (!rotating) ctx.strokeRect(b.x0 - pad, b.y0 - pad, b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad);
       ctx.setLineDash([]);
-      if (tool === 'lasso' && !(active && active.kind === 'selmove')) {
+      // resize handle: a corner grip with two arrowheads along the diagonal
+      if (tool === 'lasso' && !(active && (active.kind === 'selmove' || active.kind === 'selrotate'))) {
+        const h = scaleHandlePos(), sx = (h.x - view.ox) / view.s, sy = (h.y - view.oy) / view.s;
+        const cor = { x: b.x1 + pad, y: b.y1 + pad }, hr = 11 / view.s;
+        ctx.beginPath(); ctx.strokeStyle = cssv('--accent'); ctx.lineWidth = 1.5 / view.s;
+        ctx.moveTo(cor.x, cor.y); ctx.lineTo(sx, sy); ctx.stroke();
+        ctx.beginPath(); ctx.fillStyle = cssv('--paper'); ctx.arc(sx, sy, hr, 0, 7); ctx.fill(); ctx.lineWidth = 1.8 / view.s; ctx.stroke();
+        // two corner brackets facing apart: a resize affordance that does not
+        // read as a slash through the circle the way a full diagonal does
+        const a1 = hr * 0.46, arm = hr * 0.42;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        [[-1, -1], [1, 1]].forEach(([dx, dy]) => {
+          const px = sx + a1 * dx, py = sy + a1 * dy;
+          ctx.beginPath(); ctx.moveTo(px - arm * dx, py); ctx.lineTo(px, py); ctx.lineTo(px, py - arm * dy); ctx.stroke();
+        });
+        ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+        if (scaling) {
+          ctx.font = `600 ${13 / view.s}px ${cssv('--sans')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillStyle = cssv('--accent'); ctx.fillText(`${Math.round(active.applied * 100)}%`, sx, sy - hr - 4 / view.s);
+        }
+      }
+      if (tool === 'lasso' && !(active && (active.kind === 'selmove' || active.kind === 'selscale'))) {
         let hx, hy, bx, by;
         if (rotating) {
           const c = active.c, dir = Math.atan2(active.w.y - c.y, active.w.x - c.x), R = Math.max(Math.hypot(active.w.x - c.x, active.w.y - c.y), 40 / view.s);
@@ -2824,7 +3099,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos() };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };

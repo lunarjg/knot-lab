@@ -8,6 +8,7 @@ const totals={r1:0,r2:0,r3:0};const S=state(fixture(-1));
 // Alternate every closed component together, minimizing flips for the fixed
 // projection (including disconnected pieces and the wrap around each component).
 require('../dist/pd-import.js');
+const INV=require('../dist/invariants.js');
 const altTrefoil=()=>PDImport.fromPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]',KC);
 const splitA=altTrefoil(),splitB=altTrefoil();splitB.comps.forEach(c=>c.pts.forEach(p=>p.x+=3000));
 const split=state(splitA.comps.concat(splitB.comps));
@@ -54,22 +55,135 @@ const birth=KC.reconcile([],b,a,KC.computeRaw(a),{nextId:()=>id++});assert(birth
 x[0].over=1-x[0].over;assert.equal(KC.reconcile(x,a,b,KC.computeRaw(b),{}).reason,'R2');
 console.log('R3 forward/reverse, cyclic-height rejection, no-op resampling, R2 birth/death and invalid R2: PASS');
 
-// Carrying a strand clean across another one in a single step is the reverse
-// of the R2 that would undo it, so it is accepted rather than rejected for
-// "passing through"; only a genuinely contradictory height order still is.
+// Two components that are not linked (one passes over the other at every
+// crossing) can be pulled apart by dragging, and the strands never have to
+// pass through each other to do it. The move is carried out the way the app
+// actually moves things -- in increments -- not as one unverifiable jump.
 {
- const barLong=()=>poly([[-200,0],[200,0],[200,-60],[-200,-60]]);
- const upright=()=>poly([[-100,-300],[-100,300],[-160,300],[-160,-300]]);
- const s=state([barLong(),upright()]);
+ const bar=[[-200,0],[200,0],[200,-60],[-200,-60]];
+ // tilted so no two edges are exactly parallel or exactly coincident
+ const upright=[[-100,-300],[-100,300],[-160,300],[-160,-300]].map(([x,y])=>[x+y*0.05,y]);
+ const s=state([poly(bar),poly(upright)]);
  assert.equal(s.crossings.length,4);
- const r=KC.attemptStep(s,cm=>{cm[1].pts.forEach(p=>{p.x+=900;});},{});
- assert(r.ok,'A wide step carrying a strand past another must not be blocked');
- assert.equal(s.crossings.length,0);
- const back=state([barLong(),upright()]);
- const rb=KC.attemptStep(back,cm=>{cm[1].pts.forEach(p=>{p.x-=900;});},{});
- assert(rb.ok);assert.equal(back.crossings.length,0);
+ for(let done=0;done<900;done+=5){
+  const r=KC.attemptStep(s,cm=>{cm[1].pts.forEach(p=>{p.x+=5;});},{});
+  assert(r.ok,'Separating two unlinked components must not be blocked (stopped at +'+done+(r.reason?': '+r.reason:'')+')');
+ }
+ assert.equal(s.crossings.length,0,'The components must end up apart');
 }
-console.log('A strand carried across another in one step is allowed, not blocked as a pass-through: PASS');
+console.log('Two unlinked components can be dragged apart, with no pass-through needed: PASS');
+
+// The whole point of the editor: a drag is a sequence of Reidemeister moves,
+// so it can never change the knot type. A step that would slide a strand
+// through another one is rejected instead of being silently accepted.
+{
+ const jonesOf=s=>{
+  const r=INV.calculate(KC.analyze(s.comps,s.crossings));
+  assert.equal(r.jones.status,'ready');
+  return r.jones.terms.map(t=>t.coefficient+'@'+t.power2).join(' ');
+ };
+ const fixtures=[
+  ['trefoil',()=>KC.fromCurves3D([KC.torusCurve(2,3,2,1)],420)],
+  ['figure-8',()=>KC.fromCurves3D([KC.figureEightCurve()],440)],
+  ['torus(3,4)',()=>KC.fromCurves3D([KC.torusCurve(3,4,2,1.15)],520)],
+  ['Hopf link',()=>KC.fromCurves3D(KC.braidCurves([1,1]),360)]
+ ];
+ // Haul a grabbed point clean across the diagram -- the gesture that used to
+ // unknot a trefoil outright once unpairable births stopped being rejected.
+ for(const [name,make] of fixtures) for(const sigma of [20,40,80]) for(const frac of [0,0.25,0.5,0.75]){
+  const s=make(),before=jonesOf(s);
+  for(let c=0;c<s.comps.length;c++){
+   const pts=s.comps[c].pts,g0=pts[Math.floor(frac*pts.length)];
+   let u=g0.u,stalls=0;const tx=-g0.x,ty=-g0.y;
+   for(let k=0;k<2000;k++){
+    const m=s.comps[c],g=m.pts[KC.indexOfU(m,u)];
+    const dx=tx-g.x,dy=ty-g.y,d=Math.hypot(dx,dy);
+    if(d<0.8)break;
+    const st=Math.min(2.5,d);
+    const r=KC.attemptStep(s,comps=>{const q=comps[c],gj=KC.indexOfU(q,u);KC.moveWeighted(q,gj,dx/d*st,dy/d*st,sigma);},{});
+    if(!r.ok){if(++stalls>3)break;continue;}
+    const held=s.comps[c];u=held.pts[KC.indexOfU(held,u)].u;
+   }
+  }
+  assert.equal(jonesOf(s),before,`Dragging changed the knot type: ${name}, drag radius ${sigma}, grab ${frac}`);
+ }
+}
+console.log('Dragging can never change the knot type, at any drag radius: PASS');
+
+// Release-time crossing separation only touches pairs the gesture tightened,
+// never pre-existing tight geometry, and never changes the topology.
+{
+ // A tight two-crossing bigon: both crossings sit well inside the 24 gap.
+ const bigon=()=>[
+  [[-80,-40],[-6,0],[0,4],[6,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-6,0],[0,-4],[6,0],[80,40],[80,100],[-80,100]]
+ ].map(poly);
+ // Untouched by any gesture: `before` already records today's distance, so
+ // nothing about the pair counts as tightened and it must be left alone.
+ const kept=state(bigon());
+ assert.equal(kept.crossings.length,2);
+ const wasKept=Math.hypot(kept.crossings[0].x-kept.crossings[1].x,kept.crossings[0].y-kept.crossings[1].y);
+ assert(wasKept<24,'The fixture must start inside the separation gap');
+ const noop=KC.separateCrossings(kept,{gap:24,before:KC.crossingDistances(kept.crossings)});
+ assert.equal(noop,0,'Pre-existing tight crossings must not be rearranged');
+ const stillKept=Math.hypot(kept.crossings[0].x-kept.crossings[1].x,kept.crossings[0].y-kept.crossings[1].y);
+ assert.equal(stillKept.toFixed(6),wasKept.toFixed(6));
+
+ // Same geometry, but `before` says the pair used to be far apart, i.e. this
+ // gesture is what squeezed them together. Now it separates.
+ const moved=state(bigon());
+ const far=new Map([[moved.crossings[0].id+':'+moved.crossings[1].id,500]]);
+ const n=KC.separateCrossings(moved,{gap:24,before:far});
+ assert(n>0,'A pair the gesture tightened must be separated');
+ assert.equal(moved.crossings.length,2,'Separation must not add or remove a crossing');
+ const after=Math.hypot(moved.crossings[0].x-moved.crossings[1].x,moved.crossings[0].y-moved.crossings[1].y);
+ assert(after>wasKept,'Separation must increase the distance');
+ assert(after>=24,'Separation must reach the requested gap');
+ assert.equal(KC.analyze(moved.comps,moved.crossings).c,2);
+
+ // Switched off at the call site (no gap, or no before snapshot) it is inert.
+ const inert=state(bigon());
+ assert.equal(KC.separateCrossings(inert,{gap:0,before:far}),0);
+ assert.equal(KC.separateCrossings(inert,{gap:24,before:null}),0);
+}
+console.log('Release-time separation moves only the crossings a gesture tightened, and preserves topology: PASS');
+
+// Separating a pair stretches the arcs between them, which leaves both strands
+// running nearly parallel through each crossing. openCrossings turns them back
+// apart about the crossing without moving the crossing or the topology.
+{
+ const deg=X=>KC.crossingAngle(X)*180/Math.PI;
+ const bigon=()=>[
+  [[-80,-40],[-6,0],[0,4],[6,0],[80,-40],[80,-100],[-80,-100]],
+  [[-80,40],[-6,0],[0,-4],[6,0],[80,40],[80,100],[-80,100]]
+ ].map(poly);
+ const MIN=40*Math.PI/180;
+ for(const gap of [24,40,60]){
+  const s=state(bigon());
+  const far=new Map([[s.crossings[0].id+':'+s.crossings[1].id,500]]);
+  const touched=new Set();
+  KC.separateCrossings(s,{gap,before:far,touched});
+  const flat=s.crossings.map(deg),apart=Math.hypot(s.crossings[0].x-s.crossings[1].x,s.crossings[0].y-s.crossings[1].y);
+  assert(Math.min(...flat)<40,`separation at gap ${gap} should have flattened a crossing (got ${flat.map(a=>a.toFixed(0))})`);
+  const n=KC.openCrossings(s,touched,{minAngle:MIN,sigma:18});
+  assert(n>0,'openCrossings must open something at gap '+gap);
+  const opened=s.crossings.map(deg);
+  assert(Math.min(...opened)>Math.min(...flat),`angles must improve at gap ${gap}: ${flat.map(a=>a.toFixed(0))} -> ${opened.map(a=>a.toFixed(0))}`);
+  assert(Math.min(...opened)>=35,`every crossing should end near the minimum at gap ${gap} (got ${opened.map(a=>a.toFixed(0))})`);
+  // the separation it just achieved must survive, and so must the topology
+  const now=Math.hypot(s.crossings[0].x-s.crossings[1].x,s.crossings[0].y-s.crossings[1].y);
+  assert(now>apart-2,`opening must not undo the separation at gap ${gap} (${apart.toFixed(1)} -> ${now.toFixed(1)})`);
+  assert.equal(s.crossings.length,2,'opening must not add or remove a crossing');
+ }
+ // a crossing that is already square is left exactly alone
+ const sq=state(bigon());
+ const ids=new Set(sq.crossings.map(X=>X.id));
+ const geom=JSON.stringify(sq.comps.map(c=>c.pts.map(q=>[q.x.toFixed(6),q.y.toFixed(6)])));
+ assert(Math.min(...sq.crossings.map(deg))>=40,'fixture should start open enough');
+ assert.equal(KC.openCrossings(sq,ids,{minAngle:MIN,sigma:18}),0,'Nothing to open on an already-square crossing');
+ assert.equal(JSON.stringify(sq.comps.map(c=>c.pts.map(q=>[q.x.toFixed(6),q.y.toFixed(6)]))),geom,'Geometry must be untouched');
+}
+console.log('Crossings flattened by separation are turned back open, without moving them or the topology: PASS');
 const curled=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat=poly([[-20,0],[20,0],[20,20],[-20,20]]);
 const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});
