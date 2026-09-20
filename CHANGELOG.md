@@ -6,6 +6,14 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Erase a whole curve; select with a rectangle (Claude Code, unreleased)
+
+- **Erase curve**, a third eraser mode beside Erase strand and Erase segment. Tapping a curve removes all of it, which is how you take one component off a link and leave the rest of the diagram alone; dragging sweeps up every curve the pointer crosses. Open arcs count too, so a half-drawn stroke goes the same way. Hovering highlights the entire curve that would be removed, closing the loop for a closed component so it reads as one object rather than a strand. <kbd>E</kbd> now cycles all three modes instead of toggling two.
+- **Rectangle lasso.** A second control in the lasso's options bar chooses the selection shape: Freehand (tracing a loop, as before) or Rectangle (drag a box). The rectangle is rebuilt as four corners on every pointer move and handed to `finishLasso` as an ordinary polygon, so selection, Region cutting, the menu and the transform handles all work unchanged. The shape is independent of the Whole curves / Region mode, so all four combinations are available.
+- The new shape control needed the `lassomodes` class: `.seg.sub button[aria-pressed="true"]` is the eraser's warn red, and only `.seg.sub.lassomodes` overrides it to the accent colour, so without it the active Rectangle button rendered red.
+- Tests: erasing one ring of a two-ring link leaves exactly the other one with no crossings, undo restores it, tapping empty space erases nothing, and <kbd>E</kbd> cycles all three modes; the rectangle selects only what it encloses, an empty rectangle selects nothing, and freehand still works. The mock DOM's `querySelectorAll` learned the new `#lassoShapes button` group.
+- Service-worker cache bumped to `knot-lab-v24-erase-curve-rect-lasso`.
+
 ## Fix Save failing on desktop (Claude Code, unreleased)
 
 Saving a diagram on desktop Chrome or Edge either showed "Could not export the file. Please try again", or appeared to freeze, and in both cases nothing was saved.

@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v23-save-fix';
+const CACHE='knot-lab-v24-erase-curve-rect-lasso';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
