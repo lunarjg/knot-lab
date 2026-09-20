@@ -52,9 +52,11 @@ For other static hosting providers, publish the contents of `dist` at the site r
 - Drag the inspector's left handle to resize it. Drag it to the right edge and release to hide the panel.
 - Use the arrow on the right edge to reopen the inspector.
 
-The Eraser's options bar carries **Clear all** beside its two modes, so emptying the canvas does not need the inspector. It is one undo step, the same as the inspector's button.
+The Eraser has three modes, cycled with <kbd>E</kbd>: **Erase strand** removes one strand between crossings or endpoints, **Erase segment** rubs out only what the cursor covers, and **Erase curve** removes the whole curve under the pointer — the way to take one component off a link without disturbing the others. Hovering in that mode highlights the entire curve that would go. Its options bar also carries **Clear all**, so emptying the canvas does not need the inspector; that is one undo step, the same as the inspector's button.
 
 Display defaults: orientation arrows are **off** and the background grid is **on**; both are in Settings → Display.
+
+The lasso takes either shape: **Freehand** traces a loop around what you want, **Rectangle** just drags a box. The shape is independent of the Whole curves / Region choice, so all four combinations work.
 
 Selections made with the lasso can be moved (drag inside the box), rotated (the handle above it) and resized (the grip at the bottom-right corner). Resizing is uniform — a non-uniform scale would distort the strands without making the diagram easier to work with — and keeps the selection centred, so the diagram grows in place. Like moving and rotating, the whole resize is one undo step.
 

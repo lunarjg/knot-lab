@@ -12,7 +12,7 @@ function boot(saved,narrow=true,Worker){
   focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
- const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
+ const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
  const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':'#16263a'}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
@@ -594,6 +594,78 @@ console.log('The lasso resizes a selection, uniformly and in place, with one und
  assert.equal(api.state.comps.length,0);
 }
 console.log('Arrows default off, grid default on, and Clear all works from the eraser bar: PASS');
+
+// Erase curve removes the whole component under the pointer, which is how you
+// take one ring off a link without disturbing the rest.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const ring=(cx,cy,r)=>{const a=[];for(let i=0;i<64;i++){const t=i/64*Math.PI*2;a.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}return a;};
+ const d=api.serialize();d.comps=[ring(300,300,120),ring(480,300,120)];
+ api.openTab(api.deserialize(d),'link');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ assert.equal(api.state.comps.length,2);
+ assert.equal(api.analysis.c,2,'The two rings should cross twice');
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
+ p.doc.querySelectorAll('#eraseModes button').find(e=>e.dataset.erase==='component').click();
+ assert.equal(api.opts.eraseMode,'component');
+ assert(p.ids.get('eraseSizeWrap').hidden,'The size slider is only for Erase segment');
+ // tap the far-left point of the left ring, well away from the other one
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:91,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ p.fire(canvas,'pointerdown',ev(180,300,'pointerdown'));
+ p.fire(canvas,'pointerup',ev(180,300,'pointerup'));p.flush();
+ assert.equal(api.state.comps.length,1,'Erase curve must remove the whole component');
+ assert.equal(api.analysis.c,0,'Removing one ring leaves no crossings');
+ const left=api.state.comps[0].pts.reduce((m,q)=>Math.min(m,q.x),Infinity);
+ assert(left>300,'The surviving ring should be the right-hand one');
+ p.ids.get('undo').click();p.flush();
+ assert.equal(api.state.comps.length,2,'Undo must bring the component back');
+ assert.equal(api.analysis.c,2);
+ // an empty tap erases nothing
+ p.fire(canvas,'pointerdown',ev(700,700,'pointerdown'));
+ p.fire(canvas,'pointerup',ev(700,700,'pointerup'));p.flush();
+ assert.equal(api.state.comps.length,2,'Tapping empty space must not erase anything');
+ // E cycles all three eraser modes
+ p.key('keydown',{key:'e'});assert.equal(api.opts.eraseMode,'strand');
+ p.key('keydown',{key:'e'});assert.equal(api.opts.eraseMode,'precise');
+ p.key('keydown',{key:'e'});assert.equal(api.opts.eraseMode,'component');
+}
+console.log('Erase curve removes one whole component of a link, and undo restores it: PASS');
+
+// The lasso can be a dragged rectangle instead of a freehand loop.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const ring=(cx,cy,r)=>{const a=[];for(let i=0;i<64;i++){const t=i/64*Math.PI*2;a.push([cx+r*Math.cos(t),cy+r*Math.sin(t)]);}return a;};
+ const d=api.serialize();d.comps=[ring(250,300,90),ring(600,300,90)];
+ api.openTab(api.deserialize(d),'two');api.view.s=1;api.view.ox=0;api.view.oy=0;p.flush();
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+ p.doc.querySelectorAll('#lassoShapes button').find(e=>e.dataset.shape==='rect').click();
+ assert.equal(api.opts.lassoShape,'rect');
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:92,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ // two corners are enough: no tracing the outline
+ p.fire(canvas,'pointerdown',ev(140,190,'pointerdown'));
+ p.fire(canvas,'pointermove',ev(360,410,'pointermove'));
+ p.fire(canvas,'pointerup',ev(360,410,'pointerup'));p.flush();
+ assert(api.__sh(),'The rectangle must make a selection');
+ // only the left ring is inside it
+ p.ids.get('mDelete').click();p.flush();
+ assert.equal(api.state.comps.length,1,'Only the enclosed ring should be selected');
+ assert(api.state.comps[0].pts.reduce((m,q)=>Math.min(m,q.x),Infinity)>400,'The right-hand ring must survive');
+ p.ids.get('undo').click();p.flush();
+ assert.equal(api.state.comps.length,2);
+ // a rectangle that encloses nothing selects nothing
+ p.fire(canvas,'pointerdown',ev(700,600,'pointerdown'));
+ p.fire(canvas,'pointermove',ev(780,680,'pointermove'));
+ p.fire(canvas,'pointerup',ev(780,680,'pointerup'));p.flush();
+ assert(!api.__sh(),'An empty rectangle selects nothing');
+ // and the freehand shape still works
+ p.doc.querySelectorAll('#lassoShapes button').find(e=>e.dataset.shape==='free').click();
+ assert.equal(api.opts.lassoShape,'free');
+ const ringPath=[[140,190],[360,190],[360,410],[140,410],[140,190]];
+ p.fire(canvas,'pointerdown',ev(ringPath[0][0],ringPath[0][1],'pointerdown'));
+ for(const [x,y] of ringPath.slice(1))p.fire(canvas,'pointermove',ev(x,y,'pointermove'));
+ p.fire(canvas,'pointerup',ev(140,190,'pointerup'));p.flush();
+ assert(api.__sh(),'Freehand selection must still work');
+}
+console.log('The lasso selects with a dragged rectangle as well as a freehand loop: PASS');
 
 // Copy and paste must leave the diagram that was already on the canvas exactly
 // as it was. Pasting integrates a whole curve, which is not a Reidemeister
