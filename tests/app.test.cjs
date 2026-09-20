@@ -595,6 +595,44 @@ console.log('The lasso resizes a selection, uniformly and in place, with one und
 }
 console.log('Arrows default off, grid default on, and Clear all works from the eraser bar: PASS');
 
+// Copy and paste must leave the diagram that was already on the canvas exactly
+// as it was. Pasting integrates a whole curve, which is not a Reidemeister
+// move; judging it as one made reconcile reject the match, and the fallback
+// renumbered every crossing and re-derived its height -- so pasting beside a
+// diagram silently flipped that diagram's crossings.
+{
+ const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ api.importPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]');p.flush();
+ api.view.s=1;api.view.ox=0;api.view.oy=0;
+ const mark=()=>api.state.crossings.map(X=>`${X.x.toFixed(3)},${X.y.toFixed(3)}:${X.over}`).sort();
+ const before=mark(),beforeC=api.analysis.c,beforeW=api.analysis.writhe;
+ assert.equal(beforeC,3);
+ const span=()=>{let x0=1/0,x1=-1/0,y0=1/0,y1=-1/0;
+  api.state.comps.forEach(c=>c.pts.forEach(q=>{x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);}));
+  return {x0,x1,y0,y1};};
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:88,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ const b=span(),m=30;
+ const ring=[[b.x0-m,b.y0-m],[b.x1+m,b.y0-m],[b.x1+m,b.y1+m],[b.x0-m,b.y1+m],[b.x0-m,b.y0-m]];
+ p.fire(canvas,'pointerdown',ev(ring[0][0],ring[0][1],'pointerdown'));
+ for(const [x,y] of ring.slice(1))p.fire(canvas,'pointermove',ev(x,y,'pointermove'));
+ p.fire(canvas,'pointerup',ev(ring[4][0],ring[4][1],'pointerup'));p.flush();
+ assert(api.__sh(),'The lasso must have selected the diagram');
+ p.ids.get('mCopy').click();p.flush();
+ p.ids.get('mPaste').click();p.flush();
+ assert.equal(api.state.comps.length,2,'Paste must add a second component');
+ const after=mark(),set=new Set(after);
+ const lost=before.filter(k=>!set.has(k));
+ assert.equal(lost.length,0,`Pasting changed ${lost.length} of the original crossings: ${lost.slice(0,3).join(' ')}`);
+ assert(api.analysis.c>beforeC,'The pasted copy must add crossings of its own');
+ assert.equal(api.analysis.writhe,beforeW*2,'Two disjointly-signed copies should double the writhe');
+ // and undo puts it back
+ p.ids.get('undo').click();p.flush();
+ assert.equal(api.state.comps.length,1);
+ assert.deepEqual(mark(),before,'Undo must restore the original crossings exactly');
+}
+console.log('Copy and paste leaves the existing diagram untouched: PASS');
+
 // Worker lifecycle: cancellation and stale results cannot leak across changes/tabs.
 {
  const workers=[];class FakeWorker{

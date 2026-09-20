@@ -184,6 +184,43 @@ console.log('Release-time separation moves only the crossings a gesture tightene
  assert.equal(JSON.stringify(sq.comps.map(c=>c.pts.map(q=>[q.x.toFixed(6),q.y.toFixed(6)]))),geom,'Geometry must be untouched');
 }
 console.log('Crossings flattened by separation are turned back open, without moving them or the topology: PASS');
+
+// Integrating a whole curve -- pasting, dropping a moved selection, drawing a
+// new loop -- is not a Reidemeister move, so reconcile must not judge it as
+// one. In integrate mode it keeps every crossing it recognises (id and
+// over/under intact) and hands back only the genuinely new ones.
+{
+ const trefoil=()=>KC.fromCurves3D([KC.torusCurve(2,3,2,1)],420);
+ const S=trefoil();
+ const before=S.crossings.map(X=>({id:X.id,over:X.over,x:+X.x.toFixed(6),y:+X.y.toFixed(6)}));
+ assert.equal(before.length,3);
+ // add a copy of the component, offset enough to cross the original a lot
+ const copy=S.comps[0].pts.map(q=>({x:q.x+40,y:q.y+40}));
+ const comp={pts:copy.map((q,i)=>({x:q.x,y:q.y,u:i/copy.length}))};
+ KC.resampleComp(comp);
+ S.comps.push(comp);
+ const firstNew=S.nextId;
+ const raw=KC.computeRaw(S.comps);
+ // plain mode rejects it: the births cannot pair up as R1 or R2
+ const strict=KC.reconcile(S.crossings,S.comps,S.comps,KC.computeRaw(S.comps),{nextId:()=>9000});
+ assert.equal(strict.ok,false,'A whole new component is not a Reidemeister move');
+ // integrate mode accepts it and preserves what was already there
+ const r=KC.reconcile(S.crossings,S.comps,S.comps,raw,{integrate:true,nextId:()=>S.nextId++});
+ assert(r.ok,'Integrate mode must never reject');
+ assert(r.crossings.length>before.length,'The copy must add crossings');
+ for(const b of before){
+  const X=r.crossings.find(c=>c.id===b.id);
+  assert(X,`Original crossing ${b.id} must survive integration`);
+  assert.equal(X.over,b.over,`Original crossing ${b.id} must keep its height`);
+  assert.equal(+X.x.toFixed(6),b.x,`Original crossing ${b.id} must not move`);
+  assert.equal(+X.y.toFixed(6),b.y);
+ }
+ const fresh=r.crossings.filter(X=>X.id>=firstNew);
+ assert.equal(fresh.length,r.crossings.length-before.length,'Only the new crossings may be numbered fresh');
+ const ids=r.crossings.map(X=>X.id);
+ assert.equal(ids.length,new Set(ids).size,'Crossing ids must stay unique');
+}
+console.log('Integrating a whole curve keeps the existing crossings, ids and heights intact: PASS');
 const curled=poly([[-20,0],[-2,0],[1,3],[-1,3],[2,0],[20,0],[20,20],[-20,20]]),flat=poly([[-20,0],[20,0],[20,20],[-20,20]]);
 const curlX=state([curled]).crossings;assert.equal(curlX.length,1);
 const r1death=KC.reconcile(curlX,[curled],[flat],[],{});assert(r1death.ok);assert.deepEqual(r1death.ev,{r1:1,r2:0,r3:0});

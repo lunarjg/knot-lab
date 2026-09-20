@@ -653,6 +653,23 @@ const KC = (function () {
     pass(45); pass(500);
 
     const births = raw.filter(N => !mN.has(N)), deaths = oldX.filter(O => !mO.has(O));
+
+    // Integrating a whole curve -- a pasted component, a dropped selection, a
+    // freshly drawn loop -- is not a Reidemeister move. It adds a complete
+    // strand at once, so its crossings are born in numbers that cannot pair up
+    // as R1 or R2, and rejecting them (which is right for a drag) would throw
+    // away the entire match. The caller then has to renumber every crossing,
+    // including the ones that never moved, and re-decide their heights: pasting
+    // beside an existing diagram silently rewrote that diagram's crossings.
+    //
+    // In this mode the matching pass still does its job -- every crossing it
+    // recognises keeps its id and its over/under -- and whatever is left over
+    // is simply handed back as fresh, for the caller to assign.
+    if (opt.integrate) {
+      const nid = opt.nextId || (() => Math.floor(Math.random() * 1e9));
+      births.forEach(N => { N.id = nid(); });
+      return { ok: true, crossings: raw, ev };
+    }
     // An R2 pair has to bound a genuine *empty* bigon: the two crossings must
     // be adjacent along both strands, with no third crossing in between. Two
     // crossings that merely happen to land near each other are not an R2, and
@@ -2335,7 +2352,7 @@ const KC = (function () {
     S.comps.push(comp);
     const ci = S.comps.length - 1, firstNew = S.nextId;
     const raw = KC.computeRaw(S.comps);
-    const r = KC.reconcile(S.crossings, S.comps, S.comps, raw, { nextId: () => S.nextId++ });
+    const r = KC.reconcile(S.crossings, S.comps, S.comps, raw, { integrate: true, nextId: () => S.nextId++ });
     const all = r.ok ? r.crossings : raw.map(X => (X.id = S.nextId++, X));
     const fresh = all.filter(X => X.id >= firstNew), self = [];
     fresh.forEach(X => {
