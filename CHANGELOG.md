@@ -6,6 +6,19 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Fix pasting rewriting the crossings of the diagram already on the canvas (Claude Code, unreleased)
+
+Copying a diagram and pasting it changed the **original** diagram's crossings: on a 20-crossing diagram supplied by the project owner, only 10 of the 20 survived a paste with their over/under intact, and the writhe stayed at 20 instead of doubling to 40. Drawing a new closed loop over an existing diagram, and dropping a moved partial selection, were hit the same way.
+
+A regression from the topology fix in the previous round. `integrateClosed` validates the new geometry with `reconcile`, and on `!r.ok` it falls back to renumbering **every** crossing and re-deriving every height from crossing memory. Integrating a whole curve adds a complete strand at once, so its crossings are born in numbers that cannot pair up as R1 or R2 — exactly what `reconcile` had just started rejecting. The rejection threw away the entire match, and the fallback then rewrote the crossings that had never moved.
+
+The rejection is right for a drag and wrong here: adding a component is not a Reidemeister move at all. `reconcile` gains an `integrate` mode that runs the matching pass as usual — every crossing it recognises keeps its id and its over/under — and hands the leftovers back as fresh for the caller to assign, without any R1/R2/R3 classification and without ever rejecting. `integrateClosed` is its only caller, which covers all three affected paths (paste, dropped selection, newly drawn loop).
+
+- Verified against the supplied diagram in a browser: 20/20 original crossings preserved at identical positions and heights, writhe 20 → 40, no console errors. Against the deployed build the same run preserves 10/20.
+- Drawing a loop over a trefoil: 3/3 preserved after the fix, 2/3 before.
+- Tests: an app-level copy/paste test asserting every original crossing is unchanged, the writhe doubles, and undo restores exactly (it fails on the unfixed code); and a core test that plain `reconcile` still rejects a whole new component while `integrate` mode preserves ids, heights and positions, numbers only the new crossings, and keeps ids unique.
+- Service-worker cache bumped to `knot-lab-v22-paste-fix`.
+
 ## Eraser gets Clear all; flip the arrow and grid defaults (Claude Code, unreleased)
 
 - Add **Clear all** to the Eraser tool's options bar, beside "Erase strand" and "Erase segment", so emptying the canvas no longer means opening the inspector. Both buttons now call one `clearAll()`, so they behave identically and stay one undo step. Styled with the warn colour via a new `.toolopt .iconbtn.danger` rule, since `.danger` was only defined inside `.selmenu`.
