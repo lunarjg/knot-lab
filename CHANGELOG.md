@@ -6,6 +6,26 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Stop refusing legitimate R2 moves in crowded diagrams (Claude Code, unreleased)
+
+Dragging a strand down onto another one kept being refused with "Blocked: a strand cannot pass through another strand", on moves that were plainly ordinary R2s. Instrumenting `reconcile` on a seven-component diagram supplied by the project owner caught it exactly: a step with **2 births and 0 deaths**, the two new crossings **14.6 units apart**, matching components, pairing cost 36.8 against a limit of 224 — a textbook R2 birth, refused only because the empty-bigon test said the bigon was not empty.
+
+That test was too strict, and the reasoning is geometric: a strand passing *through* the bigon an R2 has just created must enter and leave across that bigon's own boundary, so it necessarily leaves a crossing on one of the two bounding arcs. Counting every such crossing against the pairing meant any R2 formed in a busy region was rejected.
+
+The emptiness test now only considers crossings that **changed in the same step** — other births when pairing births, other deaths when pairing deaths. A crossing that was already there and stayed put is just another strand threading the bigon, which is legal. What genuinely makes a pairing unsafe is another *birth* interleaved between the candidates, which is the ambiguity the original fix was for.
+
+Measured on the supplied diagram (7 components × 12 grab points × 3 drag radii, each pulled 350 units down):
+
+| | false "pass" rejections | drags reaching their target | topology violations |
+| --- | --- | --- | --- |
+| before | 56 | 98/144 | 0/60 |
+| after | **8** | **107/144** | **0/60** |
+
+The knot-type guarantee is untouched: still zero violations across five fixtures × three radii × four grab points. The 8 remaining rejections are genuinely ambiguous — four births crammed into 2.5 units, where no matcher can tell which pairs with which — and refusing there is the safe answer. That also explains why auto-relax, or lifting the strand and lowering it again, clears the block: both separate the crossings enough for the pairing to be unambiguous.
+
+- Test: a ring lowered onto a bar with a post already threaded through the gap, so the new bigon has the post running through it. `reconcile` must accept it as exactly one R2 and keep all six pre-existing crossings. It fails on the unfixed code with `reason=pass`.
+- Service-worker cache bumped to `knot-lab-v25-r2-bigon-fix`.
+
 ## Erase a whole curve; select with a rectangle (Claude Code, unreleased)
 
 - **Erase curve**, a third eraser mode beside Erase strand and Erase segment. Tapping a curve removes all of it, which is how you take one component off a link and leave the rest of the diagram alone; dragging sweeps up every curve the pointer crosses. Open arcs count too, so a half-drawn stroke goes the same way. Hovering highlights the entire curve that would be removed, closing the loop for a closed component so it reads as one object rather than a strand. <kbd>E</kbd> now cycles all three modes instead of toggling two.

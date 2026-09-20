@@ -110,6 +110,40 @@ console.log('Two unlinked components can be dragged apart, with no pass-through 
 }
 console.log('Dragging can never change the knot type, at any drag radius: PASS');
 
+// A strand passing through the bigon an R2 just created is an ordinary thing
+// for a drag to produce: it enters and leaves across the bigon's own boundary,
+// so it necessarily leaves a crossing on one of the two arcs. Counting those
+// against the pairing made reconcile refuse clean R2s in crowded diagrams --
+// "a strand cannot pass through another strand" on a move that plainly is one.
+{
+ const dense=a=>{const o=[];for(let i=0;i<a.length;i++){const p=a[i],q=a[(i+1)%a.length];
+  const n=Math.max(1,Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])/6));
+  for(let k=0;k<n;k++)o.push([p[0]+(q[0]-p[0])*k/n,p[1]+(q[1]-p[1])*k/n]);}return o;};
+ // a bar, a post already threaded through in front of it, and a ring lowered
+ // onto the bar so the new bigon has the post running through it
+ const scene=ringY=>{
+  const ring=[];for(let i=0;i<96;i++){const t=i/96*Math.PI*2;ring.push([110*Math.cos(t),ringY+110*Math.sin(t)]);}
+  return [poly(dense([[-260,0],[260,0],[260,400],[-260,400]])),
+          poly(dense([[-12,-320],[12,-320],[12,320],[-12,320]])),
+          poly(ring)];
+ };
+ const before=scene(-130), after=scene(-105);
+ const old=KC.computeRaw(before);
+ old.forEach((x,i)=>{x.id=i+1;const [a2,b2]=x.occ.map(o=>o.c);x.over=a2<b2?0:1;});
+ const raw=KC.computeRaw(after);
+ assert.equal(old.length,6,'the ring should start clear of the bar');
+ assert.equal(raw.length,8,'lowering the ring onto the bar adds exactly two crossings');
+ let next=100;
+ const r=KC.reconcile(old,before,after,raw,{nextId:()=>next++});
+ assert(r.ok,`Lowering a ring onto a bar is an R2 and must be accepted (got ${r.reason})`);
+ assert.equal(r.ev.r2,1,'It should be counted as exactly one R2');
+ assert.equal(r.ev.r1,0);assert.equal(r.ev.r3,0);
+ // the crossings that were already there keep their identity through it
+ const kept=r.crossings.filter(X=>X.id<100);
+ assert.equal(kept.length,6,'every pre-existing crossing must survive the step');
+}
+console.log('An R2 whose bigon has another strand through it is accepted, not called a pass-through: PASS');
+
 // Release-time crossing separation only touches pairs the gesture tightened,
 // never pre-existing tight geometry, and never changes the topology.
 {

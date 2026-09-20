@@ -675,11 +675,20 @@ const KC = (function () {
       births.forEach(N => { N.id = nid(); });
       return { ok: true, crossings: raw, ev };
     }
-    // An R2 pair has to bound a genuine *empty* bigon: the two crossings must
-    // be adjacent along both strands, with no third crossing in between. Two
+    // An R2 pair has to be adjacent along both strands -- nothing else that
+    // appeared or vanished in this same step may sit between them. Two
     // crossings that merely happen to land near each other are not an R2, and
     // pairing them as one is how a strand gets to slide through another strand
     // while the step still looks like a legal move.
+    //
+    // Only births are in the way of a birth pair (and only deaths of a death
+    // pair), not every crossing. A crossing that was already there and did not
+    // change is just another strand passing through the new bigon, which is a
+    // perfectly ordinary thing for a drag to produce: it enters and leaves
+    // across the bigon's own boundary, so it necessarily lands on one of these
+    // arcs. Counting it made `reconcile` refuse clean R2s in any crowded part
+    // of a diagram -- on a seven-component diagram it turned 56 legitimate
+    // steps into "a strand cannot pass through another strand".
     const arcEmpty = (cm, s0, s1, all, A, B, c) => {
       const L = cm.len, fwd = mod(s1 - s0, L), bwd = mod(s0 - s1, L);
       const span = Math.min(fwd, bwd), start = fwd <= bwd ? s0 : s1;
@@ -712,7 +721,7 @@ const KC = (function () {
       for (const e of deaths) {
         if (e === d || doneD.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
-          const c = pairCost(d, e, perm, oldComps, oldX);
+          const c = pairCost(d, e, perm, oldComps, deaths);
           if (c < R2_REACH && (!best || c < best[0])) best = [c, e, perm];
         }
       }
@@ -742,7 +751,7 @@ const KC = (function () {
       for (const e of births) {
         if (e === b || doneB.has(e)) continue;
         for (let perm = 0; perm < 2; perm++) {
-          const c = pairCost(b, e, perm, comps, raw);
+          const c = pairCost(b, e, perm, comps, births);
           if (c < R2_REACH && (!best || c < best[0])) best = [c, e, perm];
         }
       }
