@@ -1395,14 +1395,107 @@ const KC = (function () {
     return go(n, edgeList.map(e => [e[0], e[1]]));
   }
 
-  // Geometry for the overlay: each decomposition curve as a closed polyline, the
-  // marked points, and the middle piece of every nonalternating arc -- the part
-  // that is an edge of G.
+  // Geometry for the overlay. A decomposition curve passes through the marked
+  // points and otherwise runs through the middle of the faces it crosses, so it
+  // reads as a loop drawn around an alternating tangle rather than as a second
+  // copy of the strands. How far it may leave a strand is decided by how much
+  // room there actually is: a ray cast across the face finds the far side, and
+  // the curve takes a fixed share of that. Two curves sharing a face therefore
+  // take their share from opposite sides and cannot meet.
   function decompositionPaths(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
-    const off = opt.offset == null ? 9 : opt.offset, step = opt.step || SEG / 2;
+    const clear = opt.clearance == null ? 8 : opt.clearance;
+    const share = opt.share == null ? 0.46 : opt.share;
+    const cap = opt.cap == null ? 90 : opt.cap;
+    const step = opt.step || SEG;
+    const passes = opt.smooth == null ? 14 : opt.smooth;
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
+
+    const seg = [];
+    comps.forEach(cm => { const q = cm.pts, n = q.length; for (let i = 0; i < n; i++) seg.push([q[i].x, q[i].y, q[(i + 1) % n].x, q[(i + 1) % n].y]); });
+    // Every point of every curve asks how much room it has, so the strands are
+    // bucketed once and each ray only looks at the cells it can reach. Nothing
+    // beyond REACH can bind the offset, which is capped well below it, so a ray
+    // that finds nothing inside that range may simply report open space.
+    const FAR = 1e4, CELL = 56, REACH = 2 * cap + 4 * clear;
+    const bucket = new Map(), stamp = new Int32Array(seg.length).fill(-1);
+    let visit = 0;
+    seg.forEach((a, i) => {
+      const lo = Math.floor(Math.min(a[0], a[2]) / CELL), hi = Math.floor(Math.max(a[0], a[2]) / CELL);
+      const bo = Math.floor(Math.min(a[1], a[3]) / CELL), bi = Math.floor(Math.max(a[1], a[3]) / CELL);
+      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) {
+        const k = cx + ':' + cy, l = bucket.get(k);
+        if (l) l.push(i); else bucket.set(k, [i]);
+      }
+    });
+    const castRay = (px, py, dx, dy) => {
+      const qx = px + dx * REACH, qy = py + dy * REACH;
+      const lo = Math.floor(Math.min(px, qx) / CELL), hi = Math.floor(Math.max(px, qx) / CELL);
+      const bo = Math.floor(Math.min(py, qy) / CELL), bi = Math.floor(Math.max(py, qy) / CELL);
+      let best = FAR;
+      const here = ++visit;
+      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) {
+        const l = bucket.get(cx + ':' + cy);
+        if (!l) continue;
+        for (const i of l) {
+          if (stamp[i] === here) continue;
+          stamp[i] = here;
+          const a = seg[i], ex = a[2] - a[0], ey = a[3] - a[1];
+          const den = dx * ey - dy * ex;
+          if (den > -1e-9 && den < 1e-9) continue;
+          const rx = a[0] - px, ry = a[1] - py;
+          const t = (rx * ey - ry * ex) / den;
+          if (t <= 1e-6 || t >= best) continue;
+          const u = (rx * dy - ry * dx) / den;
+          if (u >= 0 && u <= 1) best = t;
+        }
+      }
+      return best;
+    };
+    // A single ray straight across can escape down a narrow gap and report far
+    // more room than there is, so a narrow fan is taken as well; the fan is kept
+    // tight, since a wide one collapses next to every strand and would scallop
+    // the curve inwards wherever the diagram happens to be busy.
+    const FAN = [-0.3, 0, 0.3].map(a => [Math.cos(a), Math.sin(a)]);
+    const roomAt = (px, py, nx, ny) => {
+      let best = FAR;
+      for (const [c, sn] of FAN) {
+        const dx = nx * c - ny * sn, dy = nx * sn + ny * c;
+        const t = castRay(px + dx * 0.6, py + dy * 0.6, dx, dy);
+        if (t < best) best = t;
+      }
+      return best + 0.6;
+    };
+    // Offsetting a polyline folds it into a little loop at every corner that
+    // turns the wrong way. Cutting each loop out is what pulls the curve taut
+    // around the tangle instead of letting it trail whiskers at the crossings.
+    const meet = (a, b, c, d) => {
+      const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+      const den = rx * sy - ry * sx;
+      if (den > -1e-12 && den < 1e-12) return null;
+      const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+      const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+      if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) return null;
+      return { x: a.x + t * rx, y: a.y + t * ry };
+    };
+    const dropLoops = pts => {
+      const out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        out.push(pts[i]);
+        let cut = -1, at = null;
+        for (let j = pts.length - 2; j > i + 1; j--) {
+          const q = meet(pts[i], pts[i + 1], pts[j], pts[j + 1]);
+          if (q) { cut = j; at = q; break; }
+        }
+        if (cut < 0) { i++; continue; }
+        out.push(at); i = cut + 1;
+      }
+      out.push(pts[pts.length - 1]);
+      return out;
+    };
+
     const sample = (d, from, to) => {
       const D = dart[d], cm = comps[D.c], f = D.s1 > D.s0 ? 1 : -1;
       const n = Math.max(1, Math.ceil(Math.abs(to - from) / step)), out = [];
@@ -1422,7 +1515,7 @@ const KC = (function () {
       }
     }
     const side = turn >= 0 ? 1 : -1;
-    const push = (out, pts) => pts.forEach(P => out.push({ x: P.x - side * P.ty * off, y: P.y + side * P.tx * off }));
+
     // The two marked points may sit anywhere on their edge, so they are placed
     // symmetrically about its middle: the piece between them is the edge of G,
     // and the rest of the edge belongs to the alternating region at either end.
@@ -1432,18 +1525,84 @@ const KC = (function () {
       const bar = opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.6 * L, Math.max(14, Math.min(60, 0.25 * L)));
       return D.s0 + (D.s1 > D.s0 ? 1 : -1) * (L - bar) / 2;
     };
-    const curvePts = curves.map(cyc => {
-      const out = [];
-      for (const x of cyc) {
-        // The arc leaving x's marked point runs backwards along x's own arc, on
-        // around the face past the alternating arcs, and up to sigma(x).
-        const d = x ^ 1, end = sigma[x];
-        push(out, sample(d, markAt(x), dart[d].s1));
-        for (let e = nextInFace(d); e !== end; e = nextInFace(e)) push(out, sample(e, dart[e].s0, dart[e].s1));
-        push(out, sample(end, dart[end].s0, markAt(end)));
+
+    const arcPath = x => {
+      const back = x ^ 1, end = sigma[x], base = [], corners = [];
+      const add = pts => { if (base.length) corners.push(base.length - 1); base.push(...pts); };
+      add(sample(back, markAt(x), dart[back].s1));
+      for (let e = nextInFace(back); e !== end; e = nextInFace(e)) add(sample(e, dart[e].s0, dart[e].s1));
+      add(sample(end, dart[end].s0, markAt(end)));
+      const n = base.length, ramp = Math.max(1, Math.min(14 / step, (n - 1) / 2));
+      const norm = [], allow = [], limit = [], out = [];
+      for (let i = 0; i < n; i++) {
+        const P = base[i], nx = -side * P.ty, ny = side * P.tx;
+        const across = roomAt(P.x, P.y, nx, ny);
+        // The hard limit is the strand straight across: past it the curve would
+        // leave the face. Everything below only ever moves within that.
+        const straight = castRay(P.x + nx * 0.6, P.y + ny * 0.6, nx, ny) + 0.6;
+        norm.push({ x: nx, y: ny });
+        limit.push(Math.max(clear, Math.min(straight - clear, straight / 2)));
+        allow.push(across <= 2 * clear ? across / 2 : Math.min(cap, Math.max(clear, share * across), across - clear));
       }
-      return out;
-    });
+      // The face narrows to nothing at a crossing, so a ray straight across finds
+      // no room there and the curve would be pinched onto the crossing it is
+      // supposed to enclose. What the curve actually needs at a corner is the
+      // depth of the wedge it turns inside, measured along the bisector.
+      const along = new Float64Array(n);
+      for (let i = 1; i < n; i++) along[i] = along[i - 1] + Math.hypot(base[i].x - base[i - 1].x, base[i].y - base[i - 1].y);
+      for (const k of corners) {
+        const a = base[k], b = base[k + 1];
+        let ux = -a.tx + b.tx, uy = -a.ty + b.ty;
+        const len = Math.hypot(ux, uy);
+        if (len < 1e-6) continue;
+        ux /= len; uy /= len;
+        if (ux * norm[k].x + uy * norm[k].y <= 0) continue;   // a reflex corner needs no room
+        const depth = castRay(a.x + ux * 0.6, a.y + uy * 0.6, ux, uy) + 0.6;
+        const want = Math.min(cap, Math.max(clear, share * depth));
+        for (let i = 0; i < n; i++) {
+          const reach = want - 0.6 * Math.abs(along[i] - along[k]);
+          if (reach > allow[i]) allow[i] = reach;
+        }
+      }
+      // A single tight spot would otherwise scoop a notch out of the region. The
+      // offset is allowed to carry over from its neighbours at a bounded rate,
+      // which fills in a narrow notch and leaves a wide one alone, and is then
+      // put back under the hard limit so nothing can reach a strand.
+      const gapTo = i => Math.hypot(base[i].x - base[i - 1].x, base[i].y - base[i - 1].y);
+      for (let i = 1; i < n; i++) allow[i] = Math.max(allow[i], allow[i - 1] - 0.7 * gapTo(i));
+      for (let i = n - 2; i >= 0; i--) allow[i] = Math.max(allow[i], allow[i + 1] - 0.7 * gapTo(i + 1));
+      for (let i = 0; i < n; i++) allow[i] = Math.min(allow[i], limit[i]);
+      // The offset may still not change faster than the curve can turn, or a spot
+      // where the room suddenly opens up throws it out in a spike.
+      for (let i = 1; i < n; i++) allow[i] = Math.min(allow[i], allow[i - 1] + 0.8 * gapTo(i));
+      for (let i = n - 2; i >= 0; i--) allow[i] = Math.min(allow[i], allow[i + 1] + 0.8 * gapTo(i + 1));
+      for (let i = 0; i < n; i++) {
+        // Both arcs meeting at a marked point leave it by the same amount, so the
+        // curve crosses the edge there instead of doubling back along it.
+        const t = Math.min(1, Math.min(i, n - 1 - i) / ramp), ease = t * t * (3 - 2 * t);
+        allow[i] = clear + ease * (Math.max(clear, allow[i]) - clear);
+        out.push({ x: base[i].x + norm[i].x * allow[i], y: base[i].y + norm[i].y * allow[i] });
+      }
+      // Round the arc off, keeping every point at least `clear` off its own strand
+      // and inside the room the ray cast allowed it, so smoothing can neither
+      // reach a strand nor cross the curve sharing the face.
+      for (let pass = 0; pass < passes; pass++) {
+        const was = out.slice();
+        for (let i = 1; i < n - 1; i++) {
+          const P = base[i], N = norm[i], lim = allow[i];
+          let dx = (was[i - 1].x + 2 * was[i].x + was[i + 1].x) / 4 - P.x;
+          let dy = (was[i - 1].y + 2 * was[i].y + was[i + 1].y) / 4 - P.y;
+          const along = dx * N.x + dy * N.y;
+          if (along < clear) { dx += N.x * (clear - along); dy += N.y * (clear - along); }
+          const len = Math.hypot(dx, dy);
+          if (len > lim) { dx = dx / len * lim; dy = dy / len * lim; }
+          out[i] = { x: P.x + dx, y: P.y + dy };
+        }
+      }
+      return dropLoops(out);
+    };
+    const curvePts = curves.map(cyc => { const out = []; for (const x of cyc) out.push(...arcPath(x)); return out; });
+
     const marks = [], gEdges = [];
     for (const g of nonAlt) {
       const a = markAt(2 * g), b = markAt(2 * g + 1), pts = sample(2 * g, a, b);
@@ -3238,13 +3397,24 @@ const KC = (function () {
     if (!decompCache || decompCache.for !== analysis) {
       let dec = null;
       try { dec = KC.decompose(S.comps, S.crossings, analysis); } catch (err) { dec = null; }
-      decompCache = { for: analysis, dec,
+      decompCache = { for: analysis, dec, paths: undefined,
         genus: dec ? KC.decompositionGenusRecursive(dec.graph.n, dec.graph.edges) : null,
         ribbon: dec ? KC.decompositionGenus(dec) : null };
     }
     return decompCache;
   }
   function decomposition() { const i = decompInfo(); return i && i.dec; }
+  // Only the overlay needs the geometry, and it costs a ray cast per sample, so
+  // it waits until that view actually asks for it rather than being paid for on
+  // every edit.
+  function decompositionPaths() {
+    const info = decompInfo();
+    if (!info || !info.dec) return null;
+    if (info.paths === undefined) {
+      try { info.paths = KC.decompositionPaths(S.comps, info.dec); } catch (err) { info.paths = null; }
+    }
+    return info.paths;
+  }
 
   // Theorem 1.2: a reduced alternating decomposition graph has Turaev genus one
   // exactly when it is a doubled cycle of even length -- the shape of Figure 2.
@@ -3578,7 +3748,7 @@ const KC = (function () {
   function drawDecomposition() {
     const dec = decomposition();
     if (!dec) { drawDiagram(); return; }
-    const paths = KC.decompositionPaths(S.comps, dec, { offset: 9, step: KC.SEG / 2 });
+    const paths = decompositionPaths();
     if (!paths) { drawDiagram(); return; }
     const gap = Math.min(12, 8 / view.s);
     const trace = pts => { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); };

@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v28-decomposition-figures';
+const CACHE='knot-lab-v29-tangle-loops';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

@@ -154,7 +154,7 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
  const a=KC.analyze(S.comps,S.crossings),d=KC.decompose(S.comps,S.crossings,a);
  assert.equal(d.graph.n,2);assert.equal(d.graph.edges.length,4);assert.equal(a.gT,1);
  assert.equal(isDoubledCycle(d.graph),2,'one flipped crossing gives C_2^2');
- const off=9,P=KC.decompositionPaths(S.comps,d,{offset:off});
+ const off=9,P=KC.decompositionPaths(S.comps,d,{clearance:off});
  assert.equal(P.curves.length,2);assert.equal(P.marks.length,2*d.nonAlt.length);assert.equal(P.gEdges.length,d.nonAlt.length);
  // A curve crosses the strand at each marked point, so it leaves one side and
  // comes back on the other: the closing chord is exactly twice the offset.
@@ -173,9 +173,6 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
  const plus=new Array(d.graph.n).fill(0),minus=new Array(d.graph.n).fill(0);
  d.graph.signed.forEach(e=>{const t=e.over?plus:minus;t[e.u]++;t[e.v]++;});
  for(let v=0;v<d.graph.n;v++)assert.equal(plus[v],minus[v],`vertex ${v} balances + and - edges`);
- // A zero offset puts the curve back on the strands it was drawn beside.
- const flat=KC.decompositionPaths(S.comps,d,{offset:0});
- flat.curves.forEach(pts=>assert(Math.hypot(pts[0].x-pts[pts.length-1].x,pts[0].y-pts[pts.length-1].y)<1e-6));
 }
 console.log('Overlay geometry: closed curves crossing at the marked points, and edges of G between them: PASS');
 
@@ -196,7 +193,7 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
    const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
    if(!d||d.alternating)continue;
-   const P=KC.decompositionPaths(S.comps,d,{offset:9});
+   const P=KC.decompositionPaths(S.comps,d,{clearance:9});
    d.curves.forEach((cyc,ci)=>{
     const pts=P.curves[ci];
     const inside=d.regions[d.curveRegion[ci]].map(xi=>wind(pts,S.crossings[xi]));
@@ -210,6 +207,45 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  }
  assert(curvesChecked>=800,`curves ${curvesChecked}`);
  console.log(`Each of ${curvesChecked} drawn curves separates its alternating region from the edges of G: PASS`);
+}
+
+// ---- The drawn curves are the decomposition curves ----
+// A curve of the decomposition is simple, disjoint from the others, and meets D
+// exactly at its own marked points. Checking that on the drawn polylines pins
+// down the whole routing: it is what says the curve really encircles a tangle
+// rather than wandering into a neighbouring one on its way round.
+{
+ const meet=(a,b,c,d)=>{const rx=b.x-a.x,ry=b.y-a.y,sx=d.x-c.x,sy=d.y-c.y,den=rx*sy-ry*sx;
+  if(den>-1e-12&&den<1e-12)return false;
+  const t=((c.x-a.x)*sy-(c.y-a.y)*sx)/den,u=((c.x-a.x)*ry-(c.y-a.y)*rx)/den;
+  return t>1e-9&&t<1-1e-9&&u>1e-9&&u<1-1e-9;};
+ const hits=(A,B,skipNear)=>{let k=0;
+  for(let i=0;i+1<A.length;i++)for(let j=0;j+1<B.length;j++){
+   if(skipNear&&Math.abs(i-j)<2)continue;
+   if(meet(A[i],A[i+1],B[j],B[j+1]))k++;}
+  return k;};
+ let drawn=0;
+ for(const [name,S] of Object.entries(fixtures)){
+  const c=S.crossings.length;
+  for(const mask of (c<=4?[...Array(1<<c).keys()]:[1,3,7,13,29,55])){
+   S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
+   const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
+   if(!d||d.alternating)continue;
+   const P=KC.decompositionPaths(S.comps,d);
+   const strands=S.comps.map(cm=>cm.pts.concat([cm.pts[0]]));
+   const closed=P.curves.map(p=>p.concat([p[0]]));
+   closed.forEach((g,i)=>{
+    drawn++;
+    assert.equal(hits(g,g,true),0,`${name}/${mask}: curve ${i} crosses itself`);
+    assert.equal(strands.reduce((t,st)=>t+hits(g,st,false),0),d.curves[i].length,
+     `${name}/${mask}: curve ${i} does not meet D exactly at its marked points`);
+   });
+   for(let i=0;i<closed.length;i++)for(let j=i+1;j<closed.length;j++)
+    assert.equal(hits(closed[i],closed[j],false),0,`${name}/${mask}: curves ${i} and ${j} cross`);
+  }
+ }
+ assert(drawn>=140,`drawn curves ${drawn}`);
+ console.log(`${drawn} drawn curves are simple, pairwise disjoint, and meet D only at their marked points: PASS`);
 }
 
 // ---- The shading of the alternating regions ----
@@ -231,7 +267,7 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
    const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
    if(!d||d.alternating)continue;
-   const P=KC.decompositionPaths(S.comps,d,{offset:9});
+   const P=KC.decompositionPaths(S.comps,d,{clearance:9});
    assert.equal(P.regions.length,d.regions.length,`${name}/${mask}: one fill per region`);
    for(const R of P.regions){
     shaded++;if(R.outer)withInfinity++;
