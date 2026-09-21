@@ -1395,81 +1395,113 @@ const KC = (function () {
     return go(n, edgeList.map(e => [e[0], e[1]]));
   }
 
-  // Geometry for the overlay. A decomposition curve passes through the marked
-  // points and otherwise runs through the middle of the faces it crosses, so it
-  // reads as a loop drawn around an alternating tangle rather than as a second
-  // copy of the strands. How far it may leave a strand is decided by how much
-  // room there actually is: a ray cast across the face finds the far side, and
-  // the curve takes a fixed share of that. Two curves sharing a face therefore
-  // take their share from opposite sides and cannot meet.
+  // Geometry for the overlay. A decomposition curve is drawn as the SHORTEST
+  // curve of its kind: it must pass through its marked points, and it must stay
+  // clear of every strand and of every other curve. Length is then minimised
+  // under those two rules, which is what makes it come out round -- a loop pulled
+  // taut around an alternating tangle. The clearance rule is the first
+  // principle, not an afterthought: a point moves a bounded amount per step and
+  // is pushed straight back out of anything it approaches, so a curve can never
+  // cross a strand, and so can never take in a strand belonging to another
+  // tangle, whatever the relaxation does.
   function decompositionPaths(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
-    const clear = opt.clearance == null ? 8 : opt.clearance;
-    const share = opt.share == null ? 0.46 : opt.share;
-    const cap = opt.cap == null ? 90 : opt.cap;
-    const step = opt.step || SEG;
-    const passes = opt.smooth == null ? 14 : opt.smooth;
+    const clear = opt.clearance == null ? 7 : opt.clearance;   // off the strands
+    const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
+    const h = opt.spacing || 6;                                // point spacing
+    const rounds = opt.rounds == null ? 80 : opt.rounds;
+    const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
+    const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
+    const puff = opt.puff == null ? 0.8 : opt.puff;            // outward pressure per round
+    const swell = opt.swell == null ? 0.5 : opt.swell;         // for this fraction of the rounds
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
 
-    const seg = [];
-    comps.forEach(cm => { const q = cm.pts, n = q.length; for (let i = 0; i < n; i++) seg.push([q[i].x, q[i].y, q[(i + 1) % n].x, q[(i + 1) % n].y]); });
-    // Every point of every curve asks how much room it has, so the strands are
-    // bucketed once and each ray only looks at the cells it can reach. Nothing
-    // beyond REACH can bind the offset, which is capped well below it, so a ray
-    // that finds nothing inside that range may simply report open space.
-    const FAR = 1e4, CELL = 56, REACH = 2 * cap + 4 * clear;
-    const bucket = new Map(), stamp = new Int32Array(seg.length).fill(-1);
-    let visit = 0;
-    seg.forEach((a, i) => {
-      const lo = Math.floor(Math.min(a[0], a[2]) / CELL), hi = Math.floor(Math.max(a[0], a[2]) / CELL);
-      const bo = Math.floor(Math.min(a[1], a[3]) / CELL), bi = Math.floor(Math.max(a[1], a[3]) / CELL);
-      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) {
-        const k = cx + ':' + cy, l = bucket.get(k);
-        if (l) l.push(i); else bucket.set(k, [i]);
+    // A grid of line segments, asked only for what lies near a point. The curve
+    // grid is rebuilt as the curves move, so it is a plain array of buckets over
+    // a fixed frame rather than anything that allocates per round.
+    const CELL = Math.max(16, 2 * Math.max(clear, apart, h));
+    const frame = { x0: 0, y0: 0, nx: 1, ny: 1 };
+    const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []) });
+    const fill = (g, items) => {
+      for (const c of g.cell) c.length = 0;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const lo = Math.max(0, Math.floor((Math.min(it[0], it[2]) - frame.x0) / CELL));
+        const hi = Math.min(frame.nx - 1, Math.floor((Math.max(it[0], it[2]) - frame.x0) / CELL));
+        const bo = Math.max(0, Math.floor((Math.min(it[1], it[3]) - frame.y0) / CELL));
+        const bi = Math.min(frame.ny - 1, Math.floor((Math.max(it[1], it[3]) - frame.y0) / CELL));
+        for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) g.cell[cy * frame.nx + cx].push(i);
+      }
+      return g;
+    };
+    const near = (g, px, py, out) => {
+      out.length = 0;
+      const cx = Math.floor((px - frame.x0) / CELL), cy = Math.floor((py - frame.y0) / CELL);
+      for (let x = Math.max(0, cx - 1); x <= Math.min(frame.nx - 1, cx + 1); x++)
+        for (let y = Math.max(0, cy - 1); y <= Math.min(frame.ny - 1, cy + 1); y++) {
+          const l = g.cell[y * frame.nx + x];
+          for (let i = 0; i < l.length; i++) out.push(l[i]);
+        }
+      return out;
+    };
+    const closest = (it, px, py) => {
+      const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
+      let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      const qx = it[0] + u * ex, qy = it[1] + u * ey;
+      return { qx, qy, d: Math.hypot(px - qx, py - qy) };
+    };
+
+    const strand = [];
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    comps.forEach(cm => {
+      const q = cm.pts, n = q.length;
+      for (let i = 0; i < n; i++) {
+        strand.push([q[i].x, q[i].y, q[(i + 1) % n].x, q[(i + 1) % n].y]);
+        bx0 = Math.min(bx0, q[i].x); bx1 = Math.max(bx1, q[i].x);
+        by0 = Math.min(by0, q[i].y); by1 = Math.max(by1, q[i].y);
       }
     });
-    const castRay = (px, py, dx, dy) => {
-      const qx = px + dx * REACH, qy = py + dy * REACH;
-      const lo = Math.floor(Math.min(px, qx) / CELL), hi = Math.floor(Math.max(px, qx) / CELL);
-      const bo = Math.floor(Math.min(py, qy) / CELL), bi = Math.floor(Math.max(py, qy) / CELL);
-      let best = FAR;
-      const here = ++visit;
-      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) {
-        const l = bucket.get(cx + ':' + cy);
-        if (!l) continue;
-        for (const i of l) {
-          if (stamp[i] === here) continue;
-          stamp[i] = here;
-          const a = seg[i], ex = a[2] - a[0], ey = a[3] - a[1];
-          const den = dx * ey - dy * ex;
-          if (den > -1e-9 && den < 1e-9) continue;
-          const rx = a[0] - px, ry = a[1] - py;
-          const t = (rx * ey - ry * ex) / den;
-          if (t <= 1e-6 || t >= best) continue;
-          const u = (rx * dy - ry * dx) / den;
-          if (u >= 0 && u <= 1) best = t;
-        }
-      }
-      return best;
+    if (!strand.length) { bx0 = by0 = 0; bx1 = by1 = 1; }
+    const PAD = 4 * CELL;
+    frame.x0 = bx0 - PAD; frame.y0 = by0 - PAD;
+    frame.nx = Math.max(1, Math.ceil((bx1 - bx0 + 2 * PAD) / CELL));
+    frame.ny = Math.max(1, Math.ceil((by1 - by0 + 2 * PAD) / CELL));
+    const strandAt = fill(grid(), strand);
+
+    const sample = (d, from, to) => {
+      const D = dart[d], cm = comps[D.c], f = D.s1 > D.s0 ? 1 : -1;
+      const n = Math.max(1, Math.ceil(Math.abs(to - from) / h)), out = [];
+      for (let i = 0; i <= n; i++) { const P = pointAtS(cm, from + (to - from) * i / n); out.push({ x: P.x, y: P.y, tx: f * P.dx, ty: f * P.dy }); }
+      return out;
     };
-    // A single ray straight across can escape down a narrow gap and report far
-    // more room than there is, so a narrow fan is taken as well; the fan is kept
-    // tight, since a wide one collapses next to every strand and would scallop
-    // the curve inwards wherever the diagram happens to be busy.
-    const FAN = [-0.3, 0, 0.3].map(a => [Math.cos(a), Math.sin(a)]);
-    const roomAt = (px, py, nx, ny) => {
-      let best = FAR;
-      for (const [c, sn] of FAN) {
-        const dx = nx * c - ny * sn, dy = nx * sn + ny * c;
-        const t = castRay(px + dx * 0.6, py + dy * 0.6, dx, dy);
-        if (t < best) best = t;
+    // Which side of a face walk the face lies on is one global bit. Under "face
+    // on the left" every walk turns through +2*pi except the one outer walk per
+    // piece, so the total turning over all walks is +2*pi*c(D).
+    let turn = 0;
+    for (const walk of faces) {
+      const pts = [];
+      for (const d of walk) pts.push(...sample(d, dart[d].s0, dart[d].s1));
+      for (let i = 0; i < pts.length; i++) {
+        const u = pts[i], v = pts[(i + 1) % pts.length];
+        turn += Math.atan2(u.tx * v.ty - u.ty * v.tx, u.tx * v.tx + u.ty * v.ty);
       }
-      return best + 0.6;
+    }
+    const side = turn >= 0 ? 1 : -1;
+
+    // The two marked points may sit anywhere on their edge, so they are placed
+    // symmetrically about its middle: the piece between them is the edge of G,
+    // and the rest of the edge belongs to the alternating region at either end.
+    const span = d => Math.abs(dart[d].s1 - dart[d].s0);
+    const markAt = d => {
+      const D = dart[d], L = span(d);
+      const bar = opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
+      return D.s0 + (D.s1 > D.s0 ? 1 : -1) * (L - bar) / 2;
     };
+
     // Offsetting a polyline folds it into a little loop at every corner that
-    // turns the wrong way. Cutting each loop out is what pulls the curve taut
-    // around the tangle instead of letting it trail whiskers at the crossings.
+    // turns the wrong way; cutting each loop out keeps the starting curve simple.
     const meet = (a, b, c, d) => {
       const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
       const den = rx * sy - ry * sx;
@@ -1495,113 +1527,216 @@ const KC = (function () {
       out.push(pts[pts.length - 1]);
       return out;
     };
-
-    const sample = (d, from, to) => {
-      const D = dart[d], cm = comps[D.c], f = D.s1 > D.s0 ? 1 : -1;
-      const n = Math.max(1, Math.ceil(Math.abs(to - from) / step)), out = [];
-      for (let i = 0; i <= n; i++) { const P = pointAtS(cm, from + (to - from) * i / n); out.push({ x: P.x, y: P.y, tx: f * P.dx, ty: f * P.dy }); }
+    const respace = pts => {
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      const total = cum[cum.length - 1], n = Math.max(1, Math.round(total / h)), out = [];
+      let j = 0;
+      for (let k = 0; k <= n; k++) {
+        const at = total * k / n;
+        while (j < cum.length - 2 && cum[j + 1] < at) j++;
+        const f = (at - cum[j]) / ((cum[j + 1] - cum[j]) || 1);
+        out.push({ x: pts[j].x + f * (pts[j + 1].x - pts[j].x), y: pts[j].y + f * (pts[j + 1].y - pts[j].y) });
+      }
       return out;
     };
-    // Which side of a face walk the face lies on is one global bit. Under "face
-    // on the left" every walk turns through +2*pi except the one outer walk per
-    // piece, so the total turning over all walks is +2*pi*c(D).
-    let turn = 0;
-    for (const walk of faces) {
-      const pts = [];
-      for (const d of walk) pts.push(...sample(d, dart[d].s0, dart[d].s1));
-      for (let i = 0; i < pts.length; i++) {
-        const u = pts[i], v = pts[(i + 1) % pts.length];
-        turn += Math.atan2(u.tx * v.ty - u.ty * v.tx, u.tx * v.tx + u.ty * v.ty);
-      }
-    }
-    const side = turn >= 0 ? 1 : -1;
 
-    // The two marked points may sit anywhere on their edge, so they are placed
-    // symmetrically about its middle: the piece between them is the edge of G,
-    // and the rest of the edge belongs to the alternating region at either end.
-    const span = d => Math.abs(dart[d].s1 - dart[d].s0);
-    const markAt = d => {
-      const D = dart[d], L = span(d);
-      const bar = opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.6 * L, Math.max(14, Math.min(60, 0.25 * L)));
-      return D.s0 + (D.s1 > D.s0 ? 1 : -1) * (L - bar) / 2;
+    // The starting curve: hug the face boundary a clearance away. It is already
+    // the right curve, just far longer than it needs to be.
+    const arcStart = x => {
+      const back = x ^ 1, end = sigma[x], pts = [];
+      const take = arr => arr.forEach(P => pts.push({ x: P.x - side * P.ty * clear, y: P.y + side * P.tx * clear }));
+      take(sample(back, markAt(x), dart[back].s1));
+      for (let e = nextInFace(back); e !== end; e = nextInFace(e)) take(sample(e, dart[e].s0, dart[e].s1));
+      take(sample(end, dart[end].s0, markAt(end)));
+      return respace(dropLoops(pts));
+    };
+    // Each curve is kept as its list of arcs, one per marked point it passes
+    // through. An arc's two ends are pinned to that marked point and never move;
+    // every other point is free, and its neighbours are always inside the same
+    // arc, so shortening never has to reason across a pin.
+    const curveArcs = curves.map(cyc => cyc.map(x => arcStart(x)));
+    const flatten = () => {
+      const flat = [], pin = [], where = [];
+      curveArcs.forEach((arcs, c) => {
+        const pts = [], mark = [], at = [];
+        arcs.forEach((arc, a) => arc.forEach((P, i) => { pts.push(P); mark.push(i === 0 || i === arc.length - 1); at.push(a * 1e5 + i); }));
+        flat.push(pts); pin.push(mark); where.push(at);
+      });
+      return { flat, pin, where };
     };
 
-    const arcPath = x => {
-      const back = x ^ 1, end = sigma[x], base = [], corners = [];
-      const add = pts => { if (base.length) corners.push(base.length - 1); base.push(...pts); };
-      add(sample(back, markAt(x), dart[back].s1));
-      for (let e = nextInFace(back); e !== end; e = nextInFace(e)) add(sample(e, dart[e].s0, dart[e].s1));
-      add(sample(end, dart[end].s0, markAt(end)));
-      const n = base.length, ramp = Math.max(1, Math.min(14 / step, (n - 1) / 2));
-      const norm = [], allow = [], limit = [], out = [];
+    // A closed polyline is simple when no two of its segments meet, bar the pairs
+    // that share an end. The grid makes that a local question.
+    const check = grid();
+    const simple = pts => {
+      const n = pts.length, segs = [];
+      for (let i = 0; i < n; i++) segs.push([pts[i].x, pts[i].y, pts[(i + 1) % n].x, pts[(i + 1) % n].y]);
+      fill(check, segs);
+      const look = [];
       for (let i = 0; i < n; i++) {
-        const P = base[i], nx = -side * P.ty, ny = side * P.tx;
-        const across = roomAt(P.x, P.y, nx, ny);
-        // The hard limit is the strand straight across: past it the curve would
-        // leave the face. Everything below only ever moves within that.
-        const straight = castRay(P.x + nx * 0.6, P.y + ny * 0.6, nx, ny) + 0.6;
-        norm.push({ x: nx, y: ny });
-        limit.push(Math.max(clear, Math.min(straight - clear, straight / 2)));
-        allow.push(across <= 2 * clear ? across / 2 : Math.min(cap, Math.max(clear, share * across), across - clear));
+        for (const j of near(check, pts[i].x, pts[i].y, look)) {
+          const gap = Math.min(Math.abs(j - i), n - Math.abs(j - i));
+          if (gap <= 1 || j < i) continue;
+          if (meet(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return false;
+        }
       }
-      // The face narrows to nothing at a crossing, so a ray straight across finds
-      // no room there and the curve would be pinched onto the crossing it is
-      // supposed to enclose. What the curve actually needs at a corner is the
-      // depth of the wedge it turns inside, measured along the bisector.
-      const along = new Float64Array(n);
-      for (let i = 1; i < n; i++) along[i] = along[i - 1] + Math.hypot(base[i].x - base[i - 1].x, base[i].y - base[i - 1].y);
-      for (const k of corners) {
-        const a = base[k], b = base[k + 1];
-        let ux = -a.tx + b.tx, uy = -a.ty + b.ty;
-        const len = Math.hypot(ux, uy);
-        if (len < 1e-6) continue;
-        ux /= len; uy /= len;
-        if (ux * norm[k].x + uy * norm[k].y <= 0) continue;   // a reflex corner needs no room
-        const depth = castRay(a.x + ux * 0.6, a.y + uy * 0.6, ux, uy) + 0.6;
-        const want = Math.min(cap, Math.max(clear, share * depth));
+      return true;
+    };
+
+    // Shorten every curve at once, so two sharing a face meet in the middle
+    // instead of one taking the room before the other has moved.
+    const bag = [], curveAt = grid();
+    const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
+    const stuck = curveArcs.map(() => false);
+    for (let round = 0; round < rounds; round++) {
+      // Points crowd towards a pin as the curve shortens, and once one lands on
+      // top of a pin the curve folds over its own marked point. Spreading each
+      // arc out again every so often is what stops that happening.
+      if (round && round % 10 === 0) curveArcs.forEach(arcs => arcs.forEach((arc, a) => { arcs[a] = respace(arc); }));
+      const { flat, pin, where } = flatten();
+      const curveSeg = [], owner = [];
+      flat.forEach((pts, c) => {
+        for (let i = 0; i < pts.length; i++) {
+          const j = (i + 1) % pts.length;
+          curveSeg.push([pts[i].x, pts[i].y, pts[j].x, pts[j].y]); owner.push(c * 1e6 + i);
+        }
+      });
+      fill(curveAt, curveSeg);
+      let shift = 0;
+      const pressing = round < swell * rounds;
+      for (let c = 0; c < flat.length; c++) {
+        const pts = flat[c], n = pts.length;
         for (let i = 0; i < n; i++) {
-          const reach = want - 0.6 * Math.abs(along[i] - along[k]);
-          if (reach > allow[i]) allow[i] = reach;
-        }
-      }
-      // A single tight spot would otherwise scoop a notch out of the region. The
-      // offset is allowed to carry over from its neighbours at a bounded rate,
-      // which fills in a narrow notch and leaves a wide one alone, and is then
-      // put back under the hard limit so nothing can reach a strand.
-      const gapTo = i => Math.hypot(base[i].x - base[i - 1].x, base[i].y - base[i - 1].y);
-      for (let i = 1; i < n; i++) allow[i] = Math.max(allow[i], allow[i - 1] - 0.7 * gapTo(i));
-      for (let i = n - 2; i >= 0; i--) allow[i] = Math.max(allow[i], allow[i + 1] - 0.7 * gapTo(i + 1));
-      for (let i = 0; i < n; i++) allow[i] = Math.min(allow[i], limit[i]);
-      // The offset may still not change faster than the curve can turn, or a spot
-      // where the room suddenly opens up throws it out in a spike.
-      for (let i = 1; i < n; i++) allow[i] = Math.min(allow[i], allow[i - 1] + 0.8 * gapTo(i));
-      for (let i = n - 2; i >= 0; i--) allow[i] = Math.min(allow[i], allow[i + 1] + 0.8 * gapTo(i + 1));
-      for (let i = 0; i < n; i++) {
-        // Both arcs meeting at a marked point leave it by the same amount, so the
-        // curve crosses the edge there instead of doubling back along it.
-        const t = Math.min(1, Math.min(i, n - 1 - i) / ramp), ease = t * t * (3 - 2 * t);
-        allow[i] = clear + ease * (Math.max(clear, allow[i]) - clear);
-        out.push({ x: base[i].x + norm[i].x * allow[i], y: base[i].y + norm[i].y * allow[i] });
-      }
-      // Round the arc off, keeping every point at least `clear` off its own strand
-      // and inside the room the ray cast allowed it, so smoothing can neither
-      // reach a strand nor cross the curve sharing the face.
-      for (let pass = 0; pass < passes; pass++) {
-        const was = out.slice();
-        for (let i = 1; i < n - 1; i++) {
-          const P = base[i], N = norm[i], lim = allow[i];
-          let dx = (was[i - 1].x + 2 * was[i].x + was[i + 1].x) / 4 - P.x;
-          let dy = (was[i - 1].y + 2 * was[i].y + was[i + 1].y) / 4 - P.y;
-          const along = dx * N.x + dy * N.y;
-          if (along < clear) { dx += N.x * (clear - along); dy += N.y * (clear - along); }
+          if (pin[c][i]) continue;
+          const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+          const ox = pts[i].x, oy = pts[i].y;
+          let px = ox, py = oy;
+          let dx = (a.x + b.x) / 2 - px, dy = (a.y + b.y) / 2 - py;
+          const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty);
+          const nx = tl > 1e-9 ? side * -ty / tl : 0, ny = tl > 1e-9 ? side * tx / tl : 0;
           const len = Math.hypot(dx, dy);
-          if (len > lim) { dx = dx / len * lim; dy = dy / len * lim; }
-          out[i] = { x: P.x + dx, y: P.y + dy };
+          if (len > stride) { dx = dx * stride / len; dy = dy * stride / len; }
+          // Shortening alone would collapse the curve onto the strands, which is
+          // the shortest it can be but says nothing. A gentle outward pressure
+          // balances it: the region grows until it runs out of room, and what the
+          // two together settle on is the roundest shape that fits. The pressure
+          // runs for part of the rounds only -- long enough to fill the room, and
+          // then off, so a curve with open space around it cannot drift away and
+          // the rest of the rounds are spent purely on smoothing it out.
+          if (pressing) { dx += nx * puff; dy += ny * puff; }
+          px += dx; py += dy;
+          for (let pass = 0; pass < 2; pass++) {
+            let hit = null, want = 0, worst = 0;
+            for (const k of near(curveAt, px, py, bag)) {
+              // Only the two segments that contain this point are exempt. A wider
+              // exemption lets a point drift onto a pinned one two places along
+              // and fold the curve over its own marked point. A curve needs only
+              // a hair of room from itself to stay unfolded; the gap that has to
+              // read on screen is the one between different curves.
+              const tag = owner[k], oc = Math.floor(tag / 1e6), oi = tag % 1e6;
+              const mine = oc === c;
+              if (mine && (oi === i || oi === (i - 1 + n) % n)) continue;
+              const keep = mine ? 0.8 * h : apart;
+              const q = closest(curveSeg[k], px, py);
+              if (keep - q.d > worst) { worst = keep - q.d; hit = q; want = keep; }
+            }
+            if (!hit) break;
+            const ux = px - hit.qx, uy = py - hit.qy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            px = hit.qx + ux / L * want; py = hit.qy + uy / L * want;
+          }
+          // Strand clearance goes last, so it is the rule that always holds: a
+          // curve that cannot reach a strand cannot cross one, and so cannot take
+          // in a strand that belongs to a different tangle.
+          for (let pass = 0; pass < 2; pass++) {
+            let hit = null, worst = clear;
+            for (const k of near(strandAt, px, py, bag)) {
+              const q = closest(strand[k], px, py);
+              if (q.d < worst) { worst = q.d; hit = q; }
+            }
+            if (!hit) break;
+            const ux = px - hit.qx, uy = py - hit.qy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            px = hit.qx + ux / L * clear; py = hit.qy + uy / L * clear;
+          }
+          // Whatever the rules above asked for, the move itself is swept against
+          // everything nearby and stopped short of the first thing it would have
+          // crossed. That is what makes the clearance rule absolute rather than a
+          // matter of step size: a point cannot end up on the far side of a
+          // strand, so a curve keeps exactly the tangle it started with.
+          let mx = px - ox, my = py - oy;
+          const far = Math.hypot(mx, my);
+          if (far > reach) { mx = mx * reach / far; my = my * reach / far; }
+          if (mx || my) {
+            let stop = 1;
+            const block = (items, from, skipSelf) => {
+              for (const k of near(from, ox + mx, oy + my, bag)) {
+                if (skipSelf) {
+                  const tag = owner[k], oc = Math.floor(tag / 1e6), oi = tag % 1e6;
+                  if (oc === c && (oi === i || oi === (i - 1 + n) % n)) continue;
+                }
+                const it = items[k], ex = it[2] - it[0], ey = it[3] - it[1];
+                const den = mx * ey - my * ex;
+                if (den > -1e-12 && den < 1e-12) continue;
+                const rx = it[0] - ox, ry = it[1] - oy;
+                const t = (rx * ey - ry * ex) / den, u = (rx * my - ry * mx) / den;
+                if (t >= 0 && t < stop && u >= 0 && u <= 1) stop = t;
+              }
+            };
+            block(strand, strandAt, false);
+            block(curveSeg, curveAt, true);
+            if (stop < 1) { const back = Math.max(0, stop - 0.2); mx *= back; my *= back; }
+          }
+          const step = Math.hypot(mx, my);
+          if (step > shift) shift = step;
+          const moved = { x: ox + mx, y: oy + my };
+          pts[i] = moved;
+          const tag = where[c][i];
+          curveArcs[c][Math.floor(tag / 1e5)][tag % 1e5] = moved;
         }
       }
-      return dropLoops(out);
-    };
-    const curvePts = curves.map(cyc => { const out = []; for (const x of cyc) out.push(...arcPath(x)); return out; });
+      // Relaxation with a bounded step can, very occasionally, walk a curve
+      // through itself. Rather than hope it does not, the last state that was
+      // checked and found simple is kept, and a curve that ties itself up is put
+      // back to it and left alone. The drawing is then always a simple curve.
+      const settled = shift < 0.35 && !pressing;
+      if (round % 10 === 9 || round === rounds - 1 || settled) {
+        for (let c = 0; c < curveArcs.length; c++) {
+          if (stuck[c]) continue;
+          if (simple([].concat(...curveArcs[c]))) safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+          else { curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y }))); stuck[c] = true; }
+        }
+        if (stuck.every(Boolean)) break;
+      }
+      if (settled) break;                     // nothing is moving any more
+    }
+    // Whatever the loop ended on, every curve is left at a state that was checked.
+    for (let c = 0; c < curveArcs.length; c++) if (!simple([].concat(...curveArcs[c]))) curveArcs[c] = safe[c];
+    const curvePts = curveArcs.map(arcs => [].concat(...arcs));
+    const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
+
+    // Bounded steps can still leave a fold of a few segments knotted up where the
+    // curve turns hard. Each is a small loop; cutting it out is safe as long as
+    // no marked point is caught inside, which would take the curve off its edge.
+    curvePts.forEach((pts, c) => {
+      const pin = held[c];
+      for (let sweep = 0; sweep < 6; sweep++) {
+        let cut = false;
+        for (let i = 0; i < pts.length && !cut; i++) {
+          for (let d = 2; d <= 12; d++) {
+            const j = i + d;
+            if (j + 1 > pts.length) break;
+            const at = meet(pts[i], pts[i + 1], pts[j], pts[(j + 1) % pts.length]);
+            if (!at) continue;
+            if (pin.slice(i + 1, j + 1).some(Boolean)) continue;
+            pts.splice(i + 1, j - i, at); pin.splice(i + 1, j - i, false);
+            cut = true; break;
+          }
+        }
+        if (!cut) break;
+      }
+    });
 
     const marks = [], gEdges = [];
     for (const g of nonAlt) {
@@ -3747,11 +3882,28 @@ const KC = (function () {
   // edge of G -- a heavy bar running from one shaded region to the next.
   function drawDecomposition() {
     const dec = decomposition();
-    if (!dec) { drawDiagram(); return; }
+    // The curves are relaxed against the whole diagram, which is worth a moment
+    // once but not once a frame, so a gesture that is still moving strands about
+    // shows the plain diagram and the decomposition returns when it is let go.
+    if (!dec || drag || erasing) { drawDiagram(); return; }
     const paths = decompositionPaths();
     if (!paths) { drawDiagram(); return; }
     const gap = Math.min(12, 8 / view.s);
-    const trace = pts => { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); };
+    // Round the polyline off as it is drawn: a quadratic through each point,
+    // joining the midpoints either side of it. The curve never leaves the corner
+    // it cuts, so the clearances the geometry established still hold.
+    const trace = pts => {
+      const n = pts.length;
+      if (n < 3) { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); return; }
+      const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      let from = mid(pts[n - 1], pts[0]);
+      ctx.moveTo(from.x, from.y);
+      for (let i = 0; i < n; i++) {
+        const to = mid(pts[i], pts[(i + 1) % n]);
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, to.x, to.y);
+      }
+      ctx.closePath();
+    };
     ctx.setLineDash([]);
     // A region is its own boundary curves filled by the even-odd rule, taken the
     // other way about for the one region that holds the point at infinity. An

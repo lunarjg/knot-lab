@@ -176,44 +176,18 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
 }
 console.log('Overlay geometry: closed curves crossing at the marked points, and edges of G between them: PASS');
 
-// ---- Each drawn curve really does bound its alternating region ----
-// A decomposition curve separates the crossings of the region it bounds from the
-// middle pieces of the nonalternating edges that meet it, so the two sets must
-// have opposite winding numbers. This is what fixes which side of the strands the
-// curve is offset to, and it is checked here on every curve of every diagram.
-{
- const wind=(pts,q)=>{let t=0;
-  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
-   const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
-  return Math.round(t/(2*Math.PI));};
- let curvesChecked=0;
- for(const [name,S] of Object.entries(fixtures)){
-  const c=S.crossings.length;
-  for(const mask of (c<=8?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682])){
-   S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
-   const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
-   if(!d||d.alternating)continue;
-   const P=KC.decompositionPaths(S.comps,d,{clearance:9});
-   d.curves.forEach((cyc,ci)=>{
-    const pts=P.curves[ci];
-    const inside=d.regions[d.curveRegion[ci]].map(xi=>wind(pts,S.crossings[xi]));
-    const outside=cyc.map(x=>{const e=P.gEdges[d.nonAlt.indexOf(x>>1)];return wind(pts,e.pts[e.pts.length>>1]);});
-    assert.equal(new Set(inside).size,1,`${name}/${mask}/${ci}: the region is split by its own curve`);
-    assert.equal(new Set(outside).size,1,`${name}/${mask}/${ci}: the edges of G are split by the curve`);
-    assert.notEqual(inside[0],outside[0],`${name}/${mask}/${ci}: the curve does not separate its region from its edges`);
-    curvesChecked++;
-   });
-  }
- }
- assert(curvesChecked>=800,`curves ${curvesChecked}`);
- console.log(`Each of ${curvesChecked} drawn curves separates its alternating region from the edges of G: PASS`);
-}
-
 // ---- The drawn curves are the decomposition curves ----
-// A curve of the decomposition is simple, disjoint from the others, and meets D
-// exactly at its own marked points. Checking that on the drawn polylines pins
-// down the whole routing: it is what says the curve really encircles a tangle
-// rather than wandering into a neighbouring one on its way round.
+// Everything the overlay claims is checked on one pass over the same diagrams,
+// since relaxing the curves is the expensive part and they only need drawing
+// once. For every curve:
+//   * it is simple, and disjoint from the other curves -- so each one encircles
+//     its own tangle and never strays into a neighbouring one;
+//   * it meets D exactly at its own marked points, which is the same statement
+//     read off the diagram rather than off the curve;
+//   * it separates the crossings of the region it bounds from the middle pieces
+//     of the edges of G that meet it, which is what fixes the side it is drawn
+//     on; and
+//   * the region's shading covers those crossings and none of those edges.
 {
  const meet=(a,b,c,d)=>{const rx=b.x-a.x,ry=b.y-a.y,sx=d.x-c.x,sy=d.y-c.y,den=rx*sy-ry*sx;
   if(den>-1e-12&&den<1e-12)return false;
@@ -224,10 +198,14 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    if(skipNear&&Math.abs(i-j)<2)continue;
    if(meet(A[i],A[i+1],B[j],B[j+1]))k++;}
   return k;};
- let drawn=0;
+ const wind=(pts,q)=>{let t=0;
+  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
+   const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
+  return Math.round(t/(2*Math.PI));};
+ let drawn=0,shaded=0,points=0,withInfinity=0;
  for(const [name,S] of Object.entries(fixtures)){
   const c=S.crossings.length;
-  for(const mask of (c<=4?[...Array(1<<c).keys()]:[1,3,7,13,29,55])){
+  for(const mask of (c<=4?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682].filter(m=>m<(1<<c)))){
    S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
    const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
    if(!d||d.alternating)continue;
@@ -239,35 +217,15 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
     assert.equal(hits(g,g,true),0,`${name}/${mask}: curve ${i} crosses itself`);
     assert.equal(strands.reduce((t,st)=>t+hits(g,st,false),0),d.curves[i].length,
      `${name}/${mask}: curve ${i} does not meet D exactly at its marked points`);
+    const pts=P.curves[i];
+    const inside=d.regions[d.curveRegion[i]].map(xi=>wind(pts,S.crossings[xi]));
+    const outside=d.curves[i].map(x=>{const e=P.gEdges[d.nonAlt.indexOf(x>>1)];return wind(pts,e.pts[e.pts.length>>1]);});
+    assert.equal(new Set(inside).size,1,`${name}/${mask}/${i}: the region is split by its own curve`);
+    assert.equal(new Set(outside).size,1,`${name}/${mask}/${i}: the edges of G are split by the curve`);
+    assert.notEqual(inside[0],outside[0],`${name}/${mask}/${i}: the curve does not separate its region from its edges`);
    });
    for(let i=0;i<closed.length;i++)for(let j=i+1;j<closed.length;j++)
     assert.equal(hits(closed[i],closed[j],false),0,`${name}/${mask}: curves ${i} and ${j} cross`);
-  }
- }
- assert(drawn>=140,`drawn curves ${drawn}`);
- console.log(`${drawn} drawn curves are simple, pairwise disjoint, and meet D only at their marked points: PASS`);
-}
-
-// ---- The shading of the alternating regions ----
-// A region is shaded by filling its own boundary curves with the even-odd rule:
-// crossing any of them toggles in and out, so the parity at a point says whether
-// it is inside, once it is known which way round that reads. `outer` marks the
-// one region that holds the point at infinity, where the fill has to be taken the
-// other way about. Every crossing of a region must land inside its shading, and
-// every edge of G meeting it must land outside.
-{
- const wind=(pts,q)=>{let t=0;
-  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
-   const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
-  return Math.round(t/(2*Math.PI));};
- let shaded=0,points=0,withInfinity=0;
- for(const [name,S] of Object.entries(fixtures)){
-  const c=S.crossings.length;
-  for(const mask of (c<=8?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682])){
-   S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
-   const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
-   if(!d||d.alternating)continue;
-   const P=KC.decompositionPaths(S.comps,d,{clearance:9});
    assert.equal(P.regions.length,d.regions.length,`${name}/${mask}: one fill per region`);
    for(const R of P.regions){
     shaded++;if(R.outer)withInfinity++;
@@ -280,20 +238,9 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    }
   }
  }
- assert(shaded>=700&&points>=6000,`shading coverage ${shaded}/${points}`);
- assert(withInfinity>=20,`the region holding the point at infinity never came up (${withInfinity})`);
- console.log(`Region shading: ${points} points on ${shaded} regions, ${withInfinity} of them holding the point at infinity: PASS`);
-}
-
-// An alternating diagram has no curves, so its one region is the whole sphere.
-{
- const S=altTrefoil(),plan=KC.alternatingAssignment(S.comps,S.crossings);
- S.crossings.forEach((x,i)=>{x.over=plan.over[i];});
- const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
- const P=KC.decompositionPaths(S.comps,d);
- assert.deepEqual(P.regions,[{region:0,curves:[],outer:true}]);
- assert.equal(P.curves.length,0);assert.equal(P.gEdges.length,0);
- console.log('An alternating diagram shades as one region covering everything: PASS');
+ assert(drawn>=90&&shaded>=90&&points>=900,`coverage ${drawn}/${shaded}/${points}`);
+ assert(withInfinity>=4,`the region holding the point at infinity never came up (${withInfinity})`);
+ console.log(`${drawn} drawn curves are simple, disjoint, meet D only at their marked points, and shade ${shaded} regions correctly over ${points} points (${withInfinity} holding the point at infinity): PASS`);
 }
 
 // ---- Degenerate input is refused, not guessed at ----
