@@ -212,6 +212,54 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  console.log(`Each of ${curvesChecked} drawn curves separates its alternating region from the edges of G: PASS`);
 }
 
+// ---- The shading of the alternating regions ----
+// A region is shaded by filling its own boundary curves with the even-odd rule:
+// crossing any of them toggles in and out, so the parity at a point says whether
+// it is inside, once it is known which way round that reads. `outer` marks the
+// one region that holds the point at infinity, where the fill has to be taken the
+// other way about. Every crossing of a region must land inside its shading, and
+// every edge of G meeting it must land outside.
+{
+ const wind=(pts,q)=>{let t=0;
+  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
+   const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
+  return Math.round(t/(2*Math.PI));};
+ let shaded=0,points=0,withInfinity=0;
+ for(const [name,S] of Object.entries(fixtures)){
+  const c=S.crossings.length;
+  for(const mask of (c<=8?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682])){
+   S.crossings.forEach((x,i)=>{x.over=(mask>>i)&1;});
+   const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
+   if(!d||d.alternating)continue;
+   const P=KC.decompositionPaths(S.comps,d,{offset:9});
+   assert.equal(P.regions.length,d.regions.length,`${name}/${mask}: one fill per region`);
+   for(const R of P.regions){
+    shaded++;if(R.outer)withInfinity++;
+    const filled=q=>(R.curves.reduce((t,ci)=>t+Math.abs(wind(P.curves[ci],q)),0)%2===1)!==R.outer;
+    for(const xi of d.regions[R.region]){points++;assert(filled(S.crossings[xi]),`${name}/${mask}: a crossing of the region is not shaded`);}
+    for(const ci of R.curves)for(const x of d.curves[ci]){
+     const e=P.gEdges[d.nonAlt.indexOf(x>>1)];
+     points++;assert(!filled(e.pts[e.pts.length>>1]),`${name}/${mask}: an edge of G is inside the shading`);
+    }
+   }
+  }
+ }
+ assert(shaded>=700&&points>=6000,`shading coverage ${shaded}/${points}`);
+ assert(withInfinity>=20,`the region holding the point at infinity never came up (${withInfinity})`);
+ console.log(`Region shading: ${points} points on ${shaded} regions, ${withInfinity} of them holding the point at infinity: PASS`);
+}
+
+// An alternating diagram has no curves, so its one region is the whole sphere.
+{
+ const S=altTrefoil(),plan=KC.alternatingAssignment(S.comps,S.crossings);
+ S.crossings.forEach((x,i)=>{x.over=plan.over[i];});
+ const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
+ const P=KC.decompositionPaths(S.comps,d);
+ assert.deepEqual(P.regions,[{region:0,curves:[],outer:true}]);
+ assert.equal(P.curves.length,0);assert.equal(P.gEdges.length,0);
+ console.log('An alternating diagram shades as one region covering everything: PASS');
+}
+
 // ---- Degenerate input is refused, not guessed at ----
 assert.equal(KC.decompositionGenusRecursive(3,[[0,1],[1,2],[2,0]]),null,'a triangle is not an alternating decomposition graph');
 {

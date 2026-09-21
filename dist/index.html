@@ -240,6 +240,9 @@ h2{font-size:15px}
 .row label{grid-column:1}
 .row output{grid-column:2;grid-row:1;min-width:70px;font-variant-numeric:tabular-nums;color:var(--accent)}
 .row input[type=range]{grid-column:1/-1;width:100%;min-height:28px;margin:0}
+.adgraph{margin:10px 0 0;padding:8px;border:1px solid var(--rule);border-radius:10px;background:var(--paper)}
+.adgraph svg{display:block;width:100%;height:auto}
+.adgraph figcaption{margin-top:6px;font-size:12px;color:var(--muted);text-align:center}
 .row:has(input:disabled){opacity:.5}
 summary{min-height:44px;padding:10px 0;font-weight:600;cursor:pointer;color:var(--ink)}
 summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -367,6 +370,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <dt>g<sub>T</sub>(G) from G alone</dt><dd id="adGenus">&mdash;</dd>
       </dl>
       <div class="flags" id="adFlags"></div>
+      <figure class="adgraph" id="adGraphView" hidden></figure>
       <p class="small" id="adNote">Draw a closed diagram to decompose it.</p>
       <details class="small">
         <summary>What this is</summary>
@@ -1446,7 +1450,30 @@ const KC = (function () {
       marks.push(pts[0], pts[pts.length - 1]);
       gEdges.push({ pts, over: !!dart[2 * g].over, arc: g, s: [a, b] });
     }
-    return { curves: curvePts, marks, gEdges, side };
+    // To shade an alternating region, fill its own boundary curves by the
+    // even-odd rule: crossing any of them toggles in and out of the region, so
+    // the parity at a point says whether it is inside -- once it is known which
+    // way round that reads. One crossing of the region settles it, and when the
+    // parity there is even the region is the one holding the point at infinity,
+    // so the fill has to be taken the other way about.
+    const turns = (pts, q) => {
+      let t = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        const ax = a.x - q.x, ay = a.y - q.y, bx = b.x - q.x, by = b.y - q.y;
+        t += Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+      }
+      return Math.round(t / (2 * Math.PI));
+    };
+    const regions = dec.regions.map((_, r) => {
+      const own = [];
+      dec.curveRegion.forEach((cr, ci) => { if (cr === r) own.push(ci); });
+      if (!own.length) return { region: r, curves: own, outer: true };
+      const d = curves[own[0]][0], here = pointAtS(comps[dart[d].c], dart[d].s0);
+      const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
+      return { region: r, curves: own, outer: parity === 0 };
+    });
+    return { curves: curvePts, marks, gEdges, regions, side };
   }
 
   // Adjacent occurrences on every closed component must have opposite heights.
@@ -3233,16 +3260,78 @@ const KC = (function () {
     return seen.size === n ? n : 0;
   }
 
+  // The graph on its own, drawn the way the paper draws it beside the diagram:
+  // one disk per decomposition curve, and one arc per nonalternating edge of D,
+  // with the arcs of a parallel class bowed apart so the multiplicity is
+  // countable. Vertices are laid out on a circle in depth-first order, so a
+  // doubled cycle comes out as a cycle and the components stay in one piece.
+  function graphFigure(dec) {
+    const host = $('adGraphView'), g = dec && dec.graph;
+    if (!g || !g.n) { host.replaceChildren(); host.hidden = true; return; }
+    const adj = Array.from({ length: g.n }, () => []);
+    g.edges.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+    const order = [], seen = new Array(g.n).fill(false);
+    for (let v = 0; v < g.n; v++) {
+      if (seen[v]) continue;
+      const stack = [v]; seen[v] = true;
+      while (stack.length) { const w = stack.pop(); order.push(w); for (const z of adj[w]) if (!seen[z]) { seen[z] = true; stack.push(z); } }
+    }
+    const WIDTH = 300, HEIGHT = g.n > 4 ? 300 : 230, cx = WIDTH / 2, cy = HEIGHT / 2;
+    const radius = Math.min(cx, cy) - 30, at = [];
+    order.forEach((v, i) => {
+      const t = -Math.PI / 2 + 2 * Math.PI * i / order.length;
+      at[v] = order.length === 1 ? { x: cx, y: cy } : { x: cx + radius * Math.cos(t), y: cy + radius * Math.sin(t) };
+    });
+    const classes = new Map();
+    g.signed.forEach(e => {
+      const key = Math.min(e.u, e.v) + ',' + Math.max(e.u, e.v);
+      if (!classes.has(key)) classes.set(key, { u: e.u, v: e.v, signs: [] });
+      classes.get(key).signs.push(e.over);
+    });
+    // Interleave the signs across a parallel class. Two arcs of the same colour
+    // side by side read as one thick line; alternating them keeps each countable,
+    // and it is how the signs sit around a vertex anyway.
+    for (const c of classes.values()) {
+      const plus = c.signs.filter(Boolean), minus = c.signs.filter(x => !x), mixed = [];
+      for (let i = 0; i < c.signs.length; i++) mixed.push((i % 2 ? minus : plus).pop() ?? (i % 2 ? plus : minus).pop());
+      c.signs = mixed;
+    }
+    const parts = [];
+    for (const { u, v, signs } of classes.values()) {
+      const a = at[u], b = at[v], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+      // Bow the arcs of a parallel class symmetrically about the straight line,
+      // over a span that stays in proportion to how far apart the vertices are.
+      const nx = -dy / len, ny = dx / len;
+      const step = Math.min(0.55 * len, 96) / Math.max(1, signs.length - 1);
+      signs.forEach((over, i) => {
+        const k = (i - (signs.length - 1) / 2) * step;
+        const qx = (a.x + b.x) / 2 + nx * k, qy = (a.y + b.y) / 2 + ny * k;
+        parts.push(`<path d="M${a.x.toFixed(1)} ${a.y.toFixed(1)}Q${qx.toFixed(1)} ${qy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}" fill="none" stroke="var(${over ? '--c1' : '--c0'})" stroke-width="2.2"></path>`);
+      });
+    }
+    for (let v = 0; v < g.n; v++) {
+      const region = v < g.curves ? dec.curveRegion[v] : dec.solo[v - g.curves];
+      parts.push(`<circle cx="${at[v].x.toFixed(1)}" cy="${at[v].y.toFixed(1)}" r="13" fill="var(${REGION_TINTS[region % REGION_TINTS.length]})" fill-opacity="0.38" stroke="var(--ink)" stroke-width="1.6"></circle>`);
+    }
+    const svg = `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="The alternating decomposition graph G: ${g.n} vertices and ${g.edges.length} edges"><g>${parts.join('')}</g></svg>`;
+    const caption = g.edges.length
+      ? 'G, with a vertex per decomposition curve. Edge colour is the sign, blue for an overstrand edge and orange for an understrand one; the signs alternate around every vertex.'
+      : 'G, one vertex per connected piece of an alternating diagram and no edges.';
+    host.hidden = false;
+    host.innerHTML = svg + `<figcaption>${caption}</figcaption>`;
+  }
+
   function updateDecompositionPanel() {
     const info = decompInfo(), d = info && info.dec;
     if (!d) {
       ['adEdges', 'adCurves', 'adRegions'].forEach(id => setText(id, 0));
       setText('adGraph', '\u2014'); setText('adGenus', '\u2014');
-      $('adFlags').innerHTML = '';
+      $('adFlags').innerHTML = ''; graphFigure(null);
       $('adNote').textContent = S.comps.length ? 'The decomposition is unavailable for this diagram.' : 'Draw a closed diagram to decompose it.';
       return;
     }
     const g = d.graph, plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    graphFigure(d);
     setText('adEdges', g.edges.length); setText('adCurves', g.curves); setText('adRegions', d.regions.length);
     setText('adGraph', `${g.n} ${g.n === 1 ? 'vertex' : 'vertices'}, ${plural(g.edges.length, 'edge')}`);
     setText('adGenus', info.genus === null ? '\u2014' : fmt(info.genus));
@@ -3266,13 +3355,17 @@ const KC = (function () {
       const d = decomposition();
       L.innerHTML = !d ? '<b>alternating decomposition</b><div class="sub">Not available for this diagram</div>'
         : d.alternating ? `<b>alternating decomposition</b><div class="sub">The diagram is alternating: no nonalternating edges, so no curves, and G is one vertex per piece</div>`
-        : `<b>alternating decomposition</b>, ${d.curves.length} curves around ${d.regions.length} alternating regions<div class="sub">Strands are coloured by alternating region. Dashed curves are the decomposition; the heavy segments between the marked dots are the edges of G, + for an overstrand edge and \u2212 for an understrand edge.</div>`;
+        : `<b>alternating decomposition</b>, ${d.curves.length} curves around ${d.regions.length} alternating regions<div class="sub">Each shaded region is a vertex of G, ringed by the decomposition curves that bound it. The heavy bar between two marked points on a nonalternating edge is an edge of G, + for an overstrand edge and \u2212 for an understrand edge.</div>`;
     }
     else L.innerHTML = `<b>Seifert state</b>, ${a.sS.count} circles<div class="sub">Smoothing follows the strand orientations</div>`;
   }
 
   // ---------- rendering ----------
   function palette() { return ['--c0', '--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8', '--c9'].map(cssv); }
+  // --c0 and --c1 mean the sign of an edge of G wherever the decomposition is
+  // drawn, so region tints start past them and never collide with a sign.
+  const REGION_TINTS = ['--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8', '--c9'];
+  function regionColor(r) { return cssv(REGION_TINTS[r % REGION_TINTS.length]); }
 
   function tracePiece(comp, s0, s1) {
     const L = comp.len, n = comp.pts.length, cum = comp.cum, p = comp.pts;
@@ -3478,49 +3571,54 @@ const KC = (function () {
     ctx.stroke();
   }
 
-  // Alternating decomposition overlay. Strands are coloured by alternating
-  // region, nonalternating arcs stay neutral with their middle segment -- the
-  // edge of G -- picked out between the two marked points, and each decomposition
-  // curve runs alongside the strands through the faces it passes through.
+  // Alternating decomposition overlay, drawn the way the paper's figures are:
+  // the alternating regions shaded, the decomposition curves solid on top of
+  // them, and the middle piece of each nonalternating edge -- the part that is an
+  // edge of G -- a heavy bar running from one shaded region to the next.
   function drawDecomposition() {
     const dec = decomposition();
     if (!dec) { drawDiagram(); return; }
-    const pal = palette(), gap = Math.min(12, 8 / view.s);
     const paths = KC.decompositionPaths(S.comps, dec, { offset: 9, step: KC.SEG / 2 });
-    if (!paths) return;
+    if (!paths) { drawDiagram(); return; }
+    const gap = Math.min(12, 8 / view.s);
+    const trace = pts => { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); };
+    ctx.setLineDash([]);
+    // A region is its own boundary curves filled by the even-odd rule, taken the
+    // other way about for the one region that holds the point at infinity. An
+    // alternating diagram has no curves at all, and its one region is everything.
+    ctx.save(); ctx.globalAlpha = 0.22;
+    paths.regions.forEach(R => {
+      ctx.beginPath(); ctx.fillStyle = regionColor(R.region);
+      if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
+      R.curves.forEach(ci => trace(paths.curves[ci]));
+      ctx.fill('evenodd');
+    });
+    ctx.restore();
+    // The diagram itself stays neutral, as it is in the paper's figures: the
+    // shading says which region a strand is in, so colouring it again would only
+    // compete with the two things that carry the structure, the curves and the
+    // edges of G.
     const markS = new Map();
     paths.gEdges.forEach(e => markS.set(e.arc, e.s));
-    ctx.setLineDash([]); ctx.lineWidth = 3 / view.s;
-    const piece = (cm, s0, s1, xi) => {
-      if (s1 <= s0) return;
-      ctx.beginPath(); ctx.strokeStyle = pal[dec.regionOfX[xi] % pal.length];
-      tracePiece(cm, s0, s1); ctx.stroke();
-    };
+    ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--ink');
     for (let g = 0; g < dec.nArc; g++) {
       const a = dec.dart[2 * g], b = dec.dart[2 * g + 1], cm = S.comps[a.c];
       const s0 = a.s0 + (a.over ? 0 : gap), s1 = a.s1 - (b.over ? 0 : gap);
-      // A nonalternating arc has one end inside each of the two regions it joins,
-      // and only its middle piece -- the edge of G -- lies outside both of them.
-      if (!dec.isNA[g]) piece(cm, s0, s1, a.xi);
-      else { const [m0, m1] = markS.get(g); piece(cm, s0, m0, a.xi); piece(cm, m1, s1, b.xi); }
+      if (s1 <= s0) continue;
+      ctx.beginPath(); tracePiece(cm, s0, s1); ctx.stroke();
     }
-    // The edges of G share the canvas with strands already coloured by region, so
-    // they are drawn as heavy neutral bars rather than in another palette colour.
-    ctx.lineWidth = 6 / view.s; ctx.strokeStyle = cssv('--ink');
+    // Each edge of G is the middle piece of a nonalternating edge, drawn in the
+    // colour its sign has in the graph figure in the inspector.
+    ctx.lineWidth = 6.5 / view.s;
     paths.gEdges.forEach(e => {
-      ctx.beginPath(); ctx.moveTo(e.pts[0].x, e.pts[0].y);
+      ctx.beginPath(); ctx.strokeStyle = cssv(e.over ? '--c1' : '--c0');
+      ctx.moveTo(e.pts[0].x, e.pts[0].y);
       for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
       ctx.stroke();
     });
-    ctx.lineWidth = 2.6 / view.s; ctx.strokeStyle = cssv('--accent');
-    ctx.setLineDash([8 / view.s, 5 / view.s]);
-    paths.curves.forEach(pts => {
-      if (pts.length < 2) return;
-      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath(); ctx.stroke();
-    });
-    ctx.setLineDash([]); ctx.lineWidth = 1.6 / view.s; ctx.strokeStyle = cssv('--accent');
+    ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--warn');
+    paths.curves.forEach(pts => { if (pts.length > 1) { ctx.beginPath(); trace(pts); ctx.stroke(); } });
+    ctx.lineWidth = 1.8 / view.s;
     paths.marks.forEach(P => {
       ctx.beginPath(); ctx.fillStyle = cssv('--paper');
       ctx.arc(P.x, P.y, 4 / view.s, 0, 7); ctx.fill(); ctx.stroke();

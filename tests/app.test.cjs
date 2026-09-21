@@ -62,7 +62,19 @@ console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear
  assert.equal(p.ids.get('adGenus').textContent,'1');
  // Drawing the overlay goes through the same canvas guard as every other view.
  p.flush();
- p.ids.get('undo').click();assert.equal(p.ids.get('adEdges').textContent,0);
+ // G is drawn in the inspector too: a disk per vertex and an arc per edge, with
+ // the arcs of a parallel class interleaved by sign so each stays countable.
+ const figure=p.ids.get('adGraphView');
+ assert(!figure.hidden,'The graph figure is shown');
+ assert.equal((figure.innerHTML.match(/<circle/g)||[]).length,2);
+ assert.equal((figure.innerHTML.match(/<path/g)||[]).length,4);
+ const signs=[...figure.innerHTML.matchAll(/stroke="var\(--c([01])\)"/g)].map(m=>m[1]);
+ assert.equal(signs.length,4);
+ assert.equal(signs.filter(x=>x==='1').length,2,'two overstrand edges');
+ assert(signs.every((x,i)=>i===0||x!==signs[i-1]),'the signs alternate across the class');
+ p.ids.get('undo').click();
+ assert.equal(p.ids.get('adEdges').textContent,0);
+ assert.equal((p.ids.get('adGraphView').innerHTML.match(/<path/g)||[]).length,0,'an alternating diagram has no edges to draw');
 }
 console.log('Alternating decomposition view and inspector section: PASS');
 
