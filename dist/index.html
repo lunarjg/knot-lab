@@ -263,6 +263,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <button data-view="A" aria-pressed="false">all-A state</button>
         <button data-view="B" aria-pressed="false">all-B state</button>
         <button data-view="S" aria-pressed="false">Seifert</button>
+        <button data-view="AD" aria-pressed="false">Alt. decomposition</button>
       </div>
       <span class="spacer"></span><button class="iconbtn" id="pdOpen">Import PD</button>
       <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
@@ -355,6 +356,24 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <dt>Canonical Seifert surface genus</dt><dd id="vg">0</dd>
       </dl>
       <div class="flags" id="flags"></div>
+    </section>
+    <section>
+      <h2>Alternating decomposition</h2>
+      <dl class="inv">
+        <dt>Nonalternating edges of D</dt><dd id="adEdges">0</dd>
+        <dt>Decomposition curves</dt><dd id="adCurves">0</dd>
+        <dt>Alternating regions</dt><dd id="adRegions">0</dd>
+        <dt>Graph G</dt><dd id="adGraph">&mdash;</dd>
+        <dt>g<sub>T</sub>(G) from G alone</dt><dd id="adGenus">&mdash;</dd>
+      </dl>
+      <div class="flags" id="adFlags"></div>
+      <p class="small" id="adNote">Draw a closed diagram to decompose it.</p>
+      <details class="small">
+        <summary>What this is</summary>
+        <p>An edge of D, read as a 4-valent plane graph, is <em>nonalternating</em> when the strand is the overstrand at both of its ends, or the understrand at both. Mark every such edge with two points and, inside each face, join the marked points that are adjacent along the boundary without lying on the same edge. Those arcs close up into disjoint simple closed curves that cut the sphere into maximal <em>alternating regions</em>.</p>
+        <p>The <em>alternating decomposition graph</em> G has one vertex per curve and one edge per nonalternating edge of D, and an alternating diagram gives a single vertex with no edges. G is always planar and bipartite with every vertex of even degree, and it determines the Turaev surface: g<sub>T</sub>(G) above is computed from the abstract graph by the recursion of Corollary 3.9, with no reference to the diagram, and must agree with the g<sub>T</sub>(D) read off the all-A and all-B states at the top of this panel.</p>
+        <p>Method: <a href="https://doi.org/10.2140/agt.2017.17.793" target="_blank" rel="noopener noreferrer">Armond and Lowrance, &ldquo;Turaev genus and alternating decompositions&rdquo;, Algebr. Geom. Topol. 17 (2017) 793&ndash;830</a>.</p>
+      </details>
     </section>
     <section>
       <h2>Diagram actions</h2>
@@ -1188,6 +1207,248 @@ const KC = (function () {
     };
   }
 
+
+  // ----- alternating decomposition -----
+  // Armond and Lowrance, "Turaev genus and alternating decompositions",
+  // Algebr. Geom. Topol. 17 (2017) 793-830.
+  //
+  // Read D as a 4-valent plane graph. An edge of it is NONALTERNATING when the
+  // strand is the overstrand at both ends, or the understrand at both. Mark every
+  // nonalternating edge with two points and, inside each face, join the marked
+  // points that are adjacent along the boundary without lying on the same edge
+  // (Figure 1 of the paper). Those arcs close up into disjoint simple closed
+  // curves -- the alternating decomposition. The alternating decomposition graph
+  // G has one vertex per curve and one edge per nonalternating edge of D.
+  //
+  // Everything here runs on darts. Arc g is the piece of a component between two
+  // consecutive crossings; dart 2g leaves the earlier crossing running forwards
+  // and dart 2g+1 leaves the later one running backwards, so d^1 is the same arc
+  // seen from its other end.
+  function decompose(comps, X, a) {
+    a = a || analyze(comps, X);
+    const occ = a.occ, base = [];
+    let nArc = 0;
+    occ.forEach((l, c) => { base[c] = nArc; nArc += l.length; });
+    const nD = 2 * nArc, dart = new Array(nD).fill(null);
+    occ.forEach((l, c) => {
+      const m = l.length, L = comps[c].len;
+      l.forEach((e, j) => {
+        const g = base[c] + j, o = X[e.xi].occ[e.k];
+        const span = m > 1 ? mod(l[(j + 1) % m].s - e.s, L) : L;
+        dart[2 * g] = { xi: e.xi, k: e.k, c, arc: g, over: X[e.xi].over === e.k, ang: Math.atan2(o.dy, o.dx), s0: e.s, s1: e.s + span };
+      });
+      l.forEach((e, j) => {
+        const back = base[c] + (j - 1 + m) % m, f = dart[2 * back], o = X[e.xi].occ[e.k];
+        dart[2 * back + 1] = { xi: e.xi, k: e.k, c, arc: back, over: X[e.xi].over === e.k, ang: Math.atan2(-o.dy, -o.dx), s0: f.s1, s1: f.s0 };
+      });
+    });
+    const at = X.map(() => []);
+    for (let d = 0; d < nD; d++) if (dart[d]) at[dart[d].xi].push(d);
+    if (at.some(l => l.length !== 4)) return null;
+    at.forEach(l => l.sort((p, q) => dart[p].ang - dart[q].ang));
+    const rot = new Int32Array(nD);
+    at.forEach(l => l.forEach((d, i) => { rot[d] = l[(i + 1) % 4]; }));
+    const nextInFace = d => rot[d ^ 1];
+
+    const faceOf = new Int32Array(nD).fill(-1), faces = [];
+    for (let d = 0; d < nD; d++) {
+      if (faceOf[d] >= 0) continue;
+      const walk = []; let e = d;
+      do { faceOf[e] = faces.length; walk.push(e); e = nextInFace(e); } while (e !== d);
+      faces.push(walk);
+    }
+
+    const isNA = new Uint8Array(nArc), nonAlt = [];
+    for (let g = 0; g < nArc; g++) if (dart[2 * g].over === dart[2 * g + 1].over) { isNA[g] = 1; nonAlt.push(g); }
+    // Along a face walk the over/under role flips exactly at the nonalternating
+    // arcs, so every face meets an even number of them and the arcs below always
+    // pair up. sigma walks a decomposition curve from marked point to marked
+    // point: leave the arc backwards, run along the face past the alternating
+    // arcs, and stop at the first nonalternating one.
+    const nextNA = d => { let e = nextInFace(d); while (!isNA[e >> 1]) e = nextInFace(e); return e; };
+    const sigma = new Int32Array(nD).fill(-1);
+    for (const g of nonAlt) for (const d of [2 * g, 2 * g + 1]) sigma[d] = nextNA(d ^ 1);
+    const curveOf = new Int32Array(nD).fill(-1), curves = [];
+    for (const g of nonAlt) for (const d of [2 * g, 2 * g + 1]) {
+      if (curveOf[d] >= 0) continue;
+      const cyc = []; let e = d;
+      do { curveOf[e] = curves.length; cyc.push(e); e = sigma[e]; } while (e !== d);
+      curves.push(cyc);
+    }
+
+    // An alternating region is a piece of the sphere cut along the curves that
+    // still holds crossings: exactly a maximal run of alternating arcs.
+    const ru = UF(Math.max(1, X.length));
+    for (let g = 0; g < nArc; g++) if (!isNA[g]) ru.union(dart[2 * g].xi, dart[2 * g + 1].xi);
+    const regionIx = new Map(), regions = [], regionOfX = [];
+    X.forEach((_, i) => {
+      const r = ru.find(i);
+      if (!regionIx.has(r)) { regionIx.set(r, regions.length); regions.push([]); }
+      regionOfX[i] = regionIx.get(r); regions[regionOfX[i]].push(i);
+    });
+    const curveRegion = curves.map(cyc => regionOfX[dart[cyc[0]].xi]);
+    // A region no curve bounds is a whole alternating sphere piece, and the paper
+    // gives it the single vertex that stands for an alternating diagram.
+    const bounded = new Set(curveRegion);
+    const solo = regions.map((_, r) => r).filter(r => !bounded.has(r));
+    const signed = nonAlt.map(g => ({ u: curveOf[2 * g], v: curveOf[2 * g + 1], arc: g, over: !!dart[2 * g].over }));
+    return {
+      dart, rot, nextInFace, faces, faceOf, isNA, nonAlt, sigma, curves, curveOf,
+      regions, regionOfX, curveRegion, solo, nArc, alternating: !nonAlt.length,
+      graph: { n: curves.length + solo.length, edges: signed.map(e => [e.u, e.v]), signed, curves: curves.length, solo: solo.length }
+    };
+  }
+
+  // Proposition 3.5: the Turaev surface of D is the TWISTED embedding of G -- the
+  // sphere embedding carrying a half twist in every edge band. G is bipartite and
+  // every edge joins the two sides, so half-twisting every band is the same as
+  // reflecting the vertex disks on one side, that is, reversing their rotation.
+  // The sphere embedding itself is read straight off the decomposition: the
+  // marked points sit along a curve in the order sigma visits them.
+  function decompositionGenus(dec) {
+    if (!dec) return null;
+    const { curves, curveOf, sigma, nonAlt, graph } = dec;
+    const darts = [];
+    for (const g of nonAlt) darts.push(2 * g, 2 * g + 1);
+    const back = new Int32Array(sigma.length).fill(-1);
+    for (const d of darts) back[sigma[d]] = d;
+    const boundary = (flip) => {
+      const seen = new Set(); let f = 0;
+      for (const d of darts) {
+        if (seen.has(d)) continue;
+        f++; let e = d;
+        do { seen.add(e); e = (flip[curveOf[e]] ? back[e] : sigma[e]) ^ 1; } while (e !== d);
+      }
+      return f;
+    };
+    const colour = new Int8Array(curves.length).fill(-1), adj = curves.map(() => []);
+    graph.edges.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+    let k = graph.solo;
+    for (let v = 0; v < curves.length; v++) {
+      if (colour[v] >= 0) continue;
+      k++; colour[v] = 0;
+      const q = [v];
+      while (q.length) { const w = q.pop(); for (const z of adj[w]) { if (colour[z] < 0) { colour[z] = 1 - colour[w]; q.push(z); } else if (colour[z] === colour[w]) return null; } }
+    }
+    // Isolated vertices are spheres of their own: one vertex, no edge, one face.
+    const e = graph.edges.length, V = curves.length + graph.solo;
+    const flat = boundary(new Uint8Array(curves.length)) + graph.solo, twisted = boundary(colour) + graph.solo;
+    if (V - e + flat !== 2 * k) return null;
+    const genus = (2 * k - (V - e + twisted)) / 2;
+    return Number.isInteger(genus) && genus >= 0 ? { genus, components: k, sphereFaces: flat, twistedFaces: twisted } : null;
+  }
+
+  // Corollary 3.9: the same Turaev genus read straight off the abstract graph,
+  // with no embedding and no diagram. Lemma 3.6 guarantees that one of the two
+  // rules always applies, so the recursion terminates. The rules only mean
+  // anything for an alternating decomposition graph, so a graph that is not one
+  // is refused rather than answered: planarity is assumed of the caller, but the
+  // other two conditions of Proposition 3.3 are checked here.
+  function decompositionGenusRecursive(n, edgeList) {
+    const degree = new Array(n).fill(0), near = Array.from({ length: n }, () => []);
+    for (const [u, v] of edgeList) {
+      if (!(u >= 0 && u < n && v >= 0 && v < n) || u === v) return null;
+      degree[u]++; degree[v]++; near[u].push(v); near[v].push(u);
+    }
+    if (degree.some(d => d % 2)) return null;
+    const side = new Int8Array(n).fill(-1);
+    for (let v = 0; v < n; v++) {
+      if (side[v] >= 0) continue;
+      side[v] = 0;
+      const q = [v];
+      while (q.length) { const w = q.pop(); for (const z of near[w]) { if (side[z] < 0) { side[z] = 1 - side[w]; q.push(z); } else if (side[z] === side[w]) return null; } }
+    }
+    const count = (N, E) => { const u = UF(Math.max(1, N)); E.forEach(e => u.union(e[0], e[1])); const r = new Set(); for (let i = 0; i < N; i++) r.add(u.find(i)); return r.size; };
+    const merge = (N, E, group) => {
+      const id = new Array(N).fill(-1); let next = 0;
+      for (let i = 0; i < N; i++) if (!group.has(i)) id[i] = next++;
+      const gid = next++;
+      group.forEach(i => { id[i] = gid; });
+      return [next, E.map(e => [id[e[0]], id[e[1]]]).filter(e => e[0] !== e[1])];
+    };
+    let guard = 0;
+    const go = (N, E) => {
+      if (++guard > 5000) return null;
+      if (!E.length) return 0;
+      const k = count(N, E), seen = new Map();
+      for (let i = 0; i < E.length; i++) {
+        const key = Math.min(E[i][0], E[i][1]) + ',' + Math.max(E[i][0], E[i][1]);
+        if (seen.has(key)) {
+          const j = seen.get(key), rest = E.filter((_, t) => t !== i && t !== j);
+          if (count(N, rest) === k) { const g = go(N, rest); return g === null ? null : g + 1; }
+          return go(...merge(N, rest, new Set(E[i])));
+        }
+        seen.set(key, i);
+      }
+      const deg = new Array(N).fill(0), inc = Array.from({ length: N }, () => []);
+      E.forEach((e, i) => { deg[e[0]]++; deg[e[1]]++; inc[e[0]].push(i); inc[e[1]].push(i); });
+      for (let v = 0; v < N; v++) if (deg[v] === 2) {
+        const [i, j] = inc[v], rest = E.filter((_, t) => t !== i && t !== j);
+        return go(...merge(N, rest, new Set([v, ...E[i], ...E[j]])));
+      }
+      return null;
+    };
+    return go(n, edgeList.map(e => [e[0], e[1]]));
+  }
+
+  // Geometry for the overlay: each decomposition curve as a closed polyline, the
+  // marked points, and the middle piece of every nonalternating arc -- the part
+  // that is an edge of G.
+  function decompositionPaths(comps, dec, opt) {
+    if (!dec) return null;
+    opt = opt || {};
+    const off = opt.offset == null ? 9 : opt.offset, step = opt.step || SEG / 2;
+    const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
+    const sample = (d, from, to) => {
+      const D = dart[d], cm = comps[D.c], f = D.s1 > D.s0 ? 1 : -1;
+      const n = Math.max(1, Math.ceil(Math.abs(to - from) / step)), out = [];
+      for (let i = 0; i <= n; i++) { const P = pointAtS(cm, from + (to - from) * i / n); out.push({ x: P.x, y: P.y, tx: f * P.dx, ty: f * P.dy }); }
+      return out;
+    };
+    // Which side of a face walk the face lies on is one global bit. Under "face
+    // on the left" every walk turns through +2*pi except the one outer walk per
+    // piece, so the total turning over all walks is +2*pi*c(D).
+    let turn = 0;
+    for (const walk of faces) {
+      const pts = [];
+      for (const d of walk) pts.push(...sample(d, dart[d].s0, dart[d].s1));
+      for (let i = 0; i < pts.length; i++) {
+        const u = pts[i], v = pts[(i + 1) % pts.length];
+        turn += Math.atan2(u.tx * v.ty - u.ty * v.tx, u.tx * v.tx + u.ty * v.ty);
+      }
+    }
+    const side = turn >= 0 ? 1 : -1;
+    const push = (out, pts) => pts.forEach(P => out.push({ x: P.x - side * P.ty * off, y: P.y + side * P.tx * off }));
+    // The two marked points may sit anywhere on their edge, so they are placed
+    // symmetrically about its middle: the piece between them is the edge of G,
+    // and the rest of the edge belongs to the alternating region at either end.
+    const span = d => Math.abs(dart[d].s1 - dart[d].s0);
+    const markAt = d => {
+      const D = dart[d], L = span(d);
+      const bar = opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.6 * L, Math.max(14, Math.min(60, 0.25 * L)));
+      return D.s0 + (D.s1 > D.s0 ? 1 : -1) * (L - bar) / 2;
+    };
+    const curvePts = curves.map(cyc => {
+      const out = [];
+      for (const x of cyc) {
+        // The arc leaving x's marked point runs backwards along x's own arc, on
+        // around the face past the alternating arcs, and up to sigma(x).
+        const d = x ^ 1, end = sigma[x];
+        push(out, sample(d, markAt(x), dart[d].s1));
+        for (let e = nextInFace(d); e !== end; e = nextInFace(e)) push(out, sample(e, dart[e].s0, dart[e].s1));
+        push(out, sample(end, dart[end].s0, markAt(end)));
+      }
+      return out;
+    });
+    const marks = [], gEdges = [];
+    for (const g of nonAlt) {
+      const a = markAt(2 * g), b = markAt(2 * g + 1), pts = sample(2 * g, a, b);
+      marks.push(pts[0], pts[pts.length - 1]);
+      gEdges.push({ pts, over: !!dart[2 * g].over, arc: g, s: [a, b] });
+    }
+    return { curves: curvePts, marks, gEdges, side };
+  }
+
   // Adjacent occurrences on every closed component must have opposite heights.
   // Crossing bits satisfy over[a] XOR over[b] = 1 XOR occurrence[a] XOR occurrence[b].
   function alternatingAssignment(comps,crossings) {
@@ -1218,7 +1479,8 @@ const KC = (function () {
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
     attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
-    braidCurves, analyze, alternatingAssignment, circD, mod
+    braidCurves, analyze, alternatingAssignment, circD, mod,
+    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths
   };
 })();
 
@@ -1231,6 +1493,7 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
+  let decompCache = null;
   const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
@@ -2937,15 +3200,74 @@ const KC = (function () {
     let pdText = '';
     if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# Components without crossings omitted from PD code: ${a.free}`; }
     $('pd').value = S.comps.length ? (pdText || 'No crossings') : '';
+    updateDecompositionPanel();
     updateLegend();
   }
   const fmt = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
+  // The decomposition is derived data, so it is memoised on the analysis object
+  // it was read from and thrown away whenever that is replaced.
+  function decompInfo() {
+    if (!analysis || !S.comps.length) return null;
+    if (!decompCache || decompCache.for !== analysis) {
+      let dec = null;
+      try { dec = KC.decompose(S.comps, S.crossings, analysis); } catch (err) { dec = null; }
+      decompCache = { for: analysis, dec,
+        genus: dec ? KC.decompositionGenusRecursive(dec.graph.n, dec.graph.edges) : null,
+        ribbon: dec ? KC.decompositionGenus(dec) : null };
+    }
+    return decompCache;
+  }
+  function decomposition() { const i = decompInfo(); return i && i.dec; }
+
+  // Theorem 1.2: a reduced alternating decomposition graph has Turaev genus one
+  // exactly when it is a doubled cycle of even length -- the shape of Figure 2.
+  function doubledCycle(g) {
+    const n = g.n;
+    if (n < 2 || g.edges.length !== 2 * n) return 0;
+    const nb = Array.from({ length: n }, () => new Map());
+    for (const [u, v] of g.edges) { if (u === v) return 0; nb[u].set(v, (nb[u].get(v) || 0) + 1); nb[v].set(u, (nb[v].get(u) || 0) + 1); }
+    if (n === 2) return nb[0].get(1) === 4 ? 2 : 0;
+    for (const m of nb) { if (m.size !== 2) return 0; for (const count of m.values()) if (count !== 2) return 0; }
+    const seen = new Set([0]), q = [0];
+    while (q.length) for (const w of nb[q.pop()].keys()) if (!seen.has(w)) { seen.add(w); q.push(w); }
+    return seen.size === n ? n : 0;
+  }
+
+  function updateDecompositionPanel() {
+    const info = decompInfo(), d = info && info.dec;
+    if (!d) {
+      ['adEdges', 'adCurves', 'adRegions'].forEach(id => setText(id, 0));
+      setText('adGraph', '\u2014'); setText('adGenus', '\u2014');
+      $('adFlags').innerHTML = '';
+      $('adNote').textContent = S.comps.length ? 'The decomposition is unavailable for this diagram.' : 'Draw a closed diagram to decompose it.';
+      return;
+    }
+    const g = d.graph, plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    setText('adEdges', g.edges.length); setText('adCurves', g.curves); setText('adRegions', d.regions.length);
+    setText('adGraph', `${g.n} ${g.n === 1 ? 'vertex' : 'vertices'}, ${plural(g.edges.length, 'edge')}`);
+    setText('adGenus', info.genus === null ? '\u2014' : fmt(info.genus));
+    const flags = [], cycle = doubledCycle(g);
+    if (d.alternating) flags.push(['Alternating: G is one vertex per piece', true]);
+    if (cycle) flags.push([`G is the doubled cycle C\u00b2 of length ${cycle}`, true]);
+    if (info.genus !== null) flags.push([info.genus === analysis.gT ? 'Agrees with g\u209c(D)' : `Disagrees with g\u209c(D) = ${fmt(analysis.gT)}`, info.genus === analysis.gT]);
+    $('adFlags').innerHTML = flags.map(([t, on]) => `<span class="flag${on ? ' on' : ''}">${t}</span>`).join('');
+    $('adNote').textContent = d.alternating
+      ? 'No nonalternating edges, so there are no decomposition curves and G is a single vertex for each connected piece of D.'
+      : `${plural(g.curves, 'curve')} bound ${plural(d.regions.length, 'alternating region')}. Switch the view above the canvas to Alt. decomposition to see them.`;
+  }
+
   function updateLegend() {
     const L = $('legend'), a = analysis;
     if (viewMode === 'diagram' || !a || !S.comps.length) { L.style.display = 'none'; return; }
     L.style.display = 'block';
     if (viewMode === 'A') L.innerHTML = `<b>all-A state</b>, ${a.sA.count} circles<div class="sub">Dashed lines are chords at A-smoothing sites. ${a.sA.adequate ? 'A-adequate' : 'Not A-adequate: a chord has both endpoints on the same circle'}</div>`;
     else if (viewMode === 'B') L.innerHTML = `<b>all-B state</b>, ${a.sB.count} circles<div class="sub">Dashed lines are chords at B-smoothing sites. ${a.sB.adequate ? 'B-adequate' : 'Not B-adequate: a chord has both endpoints on the same circle'}</div>`;
+    else if (viewMode === 'AD') {
+      const d = decomposition();
+      L.innerHTML = !d ? '<b>alternating decomposition</b><div class="sub">Not available for this diagram</div>'
+        : d.alternating ? `<b>alternating decomposition</b><div class="sub">The diagram is alternating: no nonalternating edges, so no curves, and G is one vertex per piece</div>`
+        : `<b>alternating decomposition</b>, ${d.curves.length} curves around ${d.regions.length} alternating regions<div class="sub">Strands are coloured by alternating region. Dashed curves are the decomposition; the heavy segments between the marked dots are the edges of G, + for an overstrand edge and \u2212 for an understrand edge.</div>`;
+    }
     else L.innerHTML = `<b>Seifert state</b>, ${a.sS.count} circles<div class="sub">Smoothing follows the strand orientations</div>`;
   }
 
@@ -2996,7 +3318,7 @@ const KC = (function () {
       ctx.restore();
     }
     const draft=draftGeometry();
-    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(draft.crossings); else drawState(viewMode); }
+    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(draft.crossings); else if (viewMode === 'AD') drawDecomposition(); else drawState(viewMode); }
     drawOpen(draft);
     if (sel) {
       const b = selBox(), pad = 10 / view.s;
@@ -3156,6 +3478,61 @@ const KC = (function () {
     ctx.stroke();
   }
 
+  // Alternating decomposition overlay. Strands are coloured by alternating
+  // region, nonalternating arcs stay neutral with their middle segment -- the
+  // edge of G -- picked out between the two marked points, and each decomposition
+  // curve runs alongside the strands through the faces it passes through.
+  function drawDecomposition() {
+    const dec = decomposition();
+    if (!dec) { drawDiagram(); return; }
+    const pal = palette(), gap = Math.min(12, 8 / view.s);
+    const paths = KC.decompositionPaths(S.comps, dec, { offset: 9, step: KC.SEG / 2 });
+    if (!paths) return;
+    const markS = new Map();
+    paths.gEdges.forEach(e => markS.set(e.arc, e.s));
+    ctx.setLineDash([]); ctx.lineWidth = 3 / view.s;
+    const piece = (cm, s0, s1, xi) => {
+      if (s1 <= s0) return;
+      ctx.beginPath(); ctx.strokeStyle = pal[dec.regionOfX[xi] % pal.length];
+      tracePiece(cm, s0, s1); ctx.stroke();
+    };
+    for (let g = 0; g < dec.nArc; g++) {
+      const a = dec.dart[2 * g], b = dec.dart[2 * g + 1], cm = S.comps[a.c];
+      const s0 = a.s0 + (a.over ? 0 : gap), s1 = a.s1 - (b.over ? 0 : gap);
+      // A nonalternating arc has one end inside each of the two regions it joins,
+      // and only its middle piece -- the edge of G -- lies outside both of them.
+      if (!dec.isNA[g]) piece(cm, s0, s1, a.xi);
+      else { const [m0, m1] = markS.get(g); piece(cm, s0, m0, a.xi); piece(cm, m1, s1, b.xi); }
+    }
+    // The edges of G share the canvas with strands already coloured by region, so
+    // they are drawn as heavy neutral bars rather than in another palette colour.
+    ctx.lineWidth = 6 / view.s; ctx.strokeStyle = cssv('--ink');
+    paths.gEdges.forEach(e => {
+      ctx.beginPath(); ctx.moveTo(e.pts[0].x, e.pts[0].y);
+      for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
+      ctx.stroke();
+    });
+    ctx.lineWidth = 2.6 / view.s; ctx.strokeStyle = cssv('--accent');
+    ctx.setLineDash([8 / view.s, 5 / view.s]);
+    paths.curves.forEach(pts => {
+      if (pts.length < 2) return;
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.stroke();
+    });
+    ctx.setLineDash([]); ctx.lineWidth = 1.6 / view.s; ctx.strokeStyle = cssv('--accent');
+    paths.marks.forEach(P => {
+      ctx.beginPath(); ctx.fillStyle = cssv('--paper');
+      ctx.arc(P.x, P.y, 4 / view.s, 0, 7); ctx.fill(); ctx.stroke();
+    });
+    ctx.font = `700 ${14 / view.s}px ${cssv('--sans')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    paths.gEdges.forEach(e => {
+      const m = e.pts[e.pts.length >> 1];
+      ctx.fillStyle = cssv(e.over ? '--c1' : '--c0');
+      ctx.fillText(e.over ? '+' : '\u2212', m.x + 14 / view.s, m.y - 14 / view.s);
+    });
+  }
+
   function drawState(key) {
     const a = analysis, st = key === 'A' ? a.sA : key === 'B' ? a.sB : a.sS, uf = st.uf, pal = palette();
     const pairKey = key === 'S' ? 'Sf' : key;
@@ -3229,7 +3606,7 @@ const KC = (function () {
       const data=JSON.parse(saved);
       if(data.format!=='knot-lab-workspace'||!Array.isArray(data.tabs)||!data.tabs.length)throw new Error('Invalid saved tab format');
       const recovered=data.tabs.map((t,i)=>({id:String(i+1),title:typeof t.title==='string'?t.title:'New diagram '+(i+1),fileName:typeof t.fileName==='string'?t.fileName:'',pdInput:typeof t.pdInput==='string'?t.pdInput:'',dirty:!!t.dirty,
-        state:deserialize(t.document),undo:[],redo:[],view:t.view&&['ox','oy','s'].every(k=>Number.isFinite(t.view[k]))&&t.view.s>0?t.view:null,viewMode:['diagram','A','B','S'].includes(t.viewMode)?t.viewMode:'diagram'}));
+        state:deserialize(t.document),undo:[],redo:[],view:t.view&&['ox','oy','s'].every(k=>Number.isFinite(t.view[k]))&&t.view.s>0?t.view:null,viewMode:['diagram','A','B','S','AD'].includes(t.viewMode)?t.viewMode:'diagram'}));
       const activeIndex=Math.max(0,data.tabs.findIndex(t=>t.id===data.activeId));
       tabs.push(...recovered);nextTabId=tabs.length+1;activeTabId=tabs[activeIndex].id;restored=true;
     } else {

@@ -64,6 +64,18 @@ PD input accepts `[[a,b,c,d], ...]` or `PD[X[a,b,c,d], ...]`. The first label is
 
 The displayed Turaev genus is the value for the current diagram, not the minimum over all diagrams of the knot.
 
+## Alternating decomposition
+
+The **Alt. decomposition** view, alongside the all-A, all-B and Seifert state views, shows Thistlethwaite's decomposition of the diagram into its maximal alternating pieces, in the form used by Armond and Lowrance.
+
+Read the diagram D as a 4-valent plane graph. An edge of it is *nonalternating* when the strand is the overstrand at both of its ends, or the understrand at both. Mark every nonalternating edge with two points and, inside each face, join the marked points that are adjacent along the boundary without lying on the same edge; the arcs close up into disjoint simple closed curves that cut the sphere into maximal *alternating regions*. The *alternating decomposition graph* G has one vertex per curve and one edge per nonalternating edge of D, and an alternating diagram gives a single vertex with no edges.
+
+In the view, strands are coloured by the alternating region they lie in, the curves of the decomposition are dashed, and the middle piece of each nonalternating edge — the part that is an edge of G — is a heavy bar between its two marked points, labelled + for an overstrand edge and − for an understrand edge. The inspector's **Alternating decomposition** section reports the counts and the graph.
+
+G determines the Turaev surface, so the app computes the Turaev genus a second time, from the graph alone: the recursion of Corollary 3.9 never looks at the diagram, and its answer must equal the g<sub>T</sub>(D) read off the all-A and all-B state counts at the top of the inspector. The panel says which it is. Tests check the two against each other, and against a third computation — the genus of the twisted ribbon embedding of G, which is the Turaev surface itself — on 2460 diagrams.
+
+Method: [Armond and Lowrance, "Turaev genus and alternating decompositions", *Algebr. Geom. Topol.* 17 (2017) 793–830](https://doi.org/10.2140/agt.2017.17.793).
+
 ## Geometry and editing behavior
 
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.

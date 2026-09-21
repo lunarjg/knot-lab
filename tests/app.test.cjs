@@ -39,6 +39,33 @@ const cr=lab.state.crossings[0],old=cr.over,e={pointerType:'mouse',pointerId:1,c
 t.fire(t.ids.get('cv'),'pointerdown',e);t.fire(t.ids.get('cv'),'pointerup',e);assert.equal(cr.over,1-old);t.ids.get('undo').click();
 console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear, all state views, autosave/reload, panel and crossing flip: PASS');
 
+// The alternating decomposition has its own state view and inspector section.
+// An alternating diagram is a single vertex with no edges; flipping one crossing
+// of the trefoil turns it into the doubled 2-cycle of Turaev genus one.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ const ad=p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD');
+ assert(ad,'Alternating decomposition view button');
+ ad.click();assert.equal(ad.getAttribute('aria-pressed'),'true');
+ assert.equal(p.ids.get('adEdges').textContent,0);
+ assert.equal(p.ids.get('adGraph').textContent,'1 vertex, 0 edges');
+ assert.equal(p.ids.get('adGenus').textContent,'0');
+ const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
+ const cr=api.state.crossings[0];
+ const e={pointerType:'mouse',pointerId:1,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',e);p.fire(p.ids.get('cv'),'pointerup',e);
+ assert.equal(api.analysis.gT,1);
+ assert.equal(p.ids.get('adEdges').textContent,4);
+ assert.equal(p.ids.get('adCurves').textContent,2);
+ assert.equal(p.ids.get('adRegions').textContent,2);
+ assert.equal(p.ids.get('adGraph').textContent,'2 vertices, 4 edges');
+ assert.equal(p.ids.get('adGenus').textContent,'1');
+ // Drawing the overlay goes through the same canvas guard as every other view.
+ p.flush();
+ p.ids.get('undo').click();assert.equal(p.ids.get('adEdges').textContent,0);
+}
+console.log('Alternating decomposition view and inspector section: PASS');
+
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
 // stays right after the last tab and scrolls together with them.

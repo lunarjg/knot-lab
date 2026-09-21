@@ -6,6 +6,19 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Alternating decomposition (Claude Code, unreleased, not on main)
+
+Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in the form used by Armond and Lowrance, ["Turaev genus and alternating decompositions", *Algebr. Geom. Topol.* 17 (2017) 793–830](https://doi.org/10.2140/agt.2017.17.793). Built on a branch for review, deliberately not merged to main.
+
+- **New state view, Alt. decomposition**, beside all-A, all-B and Seifert. Strands are coloured by alternating region, the decomposition curves are dashed, and the middle piece of each nonalternating edge — an edge of G — is a heavy bar between its two marked points, signed + for an overstrand edge and − for an understrand edge.
+- **New inspector section** with the nonalternating edge count, the number of curves, the number of alternating regions, the size of G, and g<sub>T</sub>(G).
+- `KC.decompose` does the combinatorics on darts: rotation from the crossing tangents, face walks, then the permutation σ whose cycles are the decomposition curves. The over/under role flips along a face walk exactly at the nonalternating edges, so every face meets an even number of them and the arcs always pair up — that is what makes the construction well defined, and it is asserted in the tests.
+- **Three independent Turaev genus computations, cross-checked.** `KC.decompositionGenus` builds the twisted ribbon embedding of G, which by Proposition 3.5 *is* the Turaev surface; since G is bipartite and every edge joins the two sides, half-twisting every band is the same as reversing the rotation on one side. `KC.decompositionGenusRecursive` runs the Corollary 3.9 recursion on the abstract graph with no embedding and no diagram. Both must agree with the (2k + c − s<sub>A</sub> − s<sub>B</sub>)/2 the app already showed. They agree on all **2460** diagrams the tests generate.
+- The recursion refuses a graph that is not an alternating decomposition graph rather than answering anyway: odd degrees or a non-bipartite component return `null`. A doubled cycle of odd length is one such graph, which is why Theorem 1.2's family is the even ones.
+- Other properties tested against the paper: an alternating diagram gives one vertex per connected piece; every vertex of G has even degree and G is bipartite; the sphere embedding really is spherical (V − E + F = 2k); doubled cycles, disjoint unions and one-sums have the genus the classification theorems give them; and 117 doubled path extensions leave the genus alone (Proposition 3.11).
+- The overlay geometry is tested too, not just the numbers: each of **1076** drawn curves is checked by winding number to separate the crossings of the region it bounds from the middle pieces of the edges of G that meet it. That is what fixes which side of the strands the curve is offset to, which is otherwise a coin flip.
+- Service-worker cache bumped to `knot-lab-v27-alternating-decomposition`.
+
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 
 - **Drag radius defaults to 60** (was 40) and **Separation distance to 30** (was 10).
