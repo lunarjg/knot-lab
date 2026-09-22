@@ -82,9 +82,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .canvaswrap{position:relative;flex:1;min-height:0;border-radius:14px;overflow:hidden;border:1px solid var(--rule);background:var(--paper)}
 canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 body{overscroll-behavior:none}
-.legend{position:absolute;left:14px;bottom:36px;background:color-mix(in srgb,var(--paper) 88%,transparent);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;pointer-events:none;display:none;max-width:calc(100% - 28px)}
-.legend b{font-weight:600}
-.legend .sub{color:var(--muted);font-size:12.5px}
 .hint{position:absolute;left:14px;bottom:12px;right:14px;color:var(--muted);font-size:12.5px;pointer-events:none}
 .toast{position:absolute;left:50%;bottom:40px;transform:translate(-50%,8px);z-index:5;opacity:0;transition:opacity .18s,transform .18s;background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);padding:8px 14px;border-radius:10px;font-weight:500;pointer-events:none;max-width:min(560px,90%);text-align:center}
 .toast.info{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
@@ -321,7 +318,6 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <div class="selmenu" id="selmenu" hidden>
         <button id="mCopy">Copy</button><button id="mCut">Cut</button><button id="mDelete" class="danger">Delete</button><button id="mPaste">Paste</button>
       </div>
-      <div class="legend" id="legend"></div>
       <div class="empty" id="empty"><div><strong>Draw a curve to begin</strong>Or select Import PD above to enter a code</div></div>
       <div class="toast" id="toast"></div>
       <div class="hint" id="hint"></div>
@@ -1410,11 +1406,12 @@ const KC = (function () {
     const clear = opt.clearance == null ? 7 : opt.clearance;   // off the strands
     const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
     const h = opt.spacing || 6;                                // point spacing
-    const rounds = opt.rounds == null ? 80 : opt.rounds;
+    const rounds = opt.rounds == null ? 220 : opt.rounds;
     const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
+    const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
+    const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
+    const shape = opt.shape == null ? 90 : opt.shape;         // rounds spent convexifying once it is taut
     const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
-    const puff = opt.puff == null ? 0.8 : opt.puff;            // outward pressure per round
-    const swell = opt.swell == null ? 0.5 : opt.swell;         // for this fraction of the rounds
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
 
     // A grid of line segments, asked only for what lies near a point. The curve
@@ -1422,29 +1419,48 @@ const KC = (function () {
     // a fixed frame rather than anything that allocates per round.
     const CELL = Math.max(16, 2 * Math.max(clear, apart, h));
     const frame = { x0: 0, y0: 0, nx: 1, ny: 1 };
-    const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []) });
+    const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []), at: [] });
+    const cellsOf = it => {
+      const lo = Math.max(0, Math.floor((Math.min(it[0], it[2]) - frame.x0) / CELL));
+      const hi = Math.min(frame.nx - 1, Math.floor((Math.max(it[0], it[2]) - frame.x0) / CELL));
+      const bo = Math.max(0, Math.floor((Math.min(it[1], it[3]) - frame.y0) / CELL));
+      const bi = Math.min(frame.ny - 1, Math.floor((Math.max(it[1], it[3]) - frame.y0) / CELL));
+      const out = [];
+      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) out.push(cy * frame.nx + cx);
+      return out;
+    };
     const fill = (g, items) => {
       for (const c of g.cell) c.length = 0;
+      g.at = [];
       for (let i = 0; i < items.length; i++) {
-        const it = items[i];
-        const lo = Math.max(0, Math.floor((Math.min(it[0], it[2]) - frame.x0) / CELL));
-        const hi = Math.min(frame.nx - 1, Math.floor((Math.max(it[0], it[2]) - frame.x0) / CELL));
-        const bo = Math.max(0, Math.floor((Math.min(it[1], it[3]) - frame.y0) / CELL));
-        const bi = Math.min(frame.ny - 1, Math.floor((Math.max(it[1], it[3]) - frame.y0) / CELL));
-        for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) g.cell[cy * frame.nx + cx].push(i);
+        const cells = cellsOf(items[i]);
+        g.at.push(cells);
+        for (const k of cells) g.cell[k].push(i);
       }
       return g;
     };
-    const near = (g, px, py, out) => {
+    // A curve moves while it is being swept against, so its index is kept exact
+    // point by point rather than rebuilt once a round. A stale index is what let
+    // a curve walk through a part of itself that had already moved on.
+    const relist = (g, items, i) => {
+      for (const k of g.at[i]) { const l = g.cell[k], at = l.indexOf(i); if (at >= 0) l.splice(at, 1); }
+      const cells = cellsOf(items[i]);
+      g.at[i] = cells;
+      for (const k of cells) g.cell[k].push(i);
+    };
+    const box = (g, x0, y0, x1, y1, out) => {
       out.length = 0;
-      const cx = Math.floor((px - frame.x0) / CELL), cy = Math.floor((py - frame.y0) / CELL);
-      for (let x = Math.max(0, cx - 1); x <= Math.min(frame.nx - 1, cx + 1); x++)
-        for (let y = Math.max(0, cy - 1); y <= Math.min(frame.ny - 1, cy + 1); y++) {
-          const l = g.cell[y * frame.nx + x];
-          for (let i = 0; i < l.length; i++) out.push(l[i]);
-        }
+      const lo = Math.max(0, Math.floor((Math.min(x0, x1) - frame.x0) / CELL) - 1);
+      const hi = Math.min(frame.nx - 1, Math.floor((Math.max(x0, x1) - frame.x0) / CELL) + 1);
+      const bo = Math.max(0, Math.floor((Math.min(y0, y1) - frame.y0) / CELL) - 1);
+      const bi = Math.min(frame.ny - 1, Math.floor((Math.max(y0, y1) - frame.y0) / CELL) + 1);
+      for (let x = lo; x <= hi; x++) for (let y = bo; y <= bi; y++) {
+        const l = g.cell[y * frame.nx + x];
+        for (let i = 0; i < l.length; i++) out.push(l[i]);
+      }
       return out;
     };
+    const near = (g, px, py, out) => box(g, px, py, px, py, out);
     const closest = (it, px, py) => {
       const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
       let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
@@ -1566,37 +1582,78 @@ const KC = (function () {
       return { flat, pin, where };
     };
 
-    // A closed polyline is simple when no two of its segments meet, bar the pairs
-    // that share an end. The grid makes that a local question.
+    // Cut out any small loop inside an arc, leaving its two pinned ends alone.
+    const mend = arc => {
+      for (let sweep = 0; sweep < 2; sweep++) {
+        let cut = false;
+        for (let i = 0; i + 3 < arc.length; i++) {
+          for (let d = 2; d <= 8 && i + d + 1 < arc.length; d++) {
+            const at = meet(arc[i], arc[i + 1], arc[i + d], arc[i + d + 1]);
+            if (!at) continue;
+            arc.splice(i + 1, d, at); cut = true; break;
+          }
+        }
+        if (!cut) break;
+      }
+      return arc;
+    };
+
+    // A curve is still legal when it is simple and misses every other curve. Both
+    // halves matter: convexifying pushes curves outwards, and the one thing that
+    // must never happen is two of them crossing, since that is a region taking in
+    // a piece of a tangle that is not its own.
     const check = grid();
-    const simple = pts => {
-      const n = pts.length, segs = [];
-      for (let i = 0; i < n; i++) segs.push([pts[i].x, pts[i].y, pts[(i + 1) % n].x, pts[(i + 1) % n].y]);
+    const legal = () => {
+      const segs = [], tag = [], ok = curveArcs.map(() => true);
+      curveArcs.forEach((arcs, c) => {
+        const pts = [].concat(...arcs), n = pts.length;
+        for (let i = 0; i < n; i++) { segs.push([pts[i].x, pts[i].y, pts[(i + 1) % n].x, pts[(i + 1) % n].y]); tag.push(c * 1e6 + i); }
+      });
       fill(check, segs);
       const look = [];
-      for (let i = 0; i < n; i++) {
-        for (const j of near(check, pts[i].x, pts[i].y, look)) {
-          const gap = Math.min(Math.abs(j - i), n - Math.abs(j - i));
-          if (gap <= 1 || j < i) continue;
-          if (meet(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) return false;
+      const size = curveArcs.map(arcs => arcs.reduce((t, arc) => t + arc.length, 0));
+      for (let k = 0; k < segs.length; k++) {
+        const c = Math.floor(tag[k] / 1e6), i = tag[k] % 1e6, n = size[c];
+        for (const j of box(check, segs[k][0], segs[k][1], segs[k][2], segs[k][3], look)) {
+          if (j <= k) continue;
+          const oc = Math.floor(tag[j] / 1e6), oi = tag[j] % 1e6;
+          if (oc === c && Math.min(Math.abs(oi - i), n - Math.abs(oi - i)) <= 1) continue;
+          const a = segs[k], b = segs[j];
+          if (meet({ x: a[0], y: a[1] }, { x: a[2], y: a[3] }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) { ok[c] = false; ok[oc] = false; }
         }
       }
-      return true;
+      // And it must meet the diagram exactly at its own marked points, one per
+      // arc. Sweeping a point's path cannot see the segments it drags, so a curve
+      // can slip past a strand without any point crossing one; counting settles
+      // it, and a curve that has slipped is put back.
+      const crossings = curveArcs.map(() => 0);
+      for (let k = 0; k < segs.length; k++) {
+        const c = Math.floor(tag[k] / 1e6), a = segs[k];
+        for (const j of box(strandAt, a[0], a[1], a[2], a[3], look)) {
+          const b = strand[j];
+          if (meet({ x: a[0], y: a[1] }, { x: a[2], y: a[3] }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) crossings[c]++;
+        }
+      }
+      curveArcs.forEach((arcs, c) => { if (crossings[c] !== arcs.length) ok[c] = false; });
+      return ok;
     };
 
     // Shorten every curve at once, so two sharing a face meet in the middle
     // instead of one taking the room before the other has moved.
     const bag = [], curveAt = grid();
+    let shaping = false;
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
-    const stuck = curveArcs.map(() => false);
-    for (let round = 0; round < rounds; round++) {
+    const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
+    let limit = rounds;
+    for (let round = 0; round < limit; round++) {
       // Points crowd towards a pin as the curve shortens, and once one lands on
       // top of a pin the curve folds over its own marked point. Spreading each
       // arc out again every so often is what stops that happening.
       if (round && round % 10 === 0) curveArcs.forEach(arcs => arcs.forEach((arc, a) => { arcs[a] = respace(arc); }));
       const { flat, pin, where } = flatten();
-      const curveSeg = [], owner = [];
+      const curveSeg = [], owner = [], base = [];
       flat.forEach((pts, c) => {
+        base[c] = curveSeg.length;
         for (let i = 0; i < pts.length; i++) {
           const j = (i + 1) % pts.length;
           curveSeg.push([pts[i].x, pts[i].y, pts[j].x, pts[j].y]); owner.push(c * 1e6 + i);
@@ -1604,7 +1661,6 @@ const KC = (function () {
       });
       fill(curveAt, curveSeg);
       let shift = 0;
-      const pressing = round < swell * rounds;
       for (let c = 0; c < flat.length; c++) {
         const pts = flat[c], n = pts.length;
         for (let i = 0; i < n; i++) {
@@ -1613,18 +1669,18 @@ const KC = (function () {
           const ox = pts[i].x, oy = pts[i].y;
           let px = ox, py = oy;
           let dx = (a.x + b.x) / 2 - px, dy = (a.y + b.y) / 2 - py;
-          const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty);
-          const nx = tl > 1e-9 ? side * -ty / tl : 0, ny = tl > 1e-9 ? side * tx / tl : 0;
+          if (shaping) {
+            const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty);
+            if (tl > 1e-9) {
+              const nx = side * -ty / tl, ny = side * tx / tl, inward = dx * nx + dy * ny;
+              if (inward < 0) { dx -= nx * inward; dy -= ny * inward; }
+              // Once taut, what is left to fill is shallow, so the outward half is
+              // taken at a gain; the step clamp and the sweep still bound it.
+              else { dx += nx * inward * (gain - 1); dy += ny * inward * (gain - 1); }
+            }
+          }
           const len = Math.hypot(dx, dy);
           if (len > stride) { dx = dx * stride / len; dy = dy * stride / len; }
-          // Shortening alone would collapse the curve onto the strands, which is
-          // the shortest it can be but says nothing. A gentle outward pressure
-          // balances it: the region grows until it runs out of room, and what the
-          // two together settle on is the roundest shape that fits. The pressure
-          // runs for part of the rounds only -- long enough to fill the room, and
-          // then off, so a curve with open space around it cannot drift away and
-          // the rest of the rounds are spent purely on smoothing it out.
-          if (pressing) { dx += nx * puff; dy += ny * puff; }
           px += dx; py += dy;
           for (let pass = 0; pass < 2; pass++) {
             let hit = null, want = 0, worst = 0;
@@ -1671,7 +1727,7 @@ const KC = (function () {
           if (mx || my) {
             let stop = 1;
             const block = (items, from, skipSelf) => {
-              for (const k of near(from, ox + mx, oy + my, bag)) {
+              for (const k of box(from, ox, oy, ox + mx, oy + my, bag)) {
                 if (skipSelf) {
                   const tag = owner[k], oc = Math.floor(tag / 1e6), oi = tag % 1e6;
                   if (oc === c && (oi === i || oi === (i - 1 + n) % n)) continue;
@@ -1686,7 +1742,13 @@ const KC = (function () {
             };
             block(strand, strandAt, false);
             block(curveSeg, curveAt, true);
-            if (stop < 1) { const back = Math.max(0, stop - 0.2); mx *= back; my *= back; }
+            // Stop a fixed distance short of what was in the way, rather than a
+            // fixed fraction, so a long move is held off by as much as a short one.
+            if (stop < 1) {
+              const travel = Math.hypot(mx, my) || 1;
+              const back = Math.max(0, stop - Math.min(clear, apart) / 2 / travel);
+              mx *= back; my *= back;
+            }
           }
           const step = Math.hypot(mx, my);
           if (step > shift) shift = step;
@@ -1694,25 +1756,54 @@ const KC = (function () {
           pts[i] = moved;
           const tag = where[c][i];
           curveArcs[c][Math.floor(tag / 1e5)][tag % 1e5] = moved;
+          const prev = base[c] + (i - 1 + n) % n, here = base[c] + i;
+          curveSeg[prev][2] = moved.x; curveSeg[prev][3] = moved.y;
+          curveSeg[here][0] = moved.x; curveSeg[here][1] = moved.y;
+          relist(curveAt, curveSeg, prev); relist(curveAt, curveSeg, here);
         }
       }
       // Relaxation with a bounded step can, very occasionally, walk a curve
       // through itself. Rather than hope it does not, the last state that was
       // checked and found simple is kept, and a curve that ties itself up is put
       // back to it and left alone. The drawing is then always a simple curve.
-      const settled = shift < 0.35 && !pressing;
-      if (round % 10 === 9 || round === rounds - 1 || settled) {
+      // Sweeping a point's own path is not the whole story: each of the two
+      // segments it carries sweeps a triangle, and an obstacle's end can sit
+      // inside one without the path ever crossing it. That leaves a small fold,
+      // always inside one arc and only a few points wide. Combing each arc out
+      // here, before anything looks at the curve, is what keeps a curve from
+      // being frozen at the first state it tripped over -- which is what left
+      // notches in a curve that was supposed to be pulled straight.
+      curveArcs.forEach(arcs => arcs.forEach(mend));
+      const settled = shift < 0.25;
+      if (round % 10 === 9 || round === limit - 1 || settled) {
+        const ok = legal();
         for (let c = 0; c < curveArcs.length; c++) {
           if (stuck[c]) continue;
-          if (simple([].concat(...curveArcs[c]))) safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
-          else { curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y }))); stuck[c] = true; }
+          if (ok[c]) safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+          else {
+            // A curve that trips is put back and allowed to try again; only one
+            // that keeps tripping is left where it is. Freezing on the first
+            // stumble is what left some regions barely relaxed at all.
+            curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+            if (++trips[c] >= 3) stuck[c] = true;
+          }
         }
         if (stuck.every(Boolean)) break;
       }
-      if (settled) break;                     // nothing is moving any more
+      // Shortening first pulls the curve taut, which is what takes the slack and
+      // the notches out of it. Taut is not the same as convex, though: wherever
+      // the curve comes round an obstacle it leaves a dip behind it. So once it
+      // has stopped moving, the same step is run again with only its outward half
+      // kept. Dips fill, nothing already bulging is pulled back in, and the curve
+      // walks out towards its own convex hull as far as the clearances allow.
+      if (settled) { if (shaping) break; shaping = true; limit = round + 1 + shape; }
     }
     // Whatever the loop ended on, every curve is left at a state that was checked.
-    for (let c = 0; c < curveArcs.length; c++) if (!simple([].concat(...curveArcs[c]))) curveArcs[c] = safe[c];
+    for (let pass = 0; pass < 3; pass++) {
+      const ok = legal();
+      if (ok.every(Boolean)) break;
+      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) curveArcs[c] = safe[c];
+    }
     const curvePts = curveArcs.map(arcs => [].concat(...arcs));
     const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
 
@@ -1736,6 +1827,35 @@ const KC = (function () {
         }
         if (!cut) break;
       }
+    });
+
+    // For drawing, drop the points that sit on a straight run. What is left is
+    // the corners, which a fillet can then round properly; kept at full density
+    // every corner is only one point wide and rounds over almost nothing. The
+    // tolerance is a fraction of the clearance, so the drawn line still runs
+    // where the relaxed one does.
+    const outline = curvePts.map(pts => {
+      const n = pts.length;
+      if (n < 4) return pts;
+      const off = (a, b, q) => {                       // how far q is off the chord a-b
+        const ex = b.x - a.x, ey = b.y - a.y, L2 = ex * ex + ey * ey;
+        let u = L2 ? ((q.x - a.x) * ex + (q.y - a.y) * ey) / L2 : 0;
+        u = u < 0 ? 0 : u > 1 ? 1 : u;
+        return Math.hypot(a.x + u * ex - q.x, a.y + u * ey - q.y);
+      };
+      const keep = [pts[0]];
+      let anchor = 0;
+      for (let i = 2; i < n; i++) {
+        // The chord is kept only while every point it skips still lies on it,
+        // so the line cannot drift away from the curve a fraction at a time.
+        let fits = true;
+        for (let j = anchor + 1; j < i && fits; j++) if (off(pts[anchor], pts[i], pts[j]) > tidy) fits = false;
+        if (!fits) { keep.push(pts[i - 1]); anchor = i - 1; }
+      }
+      let fits = true;
+      for (let j = anchor + 1; j < n && fits; j++) if (off(pts[anchor], pts[0], pts[j]) > tidy) fits = false;
+      if (!fits) keep.push(pts[n - 1]);
+      return keep.length >= 3 ? keep : pts;
     });
 
     const marks = [], gEdges = [];
@@ -1767,7 +1887,7 @@ const KC = (function () {
       const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
       return { region: r, curves: own, outer: parity === 0 };
     });
-    return { curves: curvePts, marks, gEdges, regions, side };
+    return { curves: curvePts, outline, marks, gEdges, regions, side };
   }
 
   // Adjacent occurrences on every closed component must have opposite heights.
@@ -2394,7 +2514,7 @@ const KC = (function () {
   $('eraseSize').oninput = e => { opts.eraseSize = +e.target.value; render(); };
   $('autoClose').onchange = e => { opts.autoClose = e.target.checked; updateHint(); };
   $('grid').onchange = e => { opts.grid = e.target.checked; render(); };
-  function setView(v) { viewMode = v; document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v)); render(); updateLegend(); }
+  function setView(v) { viewMode = v; document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v)); render(); }
   document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   // One way in for the radius, so the slider and the +/- keys cannot disagree.
@@ -3522,7 +3642,6 @@ const KC = (function () {
     if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# Components without crossings omitted from PD code: ${a.free}`; }
     $('pd').value = S.comps.length ? (pdText || 'No crossings') : '';
     updateDecompositionPanel();
-    updateLegend();
   }
   const fmt = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
   // The decomposition is derived data, so it is memoised on the analysis object
@@ -3614,10 +3733,8 @@ const KC = (function () {
         parts.push(`<path d="M${a.x.toFixed(1)} ${a.y.toFixed(1)}Q${qx.toFixed(1)} ${qy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}" fill="none" stroke="var(${over ? '--c1' : '--c0'})" stroke-width="2.2"></path>`);
       });
     }
-    for (let v = 0; v < g.n; v++) {
-      const region = v < g.curves ? dec.curveRegion[v] : dec.solo[v - g.curves];
-      parts.push(`<circle cx="${at[v].x.toFixed(1)}" cy="${at[v].y.toFixed(1)}" r="13" fill="var(${REGION_TINTS[region % REGION_TINTS.length]})" fill-opacity="0.38" stroke="var(--ink)" stroke-width="1.6"></circle>`);
-    }
+    for (let v = 0; v < g.n; v++)
+      parts.push(`<circle cx="${at[v].x.toFixed(1)}" cy="${at[v].y.toFixed(1)}" r="13" fill="var(${REGION_TINT})" fill-opacity="0.38" stroke="var(--ink)" stroke-width="1.6"></circle>`);
     const svg = `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="The alternating decomposition graph G: ${g.n} vertices and ${g.edges.length} edges"><g>${parts.join('')}</g></svg>`;
     const caption = g.edges.length
       ? 'G, with a vertex per decomposition curve. Edge colour is the sign, blue for an overstrand edge and orange for an understrand one; the signs alternate around every vertex.'
@@ -3650,27 +3767,14 @@ const KC = (function () {
       : `${plural(g.curves, 'curve')} bound ${plural(d.regions.length, 'alternating region')}. Switch the view above the canvas to Alt. decomposition to see them.`;
   }
 
-  function updateLegend() {
-    const L = $('legend'), a = analysis;
-    if (viewMode === 'diagram' || !a || !S.comps.length) { L.style.display = 'none'; return; }
-    L.style.display = 'block';
-    if (viewMode === 'A') L.innerHTML = `<b>all-A state</b>, ${a.sA.count} circles<div class="sub">Dashed lines are chords at A-smoothing sites. ${a.sA.adequate ? 'A-adequate' : 'Not A-adequate: a chord has both endpoints on the same circle'}</div>`;
-    else if (viewMode === 'B') L.innerHTML = `<b>all-B state</b>, ${a.sB.count} circles<div class="sub">Dashed lines are chords at B-smoothing sites. ${a.sB.adequate ? 'B-adequate' : 'Not B-adequate: a chord has both endpoints on the same circle'}</div>`;
-    else if (viewMode === 'AD') {
-      const d = decomposition();
-      L.innerHTML = !d ? '<b>alternating decomposition</b><div class="sub">Not available for this diagram</div>'
-        : d.alternating ? `<b>alternating decomposition</b><div class="sub">The diagram is alternating: no nonalternating edges, so no curves, and G is one vertex per piece</div>`
-        : `<b>alternating decomposition</b>, ${d.curves.length} curves around ${d.regions.length} alternating regions<div class="sub">Each shaded region is a vertex of G, ringed by the decomposition curves that bound it. The heavy bar between two marked points on a nonalternating edge is an edge of G, + for an overstrand edge and \u2212 for an understrand edge.</div>`;
-    }
-    else L.innerHTML = `<b>Seifert state</b>, ${a.sS.count} circles<div class="sub">Smoothing follows the strand orientations</div>`;
-  }
-
   // ---------- rendering ----------
   function palette() { return ['--c0', '--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8', '--c9'].map(cssv); }
-  // --c0 and --c1 mean the sign of an edge of G wherever the decomposition is
-  // drawn, so region tints start past them and never collide with a sign.
-  const REGION_TINTS = ['--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8', '--c9'];
-  function regionColor(r) { return cssv(REGION_TINTS[r % REGION_TINTS.length]); }
+  // Every alternating region is tinted the same. They are already told apart by
+  // the curves that separate them, and a colour per region only suggested a
+  // difference between tangles that is not there. --c0 and --c1 are reserved:
+  // they are what the sign of an edge of G means wherever this is drawn.
+  const REGION_TINT = '--c5';
+  function regionColor() { return cssv(REGION_TINT); }
 
   function tracePiece(comp, s0, s1) {
     const L = comp.len, n = comp.pts.length, cum = comp.cum, p = comp.pts;
@@ -3889,18 +3993,26 @@ const KC = (function () {
     const paths = decompositionPaths();
     if (!paths) { drawDiagram(); return; }
     const gap = Math.min(12, 8 / view.s);
-    // Round the polyline off as it is drawn: a quadratic through each point,
-    // joining the midpoints either side of it. The curve never leaves the corner
-    // it cuts, so the clearances the geometry established still hold.
+    // Round every corner with a fillet as the path is drawn: run straight up to a
+    // short way before the corner, curve through it, and carry on. The curve stays
+    // inside the corner it cuts, so the clearances the geometry established hold.
+    const FILLET = 14;
     const trace = pts => {
       const n = pts.length;
       if (n < 3) { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); return; }
-      const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
-      let from = mid(pts[n - 1], pts[0]);
-      ctx.moveTo(from.x, from.y);
+      const at = i => pts[(i % n + n) % n];
+      const towards = (p, q) => {
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1, t = Math.min(FILLET, d / 2) / d;
+        return { x: p.x + dx * t, y: p.y + dy * t };
+      };
+      const start = towards(at(0), at(-1));
+      ctx.moveTo(start.x, start.y);
       for (let i = 0; i < n; i++) {
-        const to = mid(pts[i], pts[(i + 1) % n]);
-        ctx.quadraticCurveTo(pts[i].x, pts[i].y, to.x, to.y);
+        const p = at(i), out = towards(p, at(i + 1));
+        ctx.quadraticCurveTo(p.x, p.y, out.x, out.y);
+        const next = at(i + 1);
+        const into = towards(next, p);
+        ctx.lineTo(into.x, into.y);
       }
       ctx.closePath();
     };
@@ -3910,9 +4022,9 @@ const KC = (function () {
     // alternating diagram has no curves at all, and its one region is everything.
     ctx.save(); ctx.globalAlpha = 0.22;
     paths.regions.forEach(R => {
-      ctx.beginPath(); ctx.fillStyle = regionColor(R.region);
+      ctx.beginPath(); ctx.fillStyle = regionColor();
       if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
-      R.curves.forEach(ci => trace(paths.curves[ci]));
+      R.curves.forEach(ci => trace(paths.outline[ci]));
       ctx.fill('evenodd');
     });
     ctx.restore();
@@ -3939,7 +4051,7 @@ const KC = (function () {
       ctx.stroke();
     });
     ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--warn');
-    paths.curves.forEach(pts => { if (pts.length > 1) { ctx.beginPath(); trace(pts); ctx.stroke(); } });
+    paths.outline.forEach(pts => { if (pts.length > 1) { ctx.beginPath(); trace(pts); ctx.stroke(); } });
     ctx.lineWidth = 1.8 / view.s;
     paths.marks.forEach(P => {
       ctx.beginPath(); ctx.fillStyle = cssv('--paper');
