@@ -86,6 +86,8 @@ Each curve is kept as the arcs between its marked points, re-spaced as it shorte
 
 The overlay geometry is computed only when that view asks for it, and only once per edit. Anything that is still moving strands about — a gesture, or auto-relax stepping the whole diagram — shows the plain diagram until it stops, and the decomposition comes back then. Rebuilding it on every frame of an auto-relax run made that button look as though it had hung.
 
+Relaxing the curves is a few hundred milliseconds of arithmetic, which is long enough to be felt, so it is never done on the way to the screen. It is written as a generator that gives the thread back between rounds, and the app drives it about six milliseconds per frame: the diagram paints as soon as the gesture ends and the overlay arrives shortly after, rather than the page freezing at every release. A run started while the strands are still moving is dropped rather than finished, and only one ever runs at a time. Starting a run from the previous one's curves was tried and taken out — it is twice as quick, but the error accumulates over a chain of edits until curves are crossing strands, so every run starts clean.
+
 Every alternating region is tinted the same. They are already told apart by the curves that separate them, and a colour per region suggested a difference between tangles that is not there.
 
 The region a curve bounds is filled from the curve itself by the even-odd rule: crossing any boundary curve toggles in and out of the region. Which way round that reads is settled by one crossing of the region, since the region holding the point at infinity has to be filled the other way about.

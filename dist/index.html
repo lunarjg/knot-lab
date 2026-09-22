@@ -1400,20 +1400,29 @@ const KC = (function () {
   // is pushed straight back out of anything it approaches, so a curve can never
   // cross a strand, and so can never take in a strand belonging to another
   // tangle, whatever the relaxation does.
+  // The relaxation is the one part of this file that takes long enough to be
+  // felt, so it is written as a generator that gives the thread back between
+  // rounds. Anything that just wants the answer drains it; the app drives it a
+  // few rounds at a time so a gesture never waits on it.
   function decompositionPaths(comps, dec, opt) {
+    const steps = decompositionSteps(comps, dec, opt);
+    let step; while (!(step = steps.next()).done);
+    return step.value;
+  }
+  function* decompositionSteps(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
     const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
     const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
     const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
-    const h = opt.spacing || 8;                                // point spacing
-    const rounds = opt.rounds == null ? 90 : opt.rounds;
+    const h = opt.spacing || 9;                                // point spacing
+    const rounds = opt.rounds == null ? 50 : opt.rounds;
     const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
     const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
     const creep = opt.creep == null ? 2 : opt.creep;          // how far a marked point may slide in a round
     const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
-    const shape = opt.shape == null ? 40 : opt.shape;         // rounds spent convexifying once it is taut
+    const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
     const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
 
@@ -1474,12 +1483,18 @@ const KC = (function () {
       if (stamps[name].length < size) stamps[name] = new Int32Array(size).fill(-1);
       return stamps[name];
     };
+    // The nearest point on a segment, asked for millions of times a run: it
+    // leaves the foot of the perpendicular in `cqx`/`cqy` and returns only the
+    // distance, because handing back a little object for each answer cost more
+    // in collection than the arithmetic did.
+    let cqx = 0, cqy = 0;
     const closest = (it, px, py) => {
       const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
       let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
       u = u < 0 ? 0 : u > 1 ? 1 : u;
-      const qx = it[0] + u * ex, qy = it[1] + u * ey;
-      return { qx, qy, d: Math.hypot(px - qx, py - qy) };
+      cqx = it[0] + u * ex; cqy = it[1] + u * ey;
+      const dx = px - cqx, dy = py - cqy;
+      return Math.sqrt(dx * dx + dy * dy);
     };
 
     const strand = [];
@@ -1751,6 +1766,7 @@ const KC = (function () {
     const keep = curves.map(cyc => cyc.map(x => [frac[x], wide[x], wideBack[x]]));
     let limit = rounds;
     for (let round = 0; round < limit; round++) {
+      if (round) yield round;
       // Points crowd towards a pin as the curve shortens, and once one lands on
       // top of a pin the curve folds over its own marked point. Spreading each
       // arc out again every so often is what stops that happening.
@@ -1788,7 +1804,7 @@ const KC = (function () {
           if (len > stride) { dx = dx * stride / len; dy = dy * stride / len; }
           px += dx; py += dy;
           for (let pass = 0; pass < 2; pass++) {
-            let hit = null, want = 0, worst = 0;
+            let hit = false, want = 0, worst = 0, hx = 0, hy = 0;
             for (const k of near(curveAt, px, py, bag)) {
               // Only the two segments that contain this point are exempt. A wider
               // exemption lets a point drift onto a pinned one two places along
@@ -1799,13 +1815,13 @@ const KC = (function () {
               const mine = oc === c;
               if (mine && (oi === i || oi === (i - 1 + n) % n)) continue;
               const keep = mine ? 0.8 * h : apart;
-              const q = closest(curveSeg[k], px, py);
-              if (keep - q.d > worst) { worst = keep - q.d; hit = q; want = keep; }
+              const d = closest(curveSeg[k], px, py);
+              if (keep - d > worst) { worst = keep - d; hit = true; hx = cqx; hy = cqy; want = keep; }
             }
             if (!hit) break;
-            const ux = px - hit.qx, uy = py - hit.qy, L = Math.hypot(ux, uy);
+            const ux = px - hx, uy = py - hy, L = Math.hypot(ux, uy);
             if (L < 1e-9) break;
-            px = hit.qx + ux / L * want; py = hit.qy + uy / L * want;
+            px = hx + ux / L * want; py = hy + uy / L * want;
           }
           // A region should be a comfortable neighbourhood of its tangle, not a
           // sleeve on it. Shortening will always pull the curve back onto the
@@ -1816,16 +1832,16 @@ const KC = (function () {
           {
             let near1 = Infinity, ux = 0, uy = 0, near2 = Infinity;
             for (const k of near(strandAt, px, py, bag)) {
-              const q = closest(strand[k], px, py);
-              if (q.d < near1) { near1 = q.d; ux = px - q.qx; uy = py - q.qy; }
+              const d = closest(strand[k], px, py);
+              if (d < near1) { near1 = d; ux = px - cqx; uy = py - cqy; }
             }
             const L = Math.hypot(ux, uy);
             if (L > 1e-9 && near1 < pad) {
               ux /= L; uy /= L;
               for (const k of near(strandAt, px, py, bag)) {
-                const q = closest(strand[k], px, py);
-                const vx = px - q.qx, vy = py - q.qy;
-                if (vx * ux + vy * uy < 0 && q.d < near2) near2 = q.d;
+                const d = closest(strand[k], px, py);
+                const vx = px - cqx, vy = py - cqy;
+                if (vx * ux + vy * uy < 0 && d < near2) near2 = d;
               }
               const across = near1 + (near2 === Infinity ? 2 * pad : near2);
               const want = Math.min(pad, across / 2);
@@ -1836,15 +1852,15 @@ const KC = (function () {
           // curve that cannot reach a strand cannot cross one, and so cannot take
           // in a strand that belongs to a different tangle.
           for (let pass = 0; pass < 2; pass++) {
-            let hit = null, worst = clear;
+            let hit = false, worst = clear, hx = 0, hy = 0;
             for (const k of near(strandAt, px, py, bag)) {
-              const q = closest(strand[k], px, py);
-              if (q.d < worst) { worst = q.d; hit = q; }
+              const d = closest(strand[k], px, py);
+              if (d < worst) { worst = d; hit = true; hx = cqx; hy = cqy; }
             }
             if (!hit) break;
-            const ux = px - hit.qx, uy = py - hit.qy, L = Math.hypot(ux, uy);
+            const ux = px - hx, uy = py - hy, L = Math.hypot(ux, uy);
             if (L < 1e-9) break;
-            px = hit.qx + ux / L * clear; py = hit.qy + uy / L * clear;
+            px = hx + ux / L * clear; py = hy + uy / L * clear;
           }
           // Whatever the rules above asked for, the move itself is swept against
           // everything nearby and stopped short of the first thing it would have
@@ -2065,7 +2081,7 @@ const KC = (function () {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
     attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod,
-    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths
+    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths, decompositionSteps
   };
 })();
 
@@ -2078,7 +2094,7 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  let decompCache = null, decompRuns = 0;
+  let decompCache = null, decompRuns = 0, decompSoon = false;
   const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
@@ -3813,14 +3829,48 @@ const KC = (function () {
   // Only the overlay needs the geometry, and it costs a ray cast per sample, so
   // it waits until that view actually asks for it rather than being paid for on
   // every edit.
+  // Relaxing the curves takes a few hundred milliseconds, which is long enough
+  // to be felt at the end of a gesture, so it never runs on the way to the
+  // screen. The diagram is painted at once without the overlay, and the curves
+  // are then worked out a few rounds per frame, so the thread is handed back
+  // between them and the next drag starts on time. The overlay appears when the
+  // run finishes. (Starting a run from the previous one's curves was tried: it
+  // is twice as quick, but the error in it accumulates over a chain of edits
+  // until curves are crossing strands, so every run starts clean.)
+  const SLICE = 6;                           // ms of relaxation per frame
   function decompositionPaths() {
     const info = decompInfo();
     if (!info || !info.dec) return null;
-    if (info.paths === undefined) {
-      decompRuns++;
-      try { info.paths = KC.decompositionPaths(S.comps, info.dec); } catch (err) { info.paths = null; }
+    if (info.paths !== undefined) return info.paths;
+    // One run at a time: the flag is held for the whole of it, not just until it
+    // starts, or every repaint on the way would queue another run beside it.
+    if (!decompSoon) {
+      decompSoon = true;
+      const done = paths => { decompSoon = false; if (decompCache === info) info.paths = paths; render(); };
+      // After a frame, not just off the current task: a bare timeout still runs
+      // before the browser has painted, and the gesture ends on a stall anyway.
+      requestAnimationFrame(() => setTimeout(() => {
+        if (decompCache !== info || info.paths !== undefined) { decompSoon = false; render(); return; }
+        decompRuns++;
+        let steps;
+        try { steps = KC.decompositionSteps(S.comps, info.dec); } catch (err) { done(null); return; }
+        const slice = () => {
+          // A gesture that starts meanwhile is moving the strands this run was
+          // measured against, so the run is dropped rather than finished.
+          if (decompCache !== info || info.paths !== undefined) { decompSoon = false; render(); return; }
+          if (drag || erasing || relaxing) { requestAnimationFrame(slice); return; }
+          const until = performance.now() + SLICE;
+          try {
+            let step;
+            do { step = steps.next(); } while (!step.done && performance.now() < until);
+            if (!step.done) { requestAnimationFrame(slice); return; }
+            done(step.value);
+          } catch (err) { done(null); }
+        };
+        slice();
+      }, 0));
     }
-    return info.paths;
+    return null;
   }
 
   // Theorem 1.2: a reduced alternating decomposition graph has Turaev genus one
@@ -4270,7 +4320,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, get __decompRuns(){return decompRuns;}, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, get __decompRuns(){return decompRuns;}, get __decompPaths(){return decompCache && decompCache.paths;}, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };

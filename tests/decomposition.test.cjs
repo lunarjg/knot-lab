@@ -176,6 +176,31 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
 }
 console.log('Overlay geometry: closed curves crossing at the marked points, and edges of G between them: PASS');
 
+// ---- The relaxation gives the thread back ----
+// Relaxing the curves takes a few hundred milliseconds, which is long enough to
+// be felt at the end of a gesture, so it is written to be run in slices: the app
+// takes a few rounds per frame and gives the thread back in between. Draining
+// the same generator in one go must give exactly the same curves, and no single
+// slice may carry the whole run -- that is what a blocking version looked like.
+{
+ const S=fixtures.torus34;
+ S.crossings.forEach((x,i)=>{x.over=(i%3===0)?1:0;});
+ const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
+ assert(d&&!d.alternating,'the fixture has a nonalternating decomposition to draw');
+ let steps=0,out;
+ const it=KC.decompositionSteps(S.comps,d);
+ for(let r=it.next();;r=it.next()){if(r.done){out=r.value;break;}steps++;assert(steps<1e4,'the stepper does not end');}
+ assert(steps>=20,`the run was handed back only ${steps} times`);
+ const whole=KC.decompositionPaths(S.comps,d);
+ assert.equal(out.curves.length,whole.curves.length);
+ out.curves.forEach((pts,i)=>{
+  assert.equal(pts.length,whole.curves[i].length,`curve ${i} came out a different length in slices`);
+  pts.forEach((P,j)=>{const Q=whole.curves[i][j];
+   assert(Math.abs(P.x-Q.x)<1e-9&&Math.abs(P.y-Q.y)<1e-9,`curve ${i} point ${j} differs between a sliced and a drained run`);});
+ });
+ console.log(`Relaxation runs in ${steps} slices and lands exactly where draining it in one go does: PASS`);
+}
+
 // ---- The drawn curves are the decomposition curves ----
 // Everything the overlay claims is checked on one pass over the same diagrams,
 // since relaxing the curves is the expensive part and they only need drawing
