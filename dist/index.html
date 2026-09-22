@@ -1403,21 +1403,22 @@ const KC = (function () {
   function decompositionPaths(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
-    const clear = opt.clearance == null ? 7 : opt.clearance;   // off the strands
+    const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
+    const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
     const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
-    const h = opt.spacing || 6;                                // point spacing
-    const rounds = opt.rounds == null ? 220 : opt.rounds;
+    const h = opt.spacing || 8;                                // point spacing
+    const rounds = opt.rounds == null ? 90 : opt.rounds;
     const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
     const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
-    const shape = opt.shape == null ? 90 : opt.shape;         // rounds spent convexifying once it is taut
+    const shape = opt.shape == null ? 40 : opt.shape;         // rounds spent convexifying once it is taut
     const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
 
     // A grid of line segments, asked only for what lies near a point. The curve
     // grid is rebuilt as the curves move, so it is a plain array of buckets over
     // a fixed frame rather than anything that allocates per round.
-    const CELL = Math.max(16, 2 * Math.max(clear, apart, h));
+    const CELL = Math.max(16, 2 * Math.max(clear, apart, h), pad + 4);
     const frame = { x0: 0, y0: 0, nx: 1, ny: 1 };
     const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []), at: [] });
     const cellsOf = it => {
@@ -1461,6 +1462,16 @@ const KC = (function () {
       return out;
     };
     const near = (g, px, py, out) => box(g, px, py, px, py, out);
+    // A segment sits in every cell it spans, so a range query can hand the same
+    // one back several times. That is harmless when taking a nearest distance and
+    // wrong when counting crossings, so counting goes through a stamp.
+    let visit = 0;
+    const once = new Int32Array(4).fill(-1);
+    const stamps = { strand: once };
+    const fresh = (name, size) => {
+      if (stamps[name].length < size) stamps[name] = new Int32Array(size).fill(-1);
+      return stamps[name];
+    };
     const closest = (it, px, py) => {
       const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
       let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
@@ -1626,10 +1637,12 @@ const KC = (function () {
       // arc. Sweeping a point's path cannot see the segments it drags, so a curve
       // can slip past a strand without any point crossing one; counting settles
       // it, and a curve that has slipped is put back.
-      const crossings = curveArcs.map(() => 0);
+      const crossings = curveArcs.map(() => 0), seen = fresh('strand', strand.length);
       for (let k = 0; k < segs.length; k++) {
-        const c = Math.floor(tag[k] / 1e6), a = segs[k];
+        const c = Math.floor(tag[k] / 1e6), a = segs[k], here = ++visit;
         for (const j of box(strandAt, a[0], a[1], a[2], a[3], look)) {
+          if (seen[j] === here) continue;
+          seen[j] = here;
           const b = strand[j];
           if (meet({ x: a[0], y: a[1] }, { x: a[2], y: a[3] }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) crossings[c]++;
         }
@@ -1640,7 +1653,20 @@ const KC = (function () {
 
     // Shorten every curve at once, so two sharing a face meet in the middle
     // instead of one taking the room before the other has moved.
-    const bag = [], curveAt = grid();
+    const bag = [], sack = [], curveAt = grid();
+    // How many times a segment crosses the diagram. A move may not change this
+    // for either of the two segments the point carries.
+    const cuts = (x0, y0, x1, y1) => {
+      const seen = fresh('strand', strand.length), here = ++visit;
+      let k = 0;
+      for (const j of box(strandAt, x0, y0, x1, y1, sack)) {
+        if (seen[j] === here) continue;
+        seen[j] = here;
+        const b = strand[j];
+        if (meet({ x: x0, y: y0 }, { x: x1, y: y1 }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) k++;
+      }
+      return k;
+    };
     let shaping = false;
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
     const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
@@ -1702,6 +1728,31 @@ const KC = (function () {
             if (L < 1e-9) break;
             px = hit.qx + ux / L * want; py = hit.qy + uy / L * want;
           }
+          // A region should be a comfortable neighbourhood of its tangle, not a
+          // sleeve on it. Shortening will always pull the curve back onto the
+          // strand it came from, so the thickness is set rather than pushed for:
+          // the curve is placed halfway across whatever corridor it is in, up to
+          // `pad`. Where the corridor is narrow that is the middle of it, and
+          // where it opens out the curve stops at `pad` instead of drifting off.
+          {
+            let near1 = Infinity, ux = 0, uy = 0, near2 = Infinity;
+            for (const k of near(strandAt, px, py, bag)) {
+              const q = closest(strand[k], px, py);
+              if (q.d < near1) { near1 = q.d; ux = px - q.qx; uy = py - q.qy; }
+            }
+            const L = Math.hypot(ux, uy);
+            if (L > 1e-9 && near1 < pad) {
+              ux /= L; uy /= L;
+              for (const k of near(strandAt, px, py, bag)) {
+                const q = closest(strand[k], px, py);
+                const vx = px - q.qx, vy = py - q.qy;
+                if (vx * ux + vy * uy < 0 && q.d < near2) near2 = q.d;
+              }
+              const across = near1 + (near2 === Infinity ? 2 * pad : near2);
+              const want = Math.min(pad, across / 2);
+              if (want > near1) { px += ux * (want - near1); py += uy * (want - near1); }
+            }
+          }
           // Strand clearance goes last, so it is the rule that always holds: a
           // curve that cannot reach a strand cannot cross one, and so cannot take
           // in a strand that belongs to a different tangle.
@@ -1718,9 +1769,11 @@ const KC = (function () {
           }
           // Whatever the rules above asked for, the move itself is swept against
           // everything nearby and stopped short of the first thing it would have
-          // crossed. That is what makes the clearance rule absolute rather than a
-          // matter of step size: a point cannot end up on the far side of a
-          // strand, so a curve keeps exactly the tangle it started with.
+          // crossed. That bounds the point, but not the two segments it drags:
+          // one of those can sweep over a strand while the point's own path never
+          // touches it, which is how a curve slips out of its face. So the move
+          // is also required to leave both segments crossing the diagram exactly
+          // as often as they did before, and is halved until it does.
           let mx = px - ox, my = py - oy;
           const far = Math.hypot(mx, my);
           if (far > reach) { mx = mx * reach / far; my = my * reach / far; }
@@ -1750,6 +1803,14 @@ const KC = (function () {
               mx *= back; my *= back;
             }
           }
+          if (mx || my) {
+            const wasA = cuts(a.x, a.y, ox, oy), wasB = cuts(ox, oy, b.x, b.y);
+            for (let f = 1; ; f /= 3) {
+              if (f < 0.3) { mx = 0; my = 0; break; }
+              const tx = ox + mx * f, ty = oy + my * f;
+              if (cuts(a.x, a.y, tx, ty) === wasA && cuts(tx, ty, b.x, b.y) === wasB) { mx *= f; my *= f; break; }
+            }
+          }
           const step = Math.hypot(mx, my);
           if (step > shift) shift = step;
           const moved = { x: ox + mx, y: oy + my };
@@ -1774,18 +1835,20 @@ const KC = (function () {
       // being frozen at the first state it tripped over -- which is what left
       // notches in a curve that was supposed to be pulled straight.
       curveArcs.forEach(arcs => arcs.forEach(mend));
-      const settled = shift < 0.25;
-      if (round % 10 === 9 || round === limit - 1 || settled) {
+      const settled = shift < 0.6;
+      if (round % 5 === 4 || round === limit - 1 || settled) {
         const ok = legal();
         for (let c = 0; c < curveArcs.length; c++) {
           if (stuck[c]) continue;
           if (ok[c]) safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
           else {
-            // A curve that trips is put back and allowed to try again; only one
-            // that keeps tripping is left where it is. Freezing on the first
-            // stumble is what left some regions barely relaxed at all.
+            // A curve that trips is put back to its last legal state and allowed
+            // to try again; only one that keeps tripping is left where it is.
+            // Tripping is normal here -- widening a region walks it up against
+            // its neighbours -- so the budget is generous, and every attempt that
+            // does come back legal is kept.
             curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
-            if (++trips[c] >= 3) stuck[c] = true;
+            if (++trips[c] >= 40) stuck[c] = true;
           }
         }
         if (stuck.every(Boolean)) break;
