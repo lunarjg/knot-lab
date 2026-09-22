@@ -1410,6 +1410,8 @@ const KC = (function () {
     const rounds = opt.rounds == null ? 90 : opt.rounds;
     const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
     const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
+    const creep = opt.creep == null ? 2 : opt.creep;          // how far a marked point may slide in a round
+    const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
     const shape = opt.shape == null ? 40 : opt.shape;         // rounds spent convexifying once it is taut
     const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
@@ -1520,11 +1522,36 @@ const KC = (function () {
     // The two marked points may sit anywhere on their edge, so they are placed
     // symmetrically about its middle: the piece between them is the edge of G,
     // and the rest of the edge belongs to the alternating region at either end.
+    // The two marked points may sit anywhere on their edge, so where they sit is
+    // not fixed: each is held as a fraction of the way along from its own end and
+    // is free to slide, subject to keeping clear of the crossings and leaving a
+    // bar between them. Pinning them made every region pinch to a neck at each
+    // nonalternating edge, whatever the rest of the relaxation did.
     const span = d => Math.abs(dart[d].s1 - dart[d].s0);
-    const markAt = d => {
-      const D = dart[d], L = span(d);
-      const bar = opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
-      return D.s0 + (D.s1 > D.s0 ? 1 : -1) * (L - bar) / 2;
+    const frac = new Float64Array(dart.length);
+    const barOf = L => opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
+    const home = new Float64Array(dart.length);
+    for (const g of nonAlt) { const L = span(2 * g); home[2 * g] = home[2 * g + 1] = frac[2 * g] = frac[2 * g + 1] = (1 - barOf(L) / L) / 2; }
+    const markAt = d => { const D = dart[d]; return D.s0 + (D.s1 > D.s0 ? 1 : -1) * frac[d] * span(d); };
+    // A marked point may not crowd the crossing at its end of the edge, and the
+    // two on one edge may not close up on each other.
+    const settle = () => {
+      for (const g of nonAlt) {
+        const L = span(2 * g);
+        const edge = Math.min(0.3, Math.max(9, 0.1 * L) / L), bar = Math.min(0.4, Math.max(16, 0.2 * L) / L);
+        // The slide is meant to take the pinch out of a region, not to choose
+        // where the edge of G goes: left free, shortening walks both points onto
+        // the crossings, which is shorter and says less. So each stays within a
+        // band of where it started.
+        const hold = (d) => {
+          const f = Math.max(home[d] - band, Math.min(home[d] + band, frac[d]));
+          return Math.max(edge, f);
+        };
+        let a = hold(2 * g), b = hold(2 * g + 1);
+        const over = a + b - (1 - bar);
+        if (over > 0) { a = Math.max(edge, a - over / 2); b = Math.max(edge, b - over / 2); }
+        frac[2 * g] = a; frac[2 * g + 1] = b;
+      }
     };
 
     // Offsetting a polyline folds it into a little loop at every corner that
@@ -1653,6 +1680,57 @@ const KC = (function () {
 
     // Shorten every curve at once, so two sharing a face meet in the middle
     // instead of one taking the room before the other has moved.
+    // Where a curve meets a marked point it crosses the edge on a short chord: the
+    // end of one arc a clearance out on one side, the start of the next the same
+    // distance out on the other.
+    const wide = new Float64Array(dart.length).fill(clear), wideBack = new Float64Array(dart.length).fill(clear);
+    const chordAt = x => {
+      const P = pointAtS(comps[dart[x].c], markAt(x)), f = dart[x].s1 > dart[x].s0 ? 1 : -1;
+      const tx = f * P.dx, ty = f * P.dy, nx = -side * ty, ny = side * tx;
+      const a = wide[x], b = wideBack[x];
+      return { tx, ty, into: { x: P.x + nx * a, y: P.y + ny * a }, outOf: { x: P.x - nx * b, y: P.y - ny * b } };
+    };
+    // A marked point moves under the same rule as everything else: the segments
+    // it carries must go on crossing the diagram exactly as often as they did,
+    // and the chord itself must still cross its own edge once. A proposal that
+    // fails is dropped and the mark stays where it was.
+    const setChords = () => curves.forEach((cyc, c) => {
+      const arcs = curveArcs[c], m = cyc.length;
+      cyc.forEach((x, j) => {
+        const before = arcs[(j - 1 + m) % m], after = arcs[j];
+        const wasIn = before[before.length - 1], wasOut = after[0];
+        const u = before[before.length - 2] || wasOut, v = after[1] || wasIn;
+        const keepFrac = frac[x], keepWide = wide[x], keepBack = wideBack[x];
+        const at = chordAt(x);
+        const fine = cuts(u.x, u.y, at.into.x, at.into.y) === cuts(u.x, u.y, wasIn.x, wasIn.y)
+          && cuts(v.x, v.y, at.outOf.x, at.outOf.y) === cuts(v.x, v.y, wasOut.x, wasOut.y)
+          && cuts(at.into.x, at.into.y, at.outOf.x, at.outOf.y) === 1;
+        if (!fine) { frac[x] = keepFrac; wide[x] = keepWide; wideBack[x] = keepBack; return; }
+        before[before.length - 1] = at.into;
+        after[0] = at.outOf;
+      });
+    });
+    // Slide each marked point along its own edge towards whichever way shortens
+    // the two arcs meeting there. It is the same length that the rest of the
+    // relaxation is minimising, with one more degree of freedom.
+    const slide = () => {
+      curves.forEach((cyc, c) => {
+        const arcs = curveArcs[c], m = cyc.length;
+        cyc.forEach((x, j) => {
+          const before = arcs[(j - 1 + m) % m], after = arcs[j];
+          if (before.length < 2 || after.length < 2) return;
+          const at = chordAt(x), u = before[before.length - 2], v = after[1];
+          const du = Math.hypot(u.x - at.into.x, u.y - at.into.y) || 1;
+          const dv = Math.hypot(v.x - at.outOf.x, v.y - at.outOf.y) || 1;
+          const pull = ((u.x - at.into.x) / du + (v.x - at.outOf.x) / dv) * at.tx
+                     + ((u.y - at.into.y) / du + (v.y - at.outOf.y) / dv) * at.ty;
+          frac[x] += Math.max(-creep, Math.min(creep, creep * pull)) / span(x);
+        });
+      });
+      settle();
+      setChords();
+    };
+
     const bag = [], sack = [], curveAt = grid();
     // How many times a segment crosses the diagram. A move may not change this
     // for either of the two segments the point carries.
@@ -1670,6 +1748,7 @@ const KC = (function () {
     let shaping = false;
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
     const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
+    const keep = curves.map(cyc => cyc.map(x => [frac[x], wide[x], wideBack[x]]));
     let limit = rounds;
     for (let round = 0; round < limit; round++) {
       // Points crowd towards a pin as the curve shortens, and once one lands on
@@ -1827,6 +1906,7 @@ const KC = (function () {
       // through itself. Rather than hope it does not, the last state that was
       // checked and found simple is kept, and a curve that ties itself up is put
       // back to it and left alone. The drawing is then always a simple curve.
+      slide();
       // Sweeping a point's own path is not the whole story: each of the two
       // segments it carries sweeps a triangle, and an obstacle's end can sit
       // inside one without the path ever crossing it. That leaves a small fold,
@@ -1840,7 +1920,7 @@ const KC = (function () {
         const ok = legal();
         for (let c = 0; c < curveArcs.length; c++) {
           if (stuck[c]) continue;
-          if (ok[c]) safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+          if (ok[c]) { safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y }))); keep[c] = curves[c].map(x => [frac[x], wide[x], wideBack[x]]); }
           else {
             // A curve that trips is put back to its last legal state and allowed
             // to try again; only one that keeps tripping is left where it is.
@@ -1848,6 +1928,7 @@ const KC = (function () {
             // its neighbours -- so the budget is generous, and every attempt that
             // does come back legal is kept.
             curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+            curves[c].forEach((x, j) => { [frac[x], wide[x], wideBack[x]] = keep[c][j]; });
             if (++trips[c] >= 40) stuck[c] = true;
           }
         }
@@ -1865,7 +1946,7 @@ const KC = (function () {
     for (let pass = 0; pass < 3; pass++) {
       const ok = legal();
       if (ok.every(Boolean)) break;
-      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) curveArcs[c] = safe[c];
+      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) { curveArcs[c] = safe[c]; curves[c].forEach((x, j) => { [frac[x], wide[x], wideBack[x]] = keep[c][j]; }); }
     }
     const curvePts = curveArcs.map(arcs => [].concat(...arcs));
     const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
