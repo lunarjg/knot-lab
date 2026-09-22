@@ -201,6 +201,29 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  console.log(`Relaxation runs in ${steps} slices and lands exactly where draining it in one go does: PASS`);
 }
 
+// ---- Coarse before fine ----
+// Shortening a curve is a heat flow, so a dent takes about as many rounds to
+// fill as the square of its width in points. At the drawn spacing the wide
+// dents in a big diagram are never reached: 400 rounds still left grooves in a
+// 63-crossing one. So the curve is pulled taut on a coarse copy of itself
+// first and the spacing is halved back down as it goes -- the same curve, in a
+// fraction of the rounds.
+{
+ const S=fixtures.torus35;
+ S.crossings.forEach((x,i)=>{x.over=(i%3===0)?1:0;});
+ const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
+ assert(d&&!d.alternating,'the fixture has a nonalternating decomposition to draw');
+ const run=opt=>{let n=0,r;const it=KC.decompositionSteps(S.comps,d,opt);
+  for(r=it.next();!r.done;r=it.next()){n++;assert(n<1e4,'the stepper does not end');}
+  const len=r.value.curves.reduce((t,p)=>{let u=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];u+=Math.hypot(a.x-b.x,a.y-b.y);}return t+u;},0);
+  return {n,len};};
+ const ladder=run(undefined),flat=run({coarse:1});
+ assert(ladder.n*2<flat.n,`the ladder took ${ladder.n} rounds against ${flat.n} at the drawn spacing throughout`);
+ assert(Math.abs(ladder.len-flat.len)<0.03*flat.len,
+  `the ladder settled on a different curve: ${Math.round(ladder.len)} against ${Math.round(flat.len)}`);
+ console.log(`Pulling the curves taut coarse-first reaches the same length in ${ladder.n} rounds rather than ${flat.n}: PASS`);
+}
+
 // ---- The drawn curves are the decomposition curves ----
 // Everything the overlay claims is checked on one pass over the same diagrams,
 // since relaxing the curves is the expensive part and they only need drawing
@@ -227,7 +250,7 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
   for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
    const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
   return Math.round(t/(2*Math.PI));};
- let drawn=0,shaded=0,points=0,withInfinity=0;
+ let drawn=0,shaded=0,points=0,withInfinity=0,turnSum=0,turnWorst=0;
  for(const [name,S] of Object.entries(fixtures)){
   const c=S.crossings.length;
   for(const mask of (c<=4?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682].filter(m=>m<(1<<c)))){
@@ -239,6 +262,19 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    const closed=P.curves.map(p=>p.concat([p[0]]));
    closed.forEach((g,i)=>{
     drawn++;
+    // How far the tangent swings in all, in half-turns. A convex curve spends
+    // exactly two and every wiggle costs more, so this is what says whether the
+    // curve came out smooth -- and it is the thing the relaxation used to be
+    // worst at, since every point was placed against whichever strand happened
+    // to be nearest it and the placement jumped where that changed.
+    {
+     const p=P.curves[i],m=p.length;let turn=0;
+     for(let k=0;k<m;k++){const A=p[(k-1+m)%m],B=p[k],C=p[(k+1)%m];
+      const t1=Math.atan2(B.y-A.y,B.x-A.x),t2=Math.atan2(C.y-B.y,C.x-B.x);
+      let dt=t2-t1;while(dt>Math.PI)dt-=2*Math.PI;while(dt<-Math.PI)dt+=2*Math.PI;
+      turn+=Math.abs(dt);}
+     turn/=Math.PI;turnSum+=turn;if(turn>turnWorst)turnWorst=turn;
+    }
     assert.equal(hits(g,g,true),0,`${name}/${mask}: curve ${i} crosses itself`);
     assert.equal(strands.reduce((t,st)=>t+hits(g,st,false),0),d.curves[i].length,
      `${name}/${mask}: curve ${i} does not meet D exactly at its marked points`);
@@ -264,8 +300,11 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
   }
  }
  assert(drawn>=90&&shaded>=90&&points>=900,`coverage ${drawn}/${shaded}/${points}`);
+ const turnMean=turnSum/drawn;
+ assert(turnMean<6,`the curves came out wiggly: ${turnMean.toFixed(2)}pi of turning each on average`);
+ assert(turnWorst<30,`one curve came out wiggly: ${turnWorst.toFixed(2)}pi of turning`);
  assert(withInfinity>=4,`the region holding the point at infinity never came up (${withInfinity})`);
- console.log(`${drawn} drawn curves are simple, disjoint, meet D only at their marked points, and shade ${shaded} regions correctly over ${points} points (${withInfinity} holding the point at infinity): PASS`);
+ console.log(`${drawn} drawn curves are simple, disjoint, meet D only at their marked points, turn through ${turnMean.toFixed(1)}pi each on the way round, and shade ${shaded} regions correctly over ${points} points (${withInfinity} holding the point at infinity): PASS`);
 }
 
 // ---- Degenerate input is refused, not guessed at ----

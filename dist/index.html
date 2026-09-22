@@ -1415,21 +1415,27 @@ const KC = (function () {
     const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
     const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
     const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
-    const h = opt.spacing || 9;                                // point spacing
-    const rounds = opt.rounds == null ? 50 : opt.rounds;
+    const fine = opt.spacing || 9;                             // point spacing, as drawn
+    const coarse = opt.coarse == null ? 4 : opt.coarse;        // and how far above it the first rounds run
+    const rounds = opt.rounds == null ? 150 : opt.rounds;
     const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
     const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
     const creep = opt.creep == null ? 2 : opt.creep;          // how far a marked point may slide in a round
     const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
     const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
+    const blunt = opt.blunt == null ? 5 : opt.blunt;          // over how many points either side a dent is filled
+    const passes = opt.smooth == null ? 12 : opt.smooth;      // passes of plain smoothing once the shape is settled
+    const stray = opt.stray == null ? clear : opt.stray;      // and how far that may take a point off what it settled on
     const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
+
+    let h = fine, gait = 1;                                    // the spacing in force, and the step it allows
 
     // A grid of line segments, asked only for what lies near a point. The curve
     // grid is rebuilt as the curves move, so it is a plain array of buckets over
     // a fixed frame rather than anything that allocates per round.
-    const CELL = Math.max(16, 2 * Math.max(clear, apart, h), pad + 4);
+    const CELL = Math.max(16, 2 * Math.max(clear, apart, fine), pad + 4);
     const frame = { x0: 0, y0: 0, nx: 1, ny: 1 };
     const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []), at: [] });
     const cellsOf = it => {
@@ -1764,9 +1770,28 @@ const KC = (function () {
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
     const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
     const keep = curves.map(cyc => cyc.map(x => [frac[x], wide[x], wideBack[x]]));
-    let limit = rounds;
+    let limit = rounds, quiet = 0, was = Infinity;
+    // The ladder: the spacing in force, and the round this level gives way at.
+    // A third of the budget each is a cap rather than a share, since a level
+    // that has stopped moving hands what is left to the next one straight away,
+    // and everything it does not spend goes to the spacing that is drawn.
+    let level = Math.max(1, coarse), levelEnd = Math.ceil(rounds / 3);
     for (let round = 0; round < limit; round++) {
       if (round) yield round;
+      // Shortening a curve is a heat flow, so a dent takes about as many rounds
+      // to fill as the square of its width in points. At nine pixels a point the
+      // wide dents in a big diagram are never reached inside any budget worth
+      // paying for: 400 rounds still left grooves in a 63-crossing diagram. So
+      // the curve is pulled taut on a coarse copy of itself first -- four times
+      // the spacing, a quarter of the points, and the same shape sixteen times
+      // sooner -- and the spacing is halved back down to the drawn one as it
+      // goes. Every rule still holds at every level, since they are all written
+      // in pixels rather than in points, and the last rounds are at the spacing
+      // that is actually drawn.
+      if (level * fine !== h) {
+        h = level * fine; gait = level;
+        curveArcs.forEach(arcs => arcs.forEach((arc, a) => { arcs[a] = respace(arc); }));
+      }
       // Points crowd towards a pin as the curve shortens, and once one lands on
       // top of a pin the curve folds over its own marked point. Spreading each
       // arc out again every so often is what stops that happening.
@@ -1784,24 +1809,44 @@ const KC = (function () {
       let shift = 0;
       for (let c = 0; c < flat.length; c++) {
         const pts = flat[c], n = pts.length;
+        // Filling a dent outwards is done against a window rather than against
+        // the two neighbours: a three-point mean fills over a couple of points,
+        // which at nine pixels apart still leaves a corner. Over eleven it reads
+        // as a curve. The sums are taken once for the round, so every point is
+        // filtered against the same curve.
+        let sumX = null, sumY = null;
+        if (shaping && n > 2 * blunt + 2) {
+          sumX = new Float64Array(n + 1); sumY = new Float64Array(n + 1);
+          for (let i = 0; i < n; i++) { sumX[i + 1] = sumX[i] + pts[i].x; sumY[i + 1] = sumY[i] + pts[i].y; }
+        }
+        const sumOver = (S, i) => {
+          const lo = i - blunt, hi = i + blunt;
+          if (lo < 0) return S[n] - S[n + lo] + S[hi + 1];
+          if (hi >= n) return S[n] - S[lo] + S[hi - n + 1];
+          return S[hi + 1] - S[lo];
+        };
         for (let i = 0; i < n; i++) {
           if (pin[c][i]) continue;
           const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
           const ox = pts[i].x, oy = pts[i].y;
           let px = ox, py = oy;
           let dx = (a.x + b.x) / 2 - px, dy = (a.y + b.y) / 2 - py;
+          if (sumX) { dx = sumOver(sumX, i) / (2 * blunt + 1) - px; dy = sumOver(sumY, i) / (2 * blunt + 1) - py; }
           if (shaping) {
             const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty);
             if (tl > 1e-9) {
               const nx = side * -ty / tl, ny = side * tx / tl, inward = dx * nx + dy * ny;
-              if (inward < 0) { dx -= nx * inward; dy -= ny * inward; }
+              // Nothing already bulging is pulled back in, and a point with
+              // nothing to fill stays where it is: sliding it along the curve
+              // instead only bunches points up and leaves the curve ragged.
+              if (inward < 0) { dx = 0; dy = 0; }
               // Once taut, what is left to fill is shallow, so the outward half is
               // taken at a gain; the step clamp and the sweep still bound it.
               else { dx += nx * inward * (gain - 1); dy += ny * inward * (gain - 1); }
             }
           }
-          const len = Math.hypot(dx, dy);
-          if (len > stride) { dx = dx * stride / len; dy = dy * stride / len; }
+          const len = Math.hypot(dx, dy), cap = stride * gait;
+          if (len > cap) { dx = dx * cap / len; dy = dy * cap / len; }
           px += dx; py += dy;
           for (let pass = 0; pass < 2; pass++) {
             let hit = false, want = 0, worst = 0, hx = 0, hy = 0;
@@ -1870,8 +1915,8 @@ const KC = (function () {
           // is also required to leave both segments crossing the diagram exactly
           // as often as they did before, and is halved until it does.
           let mx = px - ox, my = py - oy;
-          const far = Math.hypot(mx, my);
-          if (far > reach) { mx = mx * reach / far; my = my * reach / far; }
+          const far = Math.hypot(mx, my), most = reach * gait;
+          if (far > most) { mx = mx * most / far; my = my * most / far; }
           if (mx || my) {
             let stop = 1;
             const block = (items, from, skipSelf) => {
@@ -1931,7 +1976,15 @@ const KC = (function () {
       // being frozen at the first state it tripped over -- which is what left
       // notches in a curve that was supposed to be pulled straight.
       curveArcs.forEach(arcs => arcs.forEach(mend));
-      const settled = shift < 0.6;
+      // Whether it is still going anywhere is asked of the length it is
+      // minimising, not of the furthest point: one point stuck against a strand
+      // held the old test open for ever, so on anything big the curve never
+      // reached the second phase at all and never came out convex.
+      let now = 0;
+      curveArcs.forEach(arcs => arcs.forEach(arc => { for (let i = 1; i < arc.length; i++) now += Math.hypot(arc[i].x - arc[i - 1].x, arc[i].y - arc[i - 1].y); }));
+      quiet = Math.abs(was - now) < 6e-4 * now && shift < 4 * gait ? quiet + 1 : 0;
+      was = now;
+      const settled = quiet >= 3;
       if (round % 5 === 4 || round === limit - 1 || settled) {
         const ok = legal();
         for (let c = 0; c < curveArcs.length; c++) {
@@ -1956,13 +2009,57 @@ const KC = (function () {
       // has stopped moving, the same step is run again with only its outward half
       // kept. Dips fill, nothing already bulging is pulled back in, and the curve
       // walks out towards its own convex hull as far as the clearances allow.
-      if (settled) { if (shaping) break; shaping = true; limit = round + 1 + shape; }
+      if (level > 1) {
+        if (settled || round + 1 >= levelEnd) {
+          level = Math.max(1, level >> 1);
+          levelEnd = level > 1 ? round + 1 + Math.ceil(rounds / 3) : rounds;
+          quiet = 0;
+        }
+      } else if (!shaping) { if (settled || round + 1 >= rounds) { shaping = true; quiet = 0; limit = round + 1 + shape; } }
+      else if (settled) break;
     }
     // Whatever the loop ended on, every curve is left at a state that was checked.
     for (let pass = 0; pass < 3; pass++) {
       const ok = legal();
       if (ok.every(Boolean)) break;
       for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) { curveArcs[c] = safe[c]; curves[c].forEach((x, j) => { [frac[x], wide[x], wideBack[x]] = keep[c][j]; }); }
+    }
+
+    // The shape is settled; what is left on it is a pixel or two of raggedness.
+    // Every point is placed against whichever strand happens to be nearest it,
+    // and where the nearest one changes from a point to the next the placement
+    // jumps. Plain smoothing takes that off, with two rules that keep it from
+    // being another relaxation: no point may end up further than a clearance from
+    // where the relaxation left it, so the curve cannot drift off the shape it
+    // settled on, and the clearance is re-imposed after every move, so smoothing
+    // can never walk a curve into a strand.
+    const rested = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
+    for (let pass = 0; pass < passes; pass++) {
+      for (let c = 0; c < curveArcs.length; c++) curveArcs[c].forEach((arc, a) => {
+        const home = rested[c][a], was = arc.map(P => ({ x: P.x, y: P.y }));
+        for (let i = 1; i < arc.length - 1; i++) {
+          let x = (was[i - 1].x + 2 * was[i].x + was[i + 1].x) / 4;
+          let y = (was[i - 1].y + 2 * was[i].y + was[i + 1].y) / 4;
+          const ox = x - home[i].x, oy = y - home[i].y, off = Math.hypot(ox, oy);
+          if (off > stray) { x = home[i].x + ox * stray / off; y = home[i].y + oy * stray / off; }
+          for (let push = 0; push < 2; push++) {
+            let hit = false, worst = clear, hx = 0, hy = 0;
+            for (const k of near(strandAt, x, y, bag)) {
+              const d = closest(strand[k], x, y);
+              if (d < worst) { worst = d; hit = true; hx = cqx; hy = cqy; }
+            }
+            if (!hit) break;
+            const ux = x - hx, uy = y - hy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            x = hx + ux / L * clear; y = hy + uy / L * clear;
+          }
+          arc[i] = { x, y };
+        }
+      });
+    }
+    {
+      const ok = legal();
+      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) curveArcs[c] = rested[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
     }
     const curvePts = curveArcs.map(arcs => [].concat(...arcs));
     const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
