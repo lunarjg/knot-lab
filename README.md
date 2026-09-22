@@ -82,6 +82,8 @@ The clearance rule is the first principle rather than an afterthought, and it is
 
 Each curve is kept as the arcs between its marked points, re-spaced as it shortens; without that, points crowd onto a pin and the curve folds over its own marked point. For drawing, the points that sit on a straight run are dropped and every corner is rounded with a fillet — kept at full density a corner is one point wide and rounds over almost nothing.
 
+The overlay geometry is computed only when that view asks for it, and only once per edit. Anything that is still moving strands about — a gesture, or auto-relax stepping the whole diagram — shows the plain diagram until it stops, and the decomposition comes back then. Rebuilding it on every frame of an auto-relax run made that button look as though it had hung.
+
 Every alternating region is tinted the same. They are already told apart by the curves that separate them, and a colour per region suggested a difference between tangles that is not there.
 
 The region a curve bounds is filled from the curve itself by the even-odd rule: crossing any boundary curve toggles in and out of the region. Which way round that reads is settled by one crossing of the region, since the region holding the point at infinity has to be filled the other way about.

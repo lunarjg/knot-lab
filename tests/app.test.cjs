@@ -78,6 +78,27 @@ console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear
 }
 console.log('Alternating decomposition view and inspector section: PASS');
 
+// Auto-relax has to finish in the decomposition view too. Relaxing the curves
+// against the whole diagram costs a moment, and doing it on every frame of the
+// run turned a second into half a minute, which reads as a hang; anything thrown
+// while stepping now ends the run rather than breaking the chain of frames.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();
+ const runs=api.__decompRuns;
+ p.ids.get('smoothBtn').click();
+ assert.equal(p.ids.get('smoothBtn').textContent,'Stop relaxing');
+ p.flush();
+ assert.equal(p.ids.get('smoothBtn').textContent,'Auto-relax','Auto-relax must stop on its own');
+ // The run takes 25 frames. Relaxing the curves once per frame is what made it
+ // look hung, so the overlay may be rebuilt once at the end and no more.
+ assert(api.__decompRuns - runs <= 1,
+  `The decomposition was rebuilt ${api.__decompRuns - runs} times during one auto-relax run`);
+ p.ids.get('undo').click();
+}
+console.log('Auto-relax finishes in the alternating decomposition view: PASS');
+
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
 // stays right after the last tab and scrolls together with them.

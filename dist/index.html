@@ -1997,7 +1997,7 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  let decompCache = null;
+  let decompCache = null, decompRuns = 0;
   const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
@@ -2452,11 +2452,19 @@ const KC = (function () {
     const frame = () => {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
-      for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S);
-        if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
+      // Anything thrown while stepping or redrawing would otherwise break the
+      // chain of frames and leave the run stuck part-way, with the button still
+      // offering to stop it. Whatever happens, this run ends.
+      try {
+        for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
+          const r = KC.relaxStep(S);
+          if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
+        }
+        changed();
+      } catch (err) {
+        relaxing = 0; stopRelax(); toast('Auto-relax stopped');
+        throw err;
       }
-      changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
         stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
       }
@@ -3728,6 +3736,7 @@ const KC = (function () {
     const info = decompInfo();
     if (!info || !info.dec) return null;
     if (info.paths === undefined) {
+      decompRuns++;
       try { info.paths = KC.decompositionPaths(S.comps, info.dec); } catch (err) { info.paths = null; }
     }
     return info.paths;
@@ -4050,9 +4059,11 @@ const KC = (function () {
   function drawDecomposition() {
     const dec = decomposition();
     // The curves are relaxed against the whole diagram, which is worth a moment
-    // once but not once a frame, so a gesture that is still moving strands about
-    // shows the plain diagram and the decomposition returns when it is let go.
-    if (!dec || drag || erasing) { drawDiagram(); return; }
+    // once but not once a frame. Anything that is still moving strands about --
+    // a gesture, or auto-relax stepping the whole diagram -- shows the plain
+    // diagram, and the decomposition comes back when it stops. Recomputing it
+    // per frame made auto-relax look as though it had hung.
+    if (!dec || drag || erasing || relaxing) { drawDiagram(); return; }
     const paths = decompositionPaths();
     if (!paths) { drawDiagram(); return; }
     const gap = Math.min(12, 8 / view.s);
@@ -4178,7 +4189,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, get __decompRuns(){return decompRuns;}, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };
