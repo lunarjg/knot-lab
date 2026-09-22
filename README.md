@@ -94,7 +94,9 @@ The overlay geometry is computed only when that view asks for it, and only once 
 
 Relaxing the curves is a few hundred milliseconds of arithmetic, which is long enough to be felt, so it is never done on the way to the screen. It is written as a generator that gives the thread back between rounds, and the app drives it about six milliseconds per frame: the diagram paints as soon as the gesture ends and the overlay arrives shortly after, rather than the page freezing at every release. A run started while the strands are still moving is dropped rather than finished, and only one ever runs at a time. Starting a run from the previous one's curves was tried and taken out — it is twice as quick, but the error accumulates over a chain of edits until curves are crossing strands, so every run starts clean.
 
-Every alternating region is tinted the same. They are already told apart by the curves that separate them, and a colour per region suggested a difference between tangles that is not there.
+Every alternating region is tinted the same. They are already told apart by the curves that separate them, and a colour per region suggested a difference between tangles that is not there. How strongly they are tinted is a setting, from the 22% they have by default down to none at all.
+
+The signs are a setting too. Colouring each edge of G by its sign and writing + or &minus; beside it is an annotation on the edge rather than the edge itself, so it switches off on its own: the bar stays, drawn neutrally, and the glyphs go. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable. The marked points themselves carry no dot — the two ends of a bar are exactly where they are.
 
 The region a curve bounds is filled from the curve itself by the even-odd rule: crossing any boundary curve toggles in and out of the region. Which way round that reads is settled by one crossing of the region, since the region holding the point at infinity has to be filled the other way about.
 

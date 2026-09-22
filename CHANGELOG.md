@@ -25,6 +25,9 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - **The marked points slide.** The paper puts two points on each nonalternating edge without saying where, so where they sit is a free choice rather than a given. Each round they move a little towards whichever way shortens the two arcs meeting there, staying clear of the crossings at either end, leaving a bar between them, and not straying far from where they started. Held still they pinched every region to a neck at each nonalternating edge, whatever the rest of the relaxation did; left completely free, shortening walks both onto the crossings, which is shorter and says less. A marked point moves under the same rule as any other: the segments it carries must go on crossing the diagram exactly as often as they did, and its chord must still cross its own edge once, or the move is dropped.
 - Each curve is kept as the arcs between its marked points and re-spaced as it shortens, or points crowd onto a pin and the curve folds over its own marked point; the small folds that a bounded step can still leave are combed out each round, before anything looks at the curve.
 - For drawing, points on a straight run are dropped and every corner is rounded with a fillet. At full density a corner is one point wide and rounds over almost nothing.
+- **The marked points carry no dot.** The two ends of an edge of G are exactly where they are, so a disk drawn on each one only added ink to the part of the picture that already has the most.
+- **The signs are a setting.** Colouring each edge of G by its sign and writing + or &minus; beside it is an annotation on the edge, not the edge itself, so it switches off on its own: the bar stays, drawn neutrally, and the glyphs go. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.
+- **The region shading has a strength**, from the 22% it has always had down to none at all, on a slider beside it.
 - **One tint for every region.** They are already told apart by the curves between them, and a colour per region suggested a difference between tangles that is not there.
 - **Longer edges of G**: the two marked points on a nonalternating edge sit further apart, so the bar between them reads as an edge rather than a tick.
 - **The caption under the canvas is gone**, for the decomposition and for the all-A, all-B and Seifert views alike.
@@ -42,7 +45,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - The relaxation is tested as something that can be run in slices: draining the generator in one go and stepping it must land on exactly the same curves, and no single slice may carry the whole run. Pulling the curves taut coarse-first is tested against doing it at the drawn spacing throughout: it must reach the same length, within 3%, in less than half the rounds.
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.
-- Service-worker cache bumped to `knot-lab-v37-pulled-taut`.
+- Service-worker cache bumped to `knot-lab-v38-overlay-settings`.
 
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 

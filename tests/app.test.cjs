@@ -1,23 +1,23 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
 function boot(saved,narrow=true,Worker){
- const arcs=[],paths=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ const arcs=[],paths=[],texts=[],fills=[],strokes=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
   setAttribute(k,v){this.attrs[k]=String(v)} removeAttribute(k){delete this.attrs[k]} getAttribute(k){return this.attrs[k]}
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
-  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
+  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8}),fillText:function(txt,x,y){assert(Number.isFinite(x)&&Number.isFinite(y));texts.push(String(txt))},fill:function(){fills.push({style:this.fillStyle,alpha:this.globalAlpha})},stroke:function(){strokes.push(this.strokeStyle)}},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
   focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
- const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':'#16263a'}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
+ const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
   key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
@@ -98,6 +98,51 @@ console.log('Alternating decomposition view and inspector section: PASS');
  p.ids.get('undo').click();
 }
 console.log('Auto-relax finishes in the alternating decomposition view: PASS');
+
+// The signs on the overlay are an annotation on the edges of G, not the edges
+// themselves, so they switch off on their own: the bar stays, drawn neutral,
+// and the + and - go. The shading has a strength, down to none at all. The
+// marked points need no dot of their own, since the two ends of a bar are
+// exactly where they are.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ // One crossing flipped, so there is something to decompose.
+ const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
+ const cr=api.state.crossings[0];
+ const at={pointerType:'mouse',pointerId:1,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',at);p.fire(p.ids.get('cv'),'pointerup',at);
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();
+ const edges=+p.ids.get('adEdges').textContent;
+ assert(edges>0,'the flipped trefoil has edges of G to sign');
+ const draw=()=>{p.texts.length=0;p.fills.length=0;p.strokes.length=0;p.arcs.length=0;p.flush();
+  for(const f of p.timers.values())if(f.ms===0)f.f();p.flush();};
+ const signs=()=>p.texts.filter(t=>t==='+'||t==='\u2212').length;
+ const tinted=()=>p.fills.filter(f=>f.style==='--c5'&&f.alpha>0).length;
+ // Defaults: signed, shaded, and no dot at a marked point.
+ assert.equal(p.ids.get('adSigns').checked,true);
+ assert.equal(p.ids.get('adTint').value,'22');
+ draw();
+ assert.equal(signs(),edges,`one + or - per edge of G, got ${signs()} for ${edges}`);
+ assert(tinted()>0,'the alternating regions are shaded');
+ assert(p.strokes.includes('--c0')||p.strokes.includes('--c1'),'the edges of G are drawn in their sign colour');
+ assert.equal(p.arcs.length,0,'nothing is drawn as a disk on the decomposition overlay');
+ // Signs off: the bars stay, in a neutral colour, and the glyphs go.
+ p.ids.get('adSigns').onchange({target:{checked:false}});
+ draw();
+ assert.equal(signs(),0,'the + and - go with the setting');
+ assert(p.strokes.includes('--accent'),'the edges of G are still drawn, neutrally');
+ assert(!p.strokes.includes('--c0')&&!p.strokes.includes('--c1'),'and not in a sign colour');
+ assert(tinted()>0,'the shading is untouched by the signs setting');
+ // Shading down to nothing, signs back on.
+ p.ids.get('adTint').oninput({target:{value:'0'}});
+ p.ids.get('adSigns').onchange({target:{checked:true}});
+ assert.equal(p.ids.get('adTintV').textContent,'0%');
+ draw();
+ assert.equal(tinted(),0,'no shading is drawn at all at zero');
+ assert.equal(signs(),edges,'the signs come back');
+}
+console.log('Overlay signs switch off on their own, the region shading has a strength, and the marked points carry no dot: PASS');
 
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always

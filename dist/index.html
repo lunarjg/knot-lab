@@ -425,6 +425,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="arrows"><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
+      <label class="chk"><input type="checkbox" id="adSigns" checked><span>Signs on the decomposition overlay<small>Colours each edge of G by its sign and writes + or &minus; beside it, in the Alt. decomposition view. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.</small></span></label>
+      <div class="row"><label for="adTint">Alternating region shading</label><input type="range" id="adTint" min="0" max="60" value="22"><output id="adTintV" for="adTint">22%</output></div>
     </section>
     <section>
       <h2>Pen &amp; touch</h2>
@@ -2265,7 +2267,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   let decompCache = null, decompRuns = 0, decompSoon = false;
-  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
+  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adTint: 0.22, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -2869,6 +2871,8 @@ const KC = (function () {
   $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
+  $('adSigns').onchange = e => { opts.adSigns = e.target.checked; render(); };
+  $('adTint').oninput = e => { opts.adTint = +e.target.value / 100; setText('adTintV', `${e.target.value}%`); render(); };
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
@@ -4395,8 +4399,8 @@ const KC = (function () {
     // A region is its own boundary curves filled by the even-odd rule, taken the
     // other way about for the one region that holds the point at infinity. An
     // alternating diagram has no curves at all, and its one region is everything.
-    ctx.save(); ctx.globalAlpha = 0.22;
-    paths.regions.forEach(R => {
+    ctx.save(); ctx.globalAlpha = opts.adTint;
+    if (opts.adTint > 0) paths.regions.forEach(R => {
       ctx.beginPath(); ctx.fillStyle = regionColor();
       if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
       R.curves.forEach(ci => trace(paths.outline[ci]));
@@ -4416,28 +4420,29 @@ const KC = (function () {
       if (s1 <= s0) continue;
       ctx.beginPath(); tracePiece(cm, s0, s1); ctx.stroke();
     }
-    // Each edge of G is the middle piece of a nonalternating edge, drawn in the
-    // colour its sign has in the graph figure in the inspector.
+    // Each edge of G is the middle piece of a nonalternating edge. Its sign is
+    // what the colour and the + or - beside it say, and both are one setting:
+    // with them off the edge is still drawn, in a neutral colour, since where it
+    // runs is the structure and the sign is the annotation on it. Its two ends
+    // are the marked points, so they need no dot of their own.
+    const signed = opts.adSigns;
     ctx.lineWidth = 6.5 / view.s;
     paths.gEdges.forEach(e => {
-      ctx.beginPath(); ctx.strokeStyle = cssv(e.over ? '--c1' : '--c0');
+      ctx.beginPath(); ctx.strokeStyle = cssv(signed ? (e.over ? '--c1' : '--c0') : '--accent');
       ctx.moveTo(e.pts[0].x, e.pts[0].y);
       for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
       ctx.stroke();
     });
     ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--warn');
     paths.outline.forEach(pts => { if (pts.length > 1) { ctx.beginPath(); trace(pts); ctx.stroke(); } });
-    ctx.lineWidth = 1.8 / view.s;
-    paths.marks.forEach(P => {
-      ctx.beginPath(); ctx.fillStyle = cssv('--paper');
-      ctx.arc(P.x, P.y, 4 / view.s, 0, 7); ctx.fill(); ctx.stroke();
-    });
-    ctx.font = `700 ${14 / view.s}px ${cssv('--sans')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    paths.gEdges.forEach(e => {
-      const m = e.pts[e.pts.length >> 1];
-      ctx.fillStyle = cssv(e.over ? '--c1' : '--c0');
-      ctx.fillText(e.over ? '+' : '\u2212', m.x + 14 / view.s, m.y - 14 / view.s);
-    });
+    if (signed) {
+      ctx.font = `700 ${14 / view.s}px ${cssv('--sans')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      paths.gEdges.forEach(e => {
+        const m = e.pts[e.pts.length >> 1];
+        ctx.fillStyle = cssv(e.over ? '--c1' : '--c0');
+        ctx.fillText(e.over ? '+' : '\u2212', m.x + 14 / view.s, m.y - 14 / view.s);
+      });
+    }
   }
 
   function drawState(key) {
