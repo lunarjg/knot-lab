@@ -1424,6 +1424,7 @@ const KC = (function () {
     const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
     const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
+    const tail = opt.tail == null ? 12 : opt.tail;            // and settling the corners the last pull leaves
     const blunt = opt.blunt == null ? 5 : opt.blunt;          // over how many points either side a dent is filled
     const passes = opt.smooth == null ? 12 : opt.smooth;      // passes of plain smoothing once the shape is settled
     const stray = opt.stray == null ? clear : opt.stray;      // and how far that may take a point off what it settled on
@@ -1752,7 +1753,7 @@ const KC = (function () {
       setChords();
     };
 
-    const bag = [], sack = [], curveAt = grid();
+    const bag = [], sack = [], pouch = [], curveAt = grid();
     // How many times a segment crosses the diagram. A move may not change this
     // for either of the two segments the point carries.
     const cuts = (x0, y0, x1, y1) => {
@@ -1766,7 +1767,71 @@ const KC = (function () {
       }
       return k;
     };
-    let shaping = false;
+    // A curve under tension is a string: where it is not held against something
+    // it runs straight, and a dent left in it is a dent nothing is holding. The
+    // relaxation walks each point downhill a step at a time and settles into
+    // whatever local minimum it is nearest, which does leave such dents behind.
+    // So the arcs are also pulled taut outright: the chord between two points of
+    // an arc replaces everything between them whenever that chord is one the
+    // curve is allowed to take. It is the same rule the relaxation obeys, asked
+    // globally instead of a step at a time, and it is what takes out a groove
+    // the flow would have needed hundreds of rounds to reach.
+    const chordFree = (A, B, c, curveSeg, owner) => {
+      // Nothing crossed, and no closer to anything than the relaxation may come.
+      if (cuts(A.x, A.y, B.x, B.y) !== 0) return false;
+      const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy);
+      const steps = Math.max(2, Math.ceil(L / (0.5 * fine)));
+      for (let step = 0; step <= steps; step++) {
+        const px = A.x + dx * step / steps, py = A.y + dy * step / steps;
+        for (const k of near(strandAt, px, py, bag)) if (closest(strand[k], px, py) < clear) return false;
+        for (const k of near(curveAt, px, py, pouch)) {
+          if (Math.floor(owner[k] / 1e6) === c) continue;
+          if (closest(curveSeg[k], px, py) < apart) return false;
+        }
+      }
+      return true;
+    };
+    // A chord can miss every strand and still close over one: a strand that loops
+    // inside the pocket it cuts off crosses neither the chord nor the arc. Taking
+    // the shortcut would swallow it whole, and a count of crossings would never
+    // notice, so the pocket is asked directly whether anything is in it.
+    const swallows = (arc, i, j) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let k = i; k <= j; k++) {
+        const Q = arc[k];
+        if (Q.x < x0) x0 = Q.x; if (Q.x > x1) x1 = Q.x;
+        if (Q.y < y0) y0 = Q.y; if (Q.y > y1) y1 = Q.y;
+      }
+      const held = (px, py) => {
+        let w = false;
+        for (let a = i, b = j; a <= j; b = a++) {
+          const A = arc[a], B = arc[b];
+          if ((A.y > py) !== (B.y > py) && px < (B.x - A.x) * (py - A.y) / (B.y - A.y) + A.x) w = !w;
+        }
+        return w;
+      };
+      const seen = fresh('strand', strand.length), here = ++visit;
+      for (const k of box(strandAt, x0, y0, x1, y1, sack)) {
+        if (seen[k] === here) continue;
+        seen[k] = here;
+        if (held(strand[k][0], strand[k][1])) return true;
+      }
+      return false;
+    };
+    const pullTaut = (curveSeg, owner) => curveArcs.forEach((arcs, c) => arcs.forEach((arc, a) => {
+      if (arc.length < 4) return;
+      const out = [arc[0]];
+      let i = 0;
+      while (i < arc.length - 1) {
+        let best = i + 1;
+        for (let j = i + 2; j < arc.length; j++) { if (!chordFree(arc[i], arc[j], c, curveSeg, owner)) break; best = j; }
+        while (best > i + 1 && swallows(arc, i, best)) best--;
+        out.push(arc[best]); i = best;
+      }
+      arcs[a] = respace(out);
+    }));
+
+    let shaping = false, pulled = false;
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
     const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
     const keep = curves.map(cyc => cyc.map(x => [frac[x], wide[x], wideBack[x]]));
@@ -2011,11 +2076,19 @@ const KC = (function () {
       // walks out towards its own convex hull as far as the clearances allow.
       if (level > 1) {
         if (settled || round + 1 >= levelEnd) {
+          pullTaut(curveSeg, owner);
           level = Math.max(1, level >> 1);
           levelEnd = level > 1 ? round + 1 + Math.ceil(rounds / 3) : rounds;
           quiet = 0;
         }
-      } else if (!shaping) { if (settled || round + 1 >= rounds) { shaping = true; quiet = 0; limit = round + 1 + shape; } }
+      } else if (!shaping) { if (settled || round + 1 >= rounds) { pullTaut(curveSeg, owner); shaping = true; quiet = 0; limit = round + 1 + shape; } }
+      else if (!pulled) {
+        // Convexifying pushes outwards everywhere it can, which puts a little
+        // slack back into the parts that were already taut. It is pulled out
+        // once more at the end, and the rounds after that settle the corners it
+        // leaves back against the clearances.
+        if (settled || round + 1 >= limit) { pullTaut(curveSeg, owner); pulled = true; quiet = 0; limit = round + 1 + tail; }
+      }
       else if (settled) break;
     }
     // Whatever the loop ended on, every curve is left at a state that was checked.

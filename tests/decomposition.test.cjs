@@ -250,7 +250,46 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
   for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
    const ax=a.x-q.x,ay=a.y-q.y,bx=b.x-q.x,by=b.y-q.y;t+=Math.atan2(ax*by-ay*bx,ax*bx+ay*by);}
   return Math.round(t/(2*Math.PI));};
- let drawn=0,shaded=0,points=0,withInfinity=0,turnSum=0,turnWorst=0;
+ // A curve under tension is a string, so a dent left in one is a dent something
+ // is holding: a strand it has to come round, or one of its own marked points,
+ // which it has to pass through. A dent with neither in it is one the
+ // relaxation settled for, and those are what used to leave grooves in a
+ // region. Every concave stretch of every drawn curve is checked for one.
+ const holds=(span,strandPts,marks)=>{
+  const poly=span.concat([span[0]]);
+  const covers=(px,py)=>{let w=false;
+   for(let a=0,b=poly.length-1;a<poly.length;b=a++){const A=poly[a],B=poly[b];
+    if((A.y>py)!==(B.y>py)&&px<(B.x-A.x)*(py-A.y)/(B.y-A.y)+A.x)w=!w;}
+   return w;};
+  for(const q of strandPts)if(covers(q.x,q.y))return true;
+  return span.slice(1,-1).some(q=>marks.some(m=>Math.hypot(m.x-q.x,m.y-q.y)<9.5));
+ };
+ const dents=(p,strandPts,marks)=>{
+  // The concave stretches are the runs between consecutive vertices of the
+  // convex hull, so the hull is taken and the curve walked between them.
+  const n=p.length,out=[];
+  const ps=p.map((q,i)=>({x:q.x,y:q.y,i})).sort((a,b)=>a.x-b.x||a.y-b.y);
+  const cross=(o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+  const lo=[],up=[];
+  for(const q of ps){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],q)<=0)lo.pop();lo.push(q);}
+  for(let k=ps.length-1;k>=0;k--){const q=ps[k];
+   while(up.length>=2&&cross(up[up.length-2],up[up.length-1],q)<=0)up.pop();up.push(q);}
+  lo.pop();up.pop();
+  const idx=lo.concat(up).map(q=>q.i).sort((a,b)=>a-b);
+  for(let k=0;k<idx.length;k++){
+   const i=idx[k],j=idx[(k+1)%idx.length],span=[];
+   for(let t=i;;t=(t+1)%n){span.push(p[t]);if(t===j||span.length>n)break;}
+   if(span.length<4)continue;
+   const A=p[i],B=p[j],ex=B.x-A.x,ey=B.y-A.y,L=Math.hypot(ex,ey);
+   if(L<20)continue;
+   let depth=0;
+   for(const q of span){const u=((q.x-A.x)*ex+(q.y-A.y)*ey)/(L*L);
+    depth=Math.max(depth,Math.hypot(A.x+u*ex-q.x,A.y+u*ey-q.y));}
+   if(depth>=12&&!holds(span,strandPts,marks))out.push(depth);
+  }
+  return out;
+ };
+ let drawn=0,shaded=0,points=0,withInfinity=0,turnSum=0,turnWorst=0,loose=0,looseWorst=0;
  for(const [name,S] of Object.entries(fixtures)){
   const c=S.crossings.length;
   for(const mask of (c<=4?[...Array(1<<c).keys()]:[1,3,7,13,29,55,91,170,341,682].filter(m=>m<(1<<c)))){
@@ -259,6 +298,7 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    if(!d||d.alternating)continue;
    const P=KC.decompositionPaths(S.comps,d);
    const strands=S.comps.map(cm=>cm.pts.concat([cm.pts[0]]));
+   const strandPts=[].concat(...S.comps.map(cm=>cm.pts));
    const closed=P.curves.map(p=>p.concat([p[0]]));
    closed.forEach((g,i)=>{
     drawn++;
@@ -274,6 +314,10 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
       let dt=t2-t1;while(dt>Math.PI)dt-=2*Math.PI;while(dt<-Math.PI)dt+=2*Math.PI;
       turn+=Math.abs(dt);}
      turn/=Math.PI;turnSum+=turn;if(turn>turnWorst)turnWorst=turn;
+     for(const depth of dents(p,strandPts,P.marks)){
+      loose++;if(depth>looseWorst)looseWorst=depth;
+      assert(depth<30,`${name}/${mask}: curve ${i} has a ${depth.toFixed(0)}px dent in it with nothing holding it`);
+     }
     }
     assert.equal(hits(g,g,true),0,`${name}/${mask}: curve ${i} crosses itself`);
     assert.equal(strands.reduce((t,st)=>t+hits(g,st,false),0),d.curves[i].length,
@@ -303,8 +347,9 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  const turnMean=turnSum/drawn;
  assert(turnMean<6,`the curves came out wiggly: ${turnMean.toFixed(2)}pi of turning each on average`);
  assert(turnWorst<30,`one curve came out wiggly: ${turnWorst.toFixed(2)}pi of turning`);
+ assert(loose<40,`${loose} dents were left with nothing holding them`);
  assert(withInfinity>=4,`the region holding the point at infinity never came up (${withInfinity})`);
- console.log(`${drawn} drawn curves are simple, disjoint, meet D only at their marked points, turn through ${turnMean.toFixed(1)}pi each on the way round, and shade ${shaded} regions correctly over ${points} points (${withInfinity} holding the point at infinity): PASS`);
+ console.log(`${drawn} drawn curves are simple, disjoint, meet D only at their marked points, turn through ${turnMean.toFixed(1)}pi each on the way round, are dented only where something holds them (${loose} shallow exceptions, the deepest ${looseWorst.toFixed(0)}px), and shade ${shaded} regions correctly over ${points} points (${withInfinity} holding the point at infinity): PASS`);
 }
 
 // ---- Degenerate input is refused, not guessed at ----
