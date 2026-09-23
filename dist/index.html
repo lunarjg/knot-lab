@@ -444,7 +444,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
       <label class="chk"><input type="checkbox" id="adSigns" checked><span>Signs on the decomposition overlay<small>Colours each edge of G by its sign and writes + or &minus; beside it, in the Alt. decomposition view. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.</small></span></label>
-      <label class="chk"><input type="checkbox" id="adFill" checked><span>Shade the alternating regions<small>The shading goes over the diagram rather than under it, and is opaque, so a shaded region hides the tangle inside it completely: what is left on the canvas is G, a blob for every vertex and the nonalternating edge between them for every edge. Turn it off to see the diagram the regions are drawn on.</small></span></label>
+      <label class="chk"><input type="checkbox" id="adFill" checked><span>Shade the alternating regions<small>The shading goes over the diagram rather than under it, so at full strength a shaded region hides the tangle inside it completely and what is left on the canvas is G: a blob for every vertex and the nonalternating edge between them for every edge.</small></span></label>
+      <div class="row"><label for="adSolid">Shading strength</label><input type="range" id="adSolid" min="10" max="100" value="100"><output id="adSolidV" for="adSolid">100%</output></div>
+      <p class="small">At 100% the tangle inside a region is hidden. Lower it to see the diagram through the shading; the switch above turns it off altogether.</p>
     </section>
     <section>
       <h2>Pen &amp; touch</h2>
@@ -452,7 +454,6 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="fingerDrag" checked><span>Finger dragging in pen-only mode<small>Use the Drag strand tool.</small></span></label>
       <label class="chk"><input type="checkbox" id="palm" checked><span>Palm rejection</span></label>
       <label class="chk"><input type="checkbox" id="autoPen" checked><span>Enable pen-only editing on pen detection</span></label>
-      <label class="chk"><input type="checkbox" id="penDoubleTap" checked><span>Double-tap with pen tip for eraser<small>Tap the canvas, not the Pencil barrel.</small></span></label>
       <p class="small" id="penStatus">No pen input detected yet</p>
     </section>
     <section class="help">
@@ -2337,11 +2338,11 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   let decompCache = null, decompRuns = 0, decompSoon = false;
-  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adFill: true, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
+  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adFill: true, adSolid: 1, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
-  const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
-  let prevTool = 'draw', redoStack = [], sel = null, lasso = null, clip = null, penTap = null, lastPenTap = null, pasteAt = null;
+  const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, fingerDrag: true };
+  let redoStack = [], sel = null, lasso = null, clip = null, pasteAt = null;
   const SNAP = 16;
   const tabs = []; let activeTabId = null, nextTabId = 1;
   const tabButtons = new Map();
@@ -2580,7 +2581,7 @@ const KC = (function () {
     if(active)endAction();
     if(sel?.floating)dropSelection();
     drag=null;pan=null;stroke=null;erasing=null;lasso=null;hoverX=null;hoverPt=null;hoverErase=null;hoverSnap=null;
-    touches.clear();pinch=null;input.penDown=null;penTap=null;lastPenTap=null;shiftDown=false;
+    touches.clear();pinch=null;input.penDown=null;shiftDown=false;
     clearSel();
   }
   function stashTab() {
@@ -2909,7 +2910,6 @@ const KC = (function () {
 
   // ---------- controls ----------
   function setTool(t) {
-    if (t !== 'erase' && tool !== 'erase') prevTool = t; else if (t === 'erase' && tool !== 'erase') prevTool = tool;
     if (t !== 'lasso') clearSel();
     tool = t; document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t));
     hoverX = hoverPt = hoverErase = hoverSnap = null;
@@ -2922,10 +2922,6 @@ const KC = (function () {
     $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso'; $('optMove').hidden = t !== 'move';
     $('toolopts').hidden = !['draw', 'erase', 'lasso', 'move'].includes(t);
     render();
-  }
-  function toggleEraser() {
-    if (tool === 'erase') setTool(prevTool && prevTool !== 'erase' ? prevTool : 'draw'); else setTool('erase');
-    toast(tool === 'erase' ? 'Switched to eraser' : 'Returned to the previous tool');
   }
   function setLassoMode(m) {
     opts.lassoMode = m; document.querySelectorAll('#lassoModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lasso === m));
@@ -2964,6 +2960,7 @@ const KC = (function () {
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
   $('adSigns').onchange = e => { opts.adSigns = e.target.checked; render(); };
   $('adFill').onchange = e => { opts.adFill = e.target.checked; render(); };
+  $('adSolid').oninput = e => { opts.adSolid = +e.target.value / 100; setText('adSolidV', `${e.target.value}%`); render(); };
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
@@ -3046,7 +3043,6 @@ const KC = (function () {
   $('penOnly').onchange = e => setPenOnly(e.target.checked, true);
   $('palm').onchange = e => { input.palm = e.target.checked; };
   $('autoPen').onchange = e => { input.autoPen = e.target.checked; };
-  $('penDoubleTap').onchange = e => { input.doubleTap = e.target.checked; };
 
   const capture = e => { try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already released */ } };
   const tolFor = e => (e.pointerType === 'touch' ? 24 : 13) / view.s;
@@ -3212,13 +3208,6 @@ const KC = (function () {
       touches.clear(); pinch = null;
       if (active) return;
       capture(e);
-      const tnow = now();
-      if (input.doubleTap && lastPenTap && tnow - lastPenTap.tEnd < 350 && Math.hypot(e.clientX - lastPenTap.x, e.clientY - lastPenTap.y) < 30) {
-        if (undoStack.length > lastPenTap.depth) { restore(undoStack.pop()); clearSel(); changed(); }
-        lastPenTap = null; penTap = null; toggleEraser();
-        active = { id: e.pointerId, type: 'pen', t0: tnow, kind: 'ignore' }; return;
-      }
-      penTap = { t0: tnow, x: e.clientX, y: e.clientY, depth: undoStack.length, moved: 0 };
       const eraserTip = e.button === 5 || (e.buttons & 32) === 32;
       beginAction(e, eraserTip ? 'erase' : null); return;
     }
@@ -3254,7 +3243,6 @@ const KC = (function () {
         return;
       }
     }
-    if (penTap && e.pointerType === 'pen') penTap.moved = Math.max(penTap.moved, Math.hypot(e.clientX - penTap.x, e.clientY - penTap.y));
     if (active) { if (active.kind !== 'ignore' && active.id === (e.pointerType === 'mouse' ? 'mouse' : e.pointerId)) moveAction(e); return; }
     if (e.pointerType === 'touch') return;
     // hover feedback for mouse and hovering pencil
@@ -3276,9 +3264,6 @@ const KC = (function () {
   const pointerEnd = e => {
     if (e.pointerType === 'pen' && input.penDown === e.pointerId) {
       input.penDown = null; input.lastPenUp = now();
-      if (penTap && now() - penTap.t0 < 250 && penTap.moved < 8) lastPenTap = { tEnd: now(), x: penTap.x, y: penTap.y, depth: penTap.depth };
-      else lastPenTap = null;
-      penTap = null;
     }
     if (e.pointerType === 'touch') {
       touches.delete(e.pointerId);
@@ -4503,12 +4488,13 @@ const KC = (function () {
     // A region is its own boundary curves filled by the even-odd rule, taken the
     // other way about for the one region that holds the point at infinity. An
     // alternating diagram has no curves at all, and its one region is everything.
-    // The fill goes over the diagram rather than under it, and is opaque, so a
-    // shaded region hides the tangle inside it completely: what is left on the
-    // canvas is G itself, a blob for each vertex and the nonalternating edge
-    // between them for each edge. It is two passes -- paper, then the tint over
-    // it -- so a filled region is exactly the colour it used to be when the
-    // diagram showed through.
+    // The fill goes over the diagram rather than under it, in two passes: paper,
+    // which is what covers the tangle, and then the tint over it, which is what
+    // gives the region its colour. Only the first carries the strength, so the
+    // colour stays the one it has always been while how much of the diagram
+    // shows through is the setting. At full strength the tangle inside a region
+    // is gone and what is left on the canvas is G itself, a blob for each vertex
+    // and the nonalternating edge between them for each edge.
     if (opts.adFill) {
       const fill = () => paths.regions.forEach(R => {
         // What bounds the region on the canvas: its own curves, and for the one
@@ -4525,7 +4511,7 @@ const KC = (function () {
         ctx.fill('evenodd');
       });
       ctx.save();
-      ctx.globalAlpha = 1; ctx.fillStyle = cssv('--paper'); fill();
+      ctx.globalAlpha = opts.adSolid; ctx.fillStyle = cssv('--paper'); fill();
       ctx.globalAlpha = 0.22; ctx.fillStyle = regionColor(); fill();
       ctx.restore();
     }

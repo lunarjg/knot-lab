@@ -6,6 +6,11 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Shading strength, and the pen double-tap out (Claude Code, unreleased)
+
+- **The shading has a strength again**, from 10% to 100%, beside the switch that turns it off. Only the pass that covers the diagram carries it, so the colour over it stays the one the region has always had and what changes is how much of the tangle shows through: at 100% it is hidden completely, and low down it reads as the light wash the shading used to be.
+- **Double-tap with the pen tip for the eraser is gone**, and with it the tap tracking behind it. A gesture that swapped the tool out from under you on a stray second tap, which the toolbar does deliberately in one tap.
+
 ## Full screen, and a header row back (Claude Code, unreleased)
 
 - **Import PD, Save and Fit have moved up beside Open files.** On a phone they wrapped onto a row of their own under the view bar, which is a row of header taken off the drawing for three buttons.
@@ -61,7 +66,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - An alternating diagram must not be painted out by its own region: with the shading on, nothing is filled at all. The test fails without the guard.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.
-- Service-worker cache bumped to `knot-lab-v42-no-hint`.
+- Service-worker cache bumped to `knot-lab-v43-shading-strength`.
 
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 

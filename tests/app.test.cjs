@@ -155,6 +155,20 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
  assert(p.strokes.includes('--accent'),'the edges of G are still drawn, neutrally');
  assert(!p.strokes.includes('--c0')&&!p.strokes.includes('--c1'),'and not in a sign colour');
  assert(tinted()>0,'the shading is untouched by the signs setting');
+ // How much of the diagram a shaded region covers is a strength. Only the
+ // paper pass carries it -- that is the one that hides the tangle -- so the
+ // colour over it stays the one the region has always had.
+ assert.equal(p.ids.get('adSolid').value,'100');
+ p.ids.get('adSolid').oninput({target:{value:'40'}});
+ assert.equal(p.ids.get('adSolidV').textContent,'40%');
+ draw();
+ assert.equal(p.fills.filter(f=>f.style==='--paper'&&Math.abs(f.alpha-0.4)<1e-9).length,tinted(),
+  'the region is covered as far as the strength says');
+ assert.equal(tinted(),p.fills.filter(f=>f.style==='--c5'&&Math.abs(f.alpha-0.22)<1e-9).length,
+  'and the tint over it is untouched');
+ p.ids.get('adSolid').oninput({target:{value:'100'}});
+ draw();
+ assert.equal(hidden(),tinted(),'back at full strength the tangle is hidden again');
  // Shading off, signs back on.
  p.ids.get('adFill').onchange({target:{checked:false}});
  p.ids.get('adSigns').onchange({target:{checked:true}});
@@ -163,7 +177,7 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
  assert.equal(hidden(),0,'and nothing is painted out, so the diagram shows');
  assert.equal(signs(),edges,'the signs come back');
 }
-console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, an alternating diagram is not painted out, and the marked points carry no dot: PASS');
+console.log('Overlay signs and region shading switch off on their own, the shading has a strength, a shaded region hides its tangle, an alternating diagram is not painted out, and the marked points carry no dot: PASS');
 
 // Import PD, Save and Fit used to sit under the view bar, which on a phone is a
 // row of header taken off the drawing. They belong with Open files.
@@ -310,7 +324,6 @@ for (const pointerType of ['mouse','pen','touch']) {
  const p=boot(),api=p.ctx.knotLab,canvas=p.ids.get('cv');
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
  p.doc.querySelectorAll('#eraseModes button').find(e=>e.dataset.erase==='precise').click();
- p.ids.get('penDoubleTap').onchange({target:{checked:false}});
  p.ids.get('palm').onchange({target:{checked:false}});
  api.view.s=1;api.view.ox=0;api.view.oy=0;
  api.state.open=[{pts:Array.from({length:41},(_,i)=>({x:100+i*5,y:100}))}];
@@ -562,7 +575,7 @@ function arcSession(pointerType='mouse',fix=true,saved) {
  api.view.s=1;api.view.ox=0;api.view.oy=0;
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();
  p.ids.get('autoClose').onchange({target:{checked:false}});p.ids.get('cornerFix').onchange({target:{checked:fix}});
- p.ids.get('palm').onchange({target:{checked:false}});p.ids.get('penDoubleTap').onchange({target:{checked:false}});
+ p.ids.get('palm').onchange({target:{checked:false}});
  p.draw=ps=>{
   const ev=([x,y],type)=>({pointerType,pointerId:80,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
   p.fire(canvas,'pointerdown',ev(ps[0],'pointerdown'));for(const q of ps.slice(1))p.fire(canvas,'pointermove',ev(q,'pointermove'));
@@ -1067,7 +1080,7 @@ console.log('Crowded crossing escape through mouse/pen/touch, undo and redo: PAS
 for(const pointerType of ['mouse','pen','touch'])for(const wrap of [false,true]) {
  const p=boot(),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx);api.importPD(pd);
  api.view.s=1;api.view.ox=0;api.view.oy=0;
- p.ids.get('penDoubleTap').onchange({target:{checked:false}});p.ids.get('palm').onchange({target:{checked:false}});
+ p.ids.get('palm').onchange({target:{checked:false}});
  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='erase').click();
  assert.equal(p.doc.querySelectorAll('#eraseModes button').find(e=>e.dataset.erase==='strand').getAttribute('aria-pressed'),'true');
  const c=api.state.comps[0],L=c.len,cuts=api.state.crossings.flatMap(X=>X.occ.map(o=>o.s)).sort((a,b)=>a-b);
