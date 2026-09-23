@@ -165,6 +165,59 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
 }
 console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, an alternating diagram is not painted out, and the marked points carry no dot: PASS');
 
+// Import PD, Save and Fit used to sit under the view bar, which on a phone is a
+// row of header taken off the drawing. They belong with Open files.
+{
+ const acts=html.slice(html.indexOf('<div class="fileacts">'),html.indexOf('<div class="bar">'));
+ assert(acts&&acts.length<900,'the file actions are one group');
+ for(const id of ['openBtn','pdOpen','saveBtn','fit'])
+  assert(acts.includes(`id="${id}"`),`${id} sits with Open files, above the view bar`);
+ const bar=html.slice(html.indexOf('<div class="bar">'),html.indexOf('<div class="canvaswrap"'));
+ assert(!bar.includes('class="iconbtn"'),'and the view bar carries nothing but the views');
+ // Five view names do not fit across a phone, so the long ones have a short
+ // form. The full name stays on the button for anything reading it aloud.
+ for(const [view,brief] of [['A','all-A'],['B','all-B'],['AD','Alt. dec.']]){
+  const at=html.indexOf(`data-view="${view}"`),end=html.indexOf('</button>',at);
+  const markup=html.slice(at,end);
+  assert(markup.includes(`<span class="brief">${brief}</span>`),`the ${view} view has a short name`);
+  assert(/aria-label="[^"]+"/.test(markup),`and keeps its full name for a reader`);
+ }
+}
+console.log('Import PD, Save and Fit share the row with Open files, and the view names have a short form: PASS');
+
+// Full screen is the app's own chrome going away: the title, the file tabs and
+// the view bar, and the inspector with them, leaving the canvas, the toolbar
+// floating on it and the arrow that brings the inspector back.
+{
+ const p=boot(undefined,false),api=p.ctx.knotLab;api.importPD(pd);
+ const full=()=>p.doc.body.classList.contains('stage-full');
+ const panel=()=>p.doc.body.classList.contains('panel-open');
+ assert(!full());assert(panel(),'the inspector starts open on a wide window');
+ p.ids.get('fullBtn').onclick();
+ assert(full(),'the button turns full screen on');
+ assert.equal(p.ids.get('fullBtn').getAttribute('aria-pressed'),'true');
+ assert(!panel(),'the inspector goes with the rest of the chrome');
+ assert(p.doc.body.classList.contains('panel-hidden'),'so its arrow is there to bring it back');
+ // Escape is the way out when nothing else is open to close.
+ p.key('keydown',{key:'Escape'});
+ assert(!full(),'Escape leaves full screen');
+ assert(panel(),'and the inspector comes back as it was');
+ // So is the shortcut, and it is a toggle.
+ p.key('keydown',{key:'f'});assert(full(),'F turns it on');
+ p.key('keydown',{key:'f'});assert(!full(),'and off again');
+ assert.equal(p.ids.get('fullBtn').getAttribute('aria-pressed'),'false');
+ // A diagram left closed stays closed on the way out.
+ p.ids.get('panelToggle').onclick();
+ assert(!panel(),'the inspector is closed by hand');
+ p.ids.get('fullBtn').onclick();p.ids.get('fullBtn').onclick();
+ assert(!full()&&!panel(),'and full screen does not open it on the way out');
+ // The toolbar is the one thing that has to survive, or there is no way back.
+ assert(p.ids.get('fullBtn'),'the way out is on the toolbar itself');
+ assert(html.indexOf('id="fullBtn"')>html.indexOf('<div class="toolbar"'));
+ assert(html.indexOf('id="fullBtn"')<html.indexOf('<div class="toolopts"'));
+}
+console.log('Full screen hides the header, the tabs, the view bar and the inspector, and the toolbar keeps the way out: PASS');
+
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
 // stays right after the last tab and scrolls together with them.

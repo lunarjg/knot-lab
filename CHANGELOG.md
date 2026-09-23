@@ -6,6 +6,13 @@ Everything below this line was implemented by a Claude Code session
 continuing that work, across two pull requests; none of it has been tagged
 as a new release yet.
 
+## Full screen, and a header row back (Claude Code, unreleased)
+
+- **Import PD, Save and Fit have moved up beside Open files.** On a phone they wrapped onto a row of their own under the view bar, which is a row of header taken off the drawing for three buttons.
+- **Full screen.** The button at the end of the toolbar takes the app's own chrome away — the title, the file tabs, the view bar, and the inspector with them — and leaves the canvas, the toolbar floating on it, and the arrow that brings the inspector back. On a phone that is 600px of canvas becoming the whole 844px screen. <kbd>F</kbd> toggles it and <kbd>Escape</kbd> leaves it; whether the inspector was open is remembered, so leaving puts the window back as it was. It is the app's chrome, not the browser's: the Fullscreen API does not work on an ordinary element in Safari on iOS, where this matters most.
+- One press of <kbd>Escape</kbd> does one thing: it closes the inspector if that is open, and leaves full screen otherwise. Both handlers were acting on the same press.
+- **The last view button ran off the edge of a phone**, where it could not be reached at all — five view names do not fit across 390px, let alone 320px. The long ones now have a short form on narrow screens (all-A, all-B, Alt. dec.), with the full name still on the button for a screen reader, and the row scrolls if even those are too wide.
+
 ## Alternating decomposition (Claude Code, unreleased, not on main)
 
 Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in the form used by Armond and Lowrance, ["Turaev genus and alternating decompositions", *Algebr. Geom. Topol.* 17 (2017) 793–830](https://doi.org/10.2140/agt.2017.17.793). Built on a branch for review, deliberately not merged to main.
@@ -53,7 +60,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - An alternating diagram must not be painted out by its own region: with the shading on, nothing is filled at all. The test fails without the guard.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.
-- Service-worker cache bumped to `knot-lab-v40-sliced-evenly`.
+- Service-worker cache bumped to `knot-lab-v41-full-screen`.
 
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 

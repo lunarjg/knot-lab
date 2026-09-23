@@ -49,9 +49,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .seg.views button[aria-pressed="true"]{background:var(--accent);color:var(--paper)}
+.views .brief{display:none}
 .iconbtn{border:1px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 11px;cursor:pointer;color:var(--ink)}
 .iconbtn:hover{border-color:var(--muted)}
-.spacer{flex:1}
 .dock{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;z-index:3;max-width:calc(100% - 20px)}
 .toolbar{display:flex;align-items:center;gap:2px;background:var(--paper);border:1px solid var(--rule);border-radius:14px;padding:4px;box-shadow:0 6px 18px -10px color-mix(in srgb,var(--ink) 45%,transparent)}
 .toolbar button{width:40px;height:38px;display:grid;place-items:center;border:0;background:transparent;border-radius:10px;color:var(--muted);cursor:pointer}
@@ -148,7 +148,6 @@ body{font-size:16px}
 .save-status{font-size:12px;color:var(--muted);margin-left:auto}
 .apphead .iconbtn{flex-shrink:0}
 .bar{gap:8px}
-.bar .spacer{min-width:0}
 button{min-height:44px;touch-action:manipulation}
 .toolbar button{width:44px;height:44px}
 .toolbar{gap:2px}
@@ -195,9 +194,18 @@ h2{font-size:15px}
  .apphead strong{font-size:17px}
  .save-status{order:3;flex-basis:100%;font-size:12px}
  .apphead .iconbtn{margin-left:auto}
+ .fileacts{flex:1;justify-content:flex-end}
  .bar{gap:6px}
  .views{width:100%;display:flex}
- .views button{flex:1;padding:6px 4px;font-size:13px}
+ /* Five view names do not fit across a phone, and the last of them ran off the
+    edge where it could not be reached at all. The long ones have a short form
+    for narrow screens, with the full name still on the button for a reader, and
+    the row scrolls if even those are too wide. */
+ .views{width:100%;overflow-x:auto;scrollbar-width:none}
+ .views::-webkit-scrollbar{display:none}
+ .views button{flex:1;padding:6px 4px;font-size:13px;white-space:nowrap}
+ .views .full{display:none}
+ .views .brief{display:inline}
  .toolbar{gap:0;padding:3px}
  .toolbar .sep{margin:0 2px}
  .toolbar button{width:36px;min-height:44px}
@@ -219,6 +227,16 @@ h2{font-size:15px}
 .new-tab:hover{background:var(--bg);color:var(--ink);border-color:var(--rule)}
 .new-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .document-tabs>.iconbtn{flex-shrink:0}
+.fileacts{display:flex;align-items:stretch;gap:6px;flex-shrink:0}
+/* Full screen is the app's own chrome, not the browser's: the title, the file
+   tabs and the view bar go, and what is left is the canvas, the toolbar on it
+   and the arrow that brings the inspector back. On a phone that is most of the
+   header given back to the drawing. */
+.stage-full .apphead,.stage-full .document-tabs,.stage-full .bar{display:none}
+.stage-full .stage{padding:0}
+.stage-full .canvaswrap{border:0;border-radius:0}
+#fullBtn .exit,.stage-full #fullBtn .enter{display:none}
+.stage-full #fullBtn .exit{display:block}
 @media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
 /* Compact inspector pages keep common controls close and details optional. */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
@@ -255,19 +273,21 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="document-tabs">
       <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
       <button id="newTab" class="new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
-      <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
+      <div class="fileacts">
+        <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
+        <button class="iconbtn" id="pdOpen">Import PD</button>
+        <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
+        <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
+      </div>
     </div>
     <div class="bar">
       <div class="seg views" role="group" aria-label="Views">
-        <button data-view="diagram" aria-pressed="true">Diagram</button>
-        <button data-view="A" aria-pressed="false">all-A state</button>
-        <button data-view="B" aria-pressed="false">all-B state</button>
-        <button data-view="S" aria-pressed="false">Seifert</button>
-        <button data-view="AD" aria-pressed="false">Alt. decomposition</button>
+        <button data-view="diagram" aria-pressed="true" aria-label="Diagram">Diagram</button>
+        <button data-view="A" aria-pressed="false" aria-label="all-A state"><span class="full">all-A state</span><span class="brief">all-A</span></button>
+        <button data-view="B" aria-pressed="false" aria-label="all-B state"><span class="full">all-B state</span><span class="brief">all-B</span></button>
+        <button data-view="S" aria-pressed="false" aria-label="Seifert state">Seifert</button>
+        <button data-view="AD" aria-pressed="false" aria-label="Alternating decomposition"><span class="full">Alt. decomposition</span><span class="brief">Alt. dec.</span></button>
       </div>
-      <span class="spacer"></span><button class="iconbtn" id="pdOpen">Import PD</button>
-      <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
-      <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
       <input type="file" id="fileInput" accept=".json,application/json" multiple hidden>
     </div>
     <div class="canvaswrap" id="wrap" role="tabpanel" aria-label="Current knot diagram">
@@ -283,6 +303,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           <span class="sep" aria-hidden="true"></span>
           <button id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
           <button id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+          <span class="sep" aria-hidden="true"></span>
+          <button id="fullBtn" aria-pressed="false" title="Full screen (F)" aria-label="Full screen"><svg class="enter" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5"/><path d="M15 4h5v5"/><path d="M15 20h5v-5"/><path d="M9 20H4v-5"/></svg><svg class="exit" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h5V4"/><path d="M20 9h-5V4"/><path d="M20 15h-5v5"/><path d="M4 15h5v5"/></svg></button>
         </div>
         <div class="toolopts" id="toolopts">
           <div class="toolopt" id="optDraw" hidden>
@@ -446,7 +468,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
       <p><b>Lasso</b> Enclose curves to select them, or switch the shape to Rectangle and just drag a box. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
       <p><b>Crossing overlap</b> “Separate overlapping crossings” (Settings) eases apart any crossings a drag pushed into each other, once the drag ends, and turns them back open so the strands meet at a readable angle. “Separation distance” sets how far. Crossings that were already close stay put.</p>
-      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>+</kbd> / <kbd>−</kbd> Drag radius · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
+      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>F</kbd> Full screen · <kbd>+</kbd> / <kbd>−</kbd> Drag radius · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
       </details>
     </section>
@@ -2707,6 +2729,23 @@ const KC = (function () {
     if (e.key === 'Enter') { setPanel(false,true); return; }
     rememberPanelWidth(e.key === 'Home' ? min : e.key === 'End' ? max : width + (e.key === 'ArrowLeft' ? 1 : -1) * (e.shiftKey ? 48 : 24));
   });
+  // Full screen puts the canvas on its own: the title, the file tabs and the
+  // view bar are the app's own chrome and go, and the inspector goes with them,
+  // which leaves the arrow that brings it back. The toolbar floats on the canvas
+  // and stays, so there is always a way out. Whether the inspector was open is
+  // remembered, so leaving full screen puts the window back as it was.
+  let fullOpen = false, panelBeforeFull = false;
+  function setFull(on, focus = false) {
+    if (on === fullOpen) return;
+    fullOpen = on;
+    document.body.classList.toggle('stage-full', on);
+    $('fullBtn').setAttribute('aria-pressed', String(on));
+    if (on) { panelBeforeFull = panelOpen; if (panelOpen) setPanel(false); }
+    else if (panelBeforeFull) setPanel(true);
+    resize();
+    if (focus) $('fullBtn').focus();
+  }
+  $('fullBtn').onclick = () => setFull(!fullOpen);
   $('panelToggle').onclick = () => setPanel(!panelOpen, true);
   $('panelClose').onclick = $('panelScrim').onclick = () => setPanel(false, true);
   function showPanelPage(page) {
@@ -2723,7 +2762,11 @@ const KC = (function () {
   narrowPanel.addEventListener('change', () => setPanel(!narrowPanel.matches));
   window.addEventListener('resize', () => { stopPanelDrag(true); drawPanelWidth(panelWidth); });
   document.addEventListener('keydown', e => {
-    if(e.key === 'Escape' && panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); }
+    // One press does one thing: close the inspector if it is open, and leave
+    // full screen otherwise. Two handlers acting on the same press did both.
+    if(e.key !== 'Escape') return;
+    if(panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); return; }
+    if(fullOpen && !sel) setFull(false, true);
   });
   setPanel(panelOpen);
   function importPD(code) {
@@ -2946,6 +2989,7 @@ const KC = (function () {
     // replacing whichever tool was active, and releasing C restores it.
     if (k === 'c') { if (!e.repeat && momentaryFlipTool === null) { momentaryFlipTool = tool; setTool('flip'); } return; }
     if (k === 'a') { if (!e.repeat) toggleRelax(); return; }
+    if (k === 'f') { if (!e.repeat) setFull(!fullOpen); return; }
     if (k === 'v') setTool('move'); else if (k === 'd') setTool('draw'); else if (k === 'x') setTool('flip'); else if (k === 'l') setTool('lasso');
     else if (k === 'e') { if (tool === 'erase') setEraseMode({ strand: 'precise', precise: 'component', component: 'strand' }[opts.eraseMode]); else setTool('erase'); }
     else if (k === '1') setView('diagram'); else if (k === '2') setView('A'); else if (k === '3') setView('B'); else if (k === '4') setView('S');

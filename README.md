@@ -110,6 +110,12 @@ The drawing is tested, not just the numbers. Every drawn curve is required to be
 
 Method: [Armond and Lowrance, "Turaev genus and alternating decompositions", *Algebr. Geom. Topol.* 17 (2017) 793–830](https://doi.org/10.2140/agt.2017.17.793).
 
+## Full screen
+
+The button at the end of the toolbar takes the app's own chrome away: the title, the file tabs, the view bar, and the inspector with them. What is left is the canvas, the toolbar floating on it, and the arrow that brings the inspector back — so there is always a way out. <kbd>F</kbd> toggles it, <kbd>Escape</kbd> leaves it, and whether the inspector was open is remembered so that leaving puts the window back as it was. It is the app's chrome rather than the browser's, since the Fullscreen API does not work on an ordinary element in Safari on iOS, which is where the screen is smallest.
+
+Import PD, Save and Fit sit with Open files rather than under the view bar, which on a phone was a row of header spent on three buttons. The view names have a short form on narrow screens — all-A, all-B, Alt. dec. — with the full name still on the button for a screen reader; five long names do not fit across a phone, and the last of them used to run off the edge where it could not be reached.
+
 ## Geometry and editing behavior
 
 - Resampling drops a polyline point once it is merely close to its neighbor, not only when it sits exactly on an unchanged straight chord; at very small scale (well under typical on-screen drawing size) this can occasionally let a resample-only step (an auto-relax frame, or even a true no-op) shift or drop a crossing with no user movement.
