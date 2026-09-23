@@ -426,7 +426,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
       <label class="chk"><input type="checkbox" id="adSigns" checked><span>Signs on the decomposition overlay<small>Colours each edge of G by its sign and writes + or &minus; beside it, in the Alt. decomposition view. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.</small></span></label>
-      <div class="row"><label for="adTint">Alternating region shading</label><input type="range" id="adTint" min="0" max="60" value="22"><output id="adTintV" for="adTint">22%</output></div>
+      <label class="chk"><input type="checkbox" id="adFill" checked><span>Shade the alternating regions<small>The shading goes over the diagram rather than under it, and is opaque, so a shaded region hides the tangle inside it completely: what is left on the canvas is G, a blob for every vertex and the nonalternating edge between them for every edge. Turn it off to see the diagram the regions are drawn on.</small></span></label>
     </section>
     <section>
       <h2>Pen &amp; touch</h2>
@@ -2211,6 +2211,21 @@ const KC = (function () {
       }
       return Math.round(t / (2 * Math.PI));
     };
+    // The region that holds the point at infinity is bounded by the curves that
+    // nothing else contains, and those are not the ones the combinatorics assigns
+    // to it: a curve belongs to the region whose tangle it encircles, so a split
+    // diagram can leave the outer region with no curves at all. Filling it then
+    // covers the whole picture, which only showed once the fill became opaque.
+    const holds = (pts, q) => {
+      let w = false;
+      for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
+        const A = pts[a], B = pts[b];
+        if ((A.y > q.y) !== (B.y > q.y) && q.x < (B.x - A.x) * (q.y - A.y) / (B.y - A.y) + A.x) w = !w;
+      }
+      return w;
+    };
+    const outermost = curvePts.map((_, i) => i)
+      .filter(i => !curvePts.some((other, j) => j !== i && holds(other, curvePts[i][0])));
     const regions = dec.regions.map((_, r) => {
       const own = [];
       dec.curveRegion.forEach((cr, ci) => { if (cr === r) own.push(ci); });
@@ -2219,7 +2234,7 @@ const KC = (function () {
       const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
       return { region: r, curves: own, outer: parity === 0 };
     });
-    return { curves: curvePts, outline, marks, gEdges, regions, side };
+    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side };
   }
 
   // Adjacent occurrences on every closed component must have opposite heights.
@@ -2267,7 +2282,7 @@ const KC = (function () {
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   let decompCache = null, decompRuns = 0, decompSoon = false;
-  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adTint: 0.22, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
+  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adFill: true, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -2872,7 +2887,7 @@ const KC = (function () {
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
   $('adSigns').onchange = e => { opts.adSigns = e.target.checked; render(); };
-  $('adTint').oninput = e => { opts.adTint = +e.target.value / 100; setText('adTintV', `${e.target.value}%`); render(); };
+  $('adFill').onchange = e => { opts.adFill = e.target.checked; render(); };
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
@@ -4396,23 +4411,10 @@ const KC = (function () {
       ctx.closePath();
     };
     ctx.setLineDash([]);
-    // A region is its own boundary curves filled by the even-odd rule, taken the
-    // other way about for the one region that holds the point at infinity. An
-    // alternating diagram has no curves at all, and its one region is everything.
-    ctx.save(); ctx.globalAlpha = opts.adTint;
-    if (opts.adTint > 0) paths.regions.forEach(R => {
-      ctx.beginPath(); ctx.fillStyle = regionColor();
-      if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
-      R.curves.forEach(ci => trace(paths.outline[ci]));
-      ctx.fill('evenodd');
-    });
-    ctx.restore();
     // The diagram itself stays neutral, as it is in the paper's figures: the
     // shading says which region a strand is in, so colouring it again would only
     // compete with the two things that carry the structure, the curves and the
     // edges of G.
-    const markS = new Map();
-    paths.gEdges.forEach(e => markS.set(e.arc, e.s));
     ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--ink');
     for (let g = 0; g < dec.nArc; g++) {
       const a = dec.dart[2 * g], b = dec.dart[2 * g + 1], cm = S.comps[a.c];
@@ -4420,13 +4422,37 @@ const KC = (function () {
       if (s1 <= s0) continue;
       ctx.beginPath(); tracePiece(cm, s0, s1); ctx.stroke();
     }
+    // A region is its own boundary curves filled by the even-odd rule, taken the
+    // other way about for the one region that holds the point at infinity. An
+    // alternating diagram has no curves at all, and its one region is everything.
+    // The fill goes over the diagram rather than under it, and is opaque, so a
+    // shaded region hides the tangle inside it completely: what is left on the
+    // canvas is G itself, a blob for each vertex and the nonalternating edge
+    // between them for each edge. It is two passes -- paper, then the tint over
+    // it -- so a filled region is exactly the colour it used to be when the
+    // diagram showed through.
+    if (opts.adFill) {
+      const fill = () => paths.regions.forEach(R => {
+        ctx.beginPath();
+        if (R.outer) {
+          ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
+          paths.outermost.forEach(ci => { if (!R.curves.includes(ci)) trace(paths.outline[ci]); });
+        }
+        R.curves.forEach(ci => trace(paths.outline[ci]));
+        ctx.fill('evenodd');
+      });
+      ctx.save();
+      ctx.globalAlpha = 1; ctx.fillStyle = cssv('--paper'); fill();
+      ctx.globalAlpha = 0.22; ctx.fillStyle = regionColor(); fill();
+      ctx.restore();
+    }
     // Each edge of G is the middle piece of a nonalternating edge. Its sign is
     // what the colour and the + or - beside it say, and both are one setting:
     // with them off the edge is still drawn, in a neutral colour, since where it
     // runs is the structure and the sign is the annotation on it. Its two ends
     // are the marked points, so they need no dot of their own.
     const signed = opts.adSigns;
-    ctx.lineWidth = 6.5 / view.s;
+    ctx.lineWidth = 3 / view.s;
     paths.gEdges.forEach(e => {
       ctx.beginPath(); ctx.strokeStyle = cssv(signed ? (e.over ? '--c1' : '--c0') : '--accent');
       ctx.moveTo(e.pts[0].x, e.pts[0].y);

@@ -119,12 +119,16 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
   for(const f of p.timers.values())if(f.ms===0)f.f();p.flush();};
  const signs=()=>p.texts.filter(t=>t==='+'||t==='\u2212').length;
  const tinted=()=>p.fills.filter(f=>f.style==='--c5'&&f.alpha>0).length;
+ // A shaded region is painted opaque paper first, so the tangle under it is
+ // gone, and the tint goes over that -- so it reads exactly as it used to.
+ const hidden=()=>p.fills.filter(f=>f.style==='--paper'&&f.alpha===1).length;
  // Defaults: signed, shaded, and no dot at a marked point.
  assert.equal(p.ids.get('adSigns').checked,true);
- assert.equal(p.ids.get('adTint').value,'22');
+ assert.equal(p.ids.get('adFill').checked,true);
  draw();
  assert.equal(signs(),edges,`one + or - per edge of G, got ${signs()} for ${edges}`);
  assert(tinted()>0,'the alternating regions are shaded');
+ assert.equal(hidden(),tinted(),'and painted out under the tint, so the tangle inside does not show');
  assert(p.strokes.includes('--c0')||p.strokes.includes('--c1'),'the edges of G are drawn in their sign colour');
  assert.equal(p.arcs.length,0,'nothing is drawn as a disk on the decomposition overlay');
  // Signs off: the bars stay, in a neutral colour, and the glyphs go.
@@ -134,15 +138,15 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
  assert(p.strokes.includes('--accent'),'the edges of G are still drawn, neutrally');
  assert(!p.strokes.includes('--c0')&&!p.strokes.includes('--c1'),'and not in a sign colour');
  assert(tinted()>0,'the shading is untouched by the signs setting');
- // Shading down to nothing, signs back on.
- p.ids.get('adTint').oninput({target:{value:'0'}});
+ // Shading off, signs back on.
+ p.ids.get('adFill').onchange({target:{checked:false}});
  p.ids.get('adSigns').onchange({target:{checked:true}});
- assert.equal(p.ids.get('adTintV').textContent,'0%');
  draw();
- assert.equal(tinted(),0,'no shading is drawn at all at zero');
+ assert.equal(tinted(),0,'nothing is shaded with the setting off');
+ assert.equal(hidden(),0,'and nothing is painted out, so the diagram shows');
  assert.equal(signs(),edges,'the signs come back');
 }
-console.log('Overlay signs switch off on their own, the region shading has a strength, and the marked points carry no dot: PASS');
+console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, and the marked points carry no dot: PASS');
 
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always

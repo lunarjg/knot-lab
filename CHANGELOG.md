@@ -27,7 +27,9 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - For drawing, points on a straight run are dropped and every corner is rounded with a fillet. At full density a corner is one point wide and rounds over almost nothing.
 - **The marked points carry no dot.** The two ends of an edge of G are exactly where they are, so a disk drawn on each one only added ink to the part of the picture that already has the most.
 - **The signs are a setting.** Colouring each edge of G by its sign and writing + or &minus; beside it is an annotation on the edge, not the edge itself, so it switches off on its own: the bar stays, drawn neutrally, and the glyphs go. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.
-- **The region shading has a strength**, from the 22% it has always had down to none at all, on a slider beside it.
+- **The region shading is a switch, and shading a region hides its tangle.** The fill goes over the diagram rather than under it, and is opaque — paper first, then the tint over it, so a shaded region reads exactly the colour it always did while the tangle inside it is gone. What is left on the canvas is G itself: a blob for every vertex and the nonalternating edge between them for every edge. Turn it off to see the diagram the regions are drawn on.
+- **The edge of G is drawn at the width of the strand it lies on**, rather than twice it. It is a piece of the diagram, not a separate object laid over it.
+- **The region holding the point at infinity was filling the whole canvas.** A curve belongs to the region whose tangle it encircles, so the outer region can be left with none of its own — on a split diagram it had none at all, and its fill covered every other region. At 22% that only looked like a slightly darker background; opaque it would have painted the picture out. It is now bounded by the curves that nothing else contains. Two regions overlapping is now a test failure rather than a shade of grey.
 - **One tint for every region.** They are already told apart by the curves between them, and a colour per region suggested a difference between tangles that is not there.
 - **Longer edges of G**: the two marked points on a nonalternating edge sit further apart, so the bar between them reads as an edge rather than a tick.
 - **The caption under the canvas is gone**, for the decomposition and for the all-A, all-B and Seifert views alike.
@@ -45,7 +47,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - The relaxation is tested as something that can be run in slices: draining the generator in one go and stepping it must land on exactly the same curves, and no single slice may carry the whole run. Pulling the curves taut coarse-first is tested against doing it at the drawn spacing throughout: it must reach the same length, within 3%, in less than half the rounds.
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.
-- Service-worker cache bumped to `knot-lab-v38-overlay-settings`.
+- Service-worker cache bumped to `knot-lab-v39-opaque-regions`.
 
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 

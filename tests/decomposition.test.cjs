@@ -334,11 +334,25 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
    assert.equal(P.regions.length,d.regions.length,`${name}/${mask}: one fill per region`);
    for(const R of P.regions){
     shaded++;if(R.outer)withInfinity++;
-    const filled=q=>(R.curves.reduce((t,ci)=>t+Math.abs(wind(P.curves[ci],q)),0)%2===1)!==R.outer;
+    // What the canvas fills: the region's own curves, and for the one holding
+    // the point at infinity every curve nothing else contains, since the curves
+    // belong to the regions whose tangles they encircle and a split diagram can
+    // leave that one with none of its own.
+    const bounds=R.outer?R.curves.concat(P.outermost.filter(ci=>!R.curves.includes(ci))):R.curves;
+    const filled=q=>(bounds.reduce((t,ci)=>t+Math.abs(wind(P.curves[ci],q)),0)%2===1)!==R.outer;
     for(const xi of d.regions[R.region]){points++;assert(filled(S.crossings[xi]),`${name}/${mask}: a crossing of the region is not shaded`);}
     for(const ci of R.curves)for(const x of d.curves[ci]){
      const e=P.gEdges[d.nonAlt.indexOf(x>>1)];
      points++;assert(!filled(e.pts[e.pts.length>>1]),`${name}/${mask}: an edge of G is inside the shading`);
+    }
+    // The shading is opaque, so two regions overlapping would be one painting
+    // the other out. A region must hold its own crossings and nobody else's.
+    for(const O of P.regions){
+     if(O===R)continue;
+     for(const xi of d.regions[O.region]){
+      points++;
+      assert(!filled(S.crossings[xi]),`${name}/${mask}: region ${R.region} is shaded over region ${O.region}`);
+     }
     }
    }
   }
