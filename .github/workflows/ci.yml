@@ -35,3 +35,5 @@ jobs:
         run: node tests/invariants.test.cjs
       - name: Offline cache
         run: node tests/offline.test.cjs
+      - name: Alternating decomposition
+        run: node tests/decomposition.test.cjs

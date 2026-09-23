@@ -49,9 +49,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
 .seg.views button[aria-pressed="true"]{background:var(--accent);color:var(--paper)}
+.views .brief{display:none}
 .iconbtn{border:1px solid var(--rule);background:var(--paper);border-radius:9px;padding:6px 11px;cursor:pointer;color:var(--ink)}
 .iconbtn:hover{border-color:var(--muted)}
-.spacer{flex:1}
 .dock{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;z-index:3;max-width:calc(100% - 20px)}
 .toolbar{display:flex;align-items:center;gap:2px;background:var(--paper);border:1px solid var(--rule);border-radius:14px;padding:4px;box-shadow:0 6px 18px -10px color-mix(in srgb,var(--ink) 45%,transparent)}
 .toolbar button{width:40px;height:38px;display:grid;place-items:center;border:0;background:transparent;border-radius:10px;color:var(--muted);cursor:pointer}
@@ -82,10 +82,6 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .canvaswrap{position:relative;flex:1;min-height:0;border-radius:14px;overflow:hidden;border:1px solid var(--rule);background:var(--paper)}
 canvas{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 body{overscroll-behavior:none}
-.legend{position:absolute;left:14px;bottom:36px;background:color-mix(in srgb,var(--paper) 88%,transparent);border:1px solid var(--rule);border-radius:10px;padding:8px 12px;pointer-events:none;display:none;max-width:calc(100% - 28px)}
-.legend b{font-weight:600}
-.legend .sub{color:var(--muted);font-size:12.5px}
-.hint{position:absolute;left:14px;bottom:12px;right:14px;color:var(--muted);font-size:12.5px;pointer-events:none}
 .toast{position:absolute;left:50%;bottom:40px;transform:translate(-50%,8px);z-index:5;opacity:0;transition:opacity .18s,transform .18s;background:var(--warn-soft);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent);padding:8px 14px;border-radius:10px;font-weight:500;pointer-events:none;max-width:min(560px,90%);text-align:center}
 .toast.info{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
 .toast.show{opacity:1;transform:translate(-50%,0)}
@@ -151,7 +147,6 @@ body{font-size:16px}
 .save-status{font-size:12px;color:var(--muted);margin-left:auto}
 .apphead .iconbtn{flex-shrink:0}
 .bar{gap:8px}
-.bar .spacer{min-width:0}
 button{min-height:44px;touch-action:manipulation}
 .toolbar button{width:44px;height:44px}
 .toolbar{gap:2px}
@@ -177,7 +172,6 @@ aside{position:relative;min-height:0;min-width:0;padding:0;overflow:visible;back
 h2{font-size:15px}
 .small,.chk span small,.help p{font-size:13px;line-height:1.6}
 .chk{margin:10px 0}
-.hint{font-size:12px;max-height:3.2em;overflow:hidden}
 .panel-hidden .app{grid-template-columns:1fr}
 .panel-hidden aside{display:none}
 .panel-reveal{display:none;position:fixed;right:env(safe-area-inset-right);top:50%;transform:translateY(-50%);z-index:7;width:44px;height:68px;padding:0;place-items:center;border:1px solid var(--rule);border-right:0;border-radius:16px 0 0 16px;background:var(--paper);color:var(--accent);box-shadow:-3px 2px 14px #0002;cursor:pointer;touch-action:manipulation}
@@ -198,14 +192,22 @@ h2{font-size:15px}
  .apphead strong{font-size:17px}
  .save-status{order:3;flex-basis:100%;font-size:12px}
  .apphead .iconbtn{margin-left:auto}
+ .fileacts{flex:1;justify-content:flex-end}
  .bar{gap:6px}
  .views{width:100%;display:flex}
- .views button{flex:1;padding:6px 4px;font-size:13px}
+ /* Five view names do not fit across a phone, and the last of them ran off the
+    edge where it could not be reached at all. The long ones have a short form
+    for narrow screens, with the full name still on the button for a reader, and
+    the row scrolls if even those are too wide. */
+ .views{width:100%;overflow-x:auto;scrollbar-width:none}
+ .views::-webkit-scrollbar{display:none}
+ .views button{flex:1;padding:6px 4px;font-size:13px;white-space:nowrap}
+ .views .full{display:none}
+ .views .brief{display:inline}
  .toolbar{gap:0;padding:3px}
  .toolbar .sep{margin:0 2px}
  .toolbar button{width:36px;min-height:44px}
  .dock{max-width:calc(100% - 12px);top:8px}
- .hint{left:10px;right:10px;bottom:8px;font-size:11px}
 }
 
 .document-tabs{display:flex;align-items:stretch;gap:6px;margin:0 0 10px;min-width:0;flex-shrink:0}
@@ -222,6 +224,16 @@ h2{font-size:15px}
 .new-tab:hover{background:var(--bg);color:var(--ink);border-color:var(--rule)}
 .new-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .document-tabs>.iconbtn{flex-shrink:0}
+.fileacts{display:flex;align-items:stretch;gap:6px;flex-shrink:0}
+/* Full screen is the app's own chrome, not the browser's: the title, the file
+   tabs and the view bar go, and what is left is the canvas, the toolbar on it
+   and the arrow that brings the inspector back. On a phone that is most of the
+   header given back to the drawing. */
+.stage-full .apphead,.stage-full .document-tabs,.stage-full .bar{display:none}
+.stage-full .stage{padding:0}
+.stage-full .canvaswrap{border:0;border-radius:0}
+#fullBtn .exit,.stage-full #fullBtn .enter{display:none}
+.stage-full #fullBtn .exit{display:block}
 @media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
 /* Compact inspector pages keep common controls close and details optional. */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
@@ -240,6 +252,9 @@ h2{font-size:15px}
 .row label{grid-column:1}
 .row output{grid-column:2;grid-row:1;min-width:70px;font-variant-numeric:tabular-nums;color:var(--accent)}
 .row input[type=range]{grid-column:1/-1;width:100%;min-height:28px;margin:0}
+.adgraph{margin:10px 0 0;padding:8px;border:1px solid var(--rule);border-radius:10px;background:var(--paper)}
+.adgraph svg{display:block;width:100%;height:auto}
+.adgraph figcaption{margin-top:6px;font-size:12px;color:var(--muted);text-align:center}
 .row:has(input:disabled){opacity:.5}
 summary{min-height:44px;padding:10px 0;font-weight:600;cursor:pointer;color:var(--ink)}
 summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -255,18 +270,21 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <div class="document-tabs">
       <div id="documentTabs" class="tab-list" role="tablist" aria-label="Open knot files"></div>
       <button id="newTab" class="new-tab" aria-label="New diagram tab" title="New diagram tab">＋</button>
-      <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
+      <div class="fileacts">
+        <button class="iconbtn" id="openBtn" title="Open files in new tabs (Ctrl+O)">Open files</button>
+        <button class="iconbtn" id="pdOpen">Import PD</button>
+        <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
+        <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
+      </div>
     </div>
     <div class="bar">
       <div class="seg views" role="group" aria-label="Views">
-        <button data-view="diagram" aria-pressed="true">Diagram</button>
-        <button data-view="A" aria-pressed="false">all-A state</button>
-        <button data-view="B" aria-pressed="false">all-B state</button>
-        <button data-view="S" aria-pressed="false">Seifert</button>
+        <button data-view="diagram" aria-pressed="true" aria-label="Diagram">Diagram</button>
+        <button data-view="A" aria-pressed="false" aria-label="all-A state"><span class="full">all-A state</span><span class="brief">all-A</span></button>
+        <button data-view="B" aria-pressed="false" aria-label="all-B state"><span class="full">all-B state</span><span class="brief">all-B</span></button>
+        <button data-view="S" aria-pressed="false" aria-label="Seifert state">Seifert</button>
+        <button data-view="AD" aria-pressed="false" aria-label="Alternating decomposition"><span class="full">Alt. decomposition</span><span class="brief">Alt. dec.</span></button>
       </div>
-      <span class="spacer"></span><button class="iconbtn" id="pdOpen">Import PD</button>
-      <button class="iconbtn" id="saveBtn" title="Save to file (Ctrl+S)">Save</button>
-      <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
       <input type="file" id="fileInput" accept=".json,application/json" multiple hidden>
     </div>
     <div class="canvaswrap" id="wrap" role="tabpanel" aria-label="Current knot diagram">
@@ -282,6 +300,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           <span class="sep" aria-hidden="true"></span>
           <button id="undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
           <button id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+          <span class="sep" aria-hidden="true"></span>
+          <button id="fullBtn" aria-pressed="false" title="Full screen (F)" aria-label="Full screen"><svg class="enter" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4H4v5"/><path d="M15 4h5v5"/><path d="M15 20h5v-5"/><path d="M9 20H4v-5"/></svg><svg class="exit" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h5V4"/><path d="M20 9h-5V4"/><path d="M20 15h-5v5"/><path d="M4 15h5v5"/></svg></button>
         </div>
         <div class="toolopts" id="toolopts">
           <div class="toolopt" id="optDraw" hidden>
@@ -317,10 +337,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <div class="selmenu" id="selmenu" hidden>
         <button id="mCopy">Copy</button><button id="mCut">Cut</button><button id="mDelete" class="danger">Delete</button><button id="mPaste">Paste</button>
       </div>
-      <div class="legend" id="legend"></div>
       <div class="empty" id="empty"><div><strong>Draw a curve to begin</strong>Or select Import PD above to enter a code</div></div>
       <div class="toast" id="toast"></div>
-      <div class="hint" id="hint"></div>
     </div>
   </div>
 
@@ -355,6 +373,25 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <dt>Canonical Seifert surface genus</dt><dd id="vg">0</dd>
       </dl>
       <div class="flags" id="flags"></div>
+    </section>
+    <section>
+      <h2>Alternating decomposition</h2>
+      <dl class="inv">
+        <dt>Nonalternating edges of D</dt><dd id="adEdges">0</dd>
+        <dt>Decomposition curves</dt><dd id="adCurves">0</dd>
+        <dt>Alternating regions</dt><dd id="adRegions">0</dd>
+        <dt>Graph G</dt><dd id="adGraph">&mdash;</dd>
+        <dt>g<sub>T</sub>(G) from G alone</dt><dd id="adGenus">&mdash;</dd>
+      </dl>
+      <div class="flags" id="adFlags"></div>
+      <figure class="adgraph" id="adGraphView" hidden></figure>
+      <p class="small" id="adNote">Draw a closed diagram to decompose it.</p>
+      <details class="small">
+        <summary>What this is</summary>
+        <p>An edge of D, read as a 4-valent plane graph, is <em>nonalternating</em> when the strand is the overstrand at both of its ends, or the understrand at both. Mark every such edge with two points and, inside each face, join the marked points that are adjacent along the boundary without lying on the same edge. Those arcs close up into disjoint simple closed curves that cut the sphere into maximal <em>alternating regions</em>.</p>
+        <p>The <em>alternating decomposition graph</em> G has one vertex per curve and one edge per nonalternating edge of D, and an alternating diagram gives a single vertex with no edges. G is always planar and bipartite with every vertex of even degree, and it determines the Turaev surface: g<sub>T</sub>(G) above is computed from the abstract graph by the recursion of Corollary 3.9, with no reference to the diagram, and must agree with the g<sub>T</sub>(D) read off the all-A and all-B states at the top of this panel.</p>
+        <p>Method: <a href="https://doi.org/10.2140/agt.2017.17.793" target="_blank" rel="noopener noreferrer">Armond and Lowrance, &ldquo;Turaev genus and alternating decompositions&rdquo;, Algebr. Geom. Topol. 17 (2017) 793&ndash;830</a>.</p>
+      </details>
     </section>
     <section>
       <h2>Diagram actions</h2>
@@ -406,6 +443,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <label class="chk"><input type="checkbox" id="arrows"><span>Orientation arrows</span></label>
       <label class="chk"><input type="checkbox" id="grid" checked><span>Background grid</span></label>
       <label class="chk"><input type="checkbox" id="signs"><span>Crossing signs</span></label>
+      <label class="chk"><input type="checkbox" id="adSigns" checked><span>Signs on the decomposition overlay<small>Colours each edge of G by its sign and writes + or &minus; beside it, in the Alt. decomposition view. The graph figure in the inspector always shows the signs, since the way they alternate around a vertex is what makes a parallel class countable.</small></span></label>
+      <label class="chk"><input type="checkbox" id="adFill" checked><span>Shade the alternating regions<small>The shading goes over the diagram rather than under it, and is opaque, so a shaded region hides the tangle inside it completely: what is left on the canvas is G, a blob for every vertex and the nonalternating edge between them for every edge. Turn it off to see the diagram the regions are drawn on.</small></span></label>
     </section>
     <section>
       <h2>Pen &amp; touch</h2>
@@ -425,7 +464,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
       <p><b>Lasso</b> Enclose curves to select them, or switch the shape to Rectangle and just drag a box. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
       <p><b>Crossing overlap</b> “Separate overlapping crossings” (Settings) eases apart any crossings a drag pushed into each other, once the drag ends, and turns them back open so the strands meet at a readable angle. “Separation distance” sets how far. Crossings that were already close stay put.</p>
-      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>+</kbd> / <kbd>−</kbd> Drag radius · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
+      <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>F</kbd> Full screen · <kbd>+</kbd> / <kbd>−</kbd> Drag radius · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
       </details>
     </section>
@@ -1188,6 +1227,1071 @@ const KC = (function () {
     };
   }
 
+
+  // ----- alternating decomposition -----
+  // Armond and Lowrance, "Turaev genus and alternating decompositions",
+  // Algebr. Geom. Topol. 17 (2017) 793-830.
+  //
+  // Read D as a 4-valent plane graph. An edge of it is NONALTERNATING when the
+  // strand is the overstrand at both ends, or the understrand at both. Mark every
+  // nonalternating edge with two points and, inside each face, join the marked
+  // points that are adjacent along the boundary without lying on the same edge
+  // (Figure 1 of the paper). Those arcs close up into disjoint simple closed
+  // curves -- the alternating decomposition. The alternating decomposition graph
+  // G has one vertex per curve and one edge per nonalternating edge of D.
+  //
+  // Everything here runs on darts. Arc g is the piece of a component between two
+  // consecutive crossings; dart 2g leaves the earlier crossing running forwards
+  // and dart 2g+1 leaves the later one running backwards, so d^1 is the same arc
+  // seen from its other end.
+  function decompose(comps, X, a) {
+    a = a || analyze(comps, X);
+    const occ = a.occ, base = [];
+    let nArc = 0;
+    occ.forEach((l, c) => { base[c] = nArc; nArc += l.length; });
+    const nD = 2 * nArc, dart = new Array(nD).fill(null);
+    occ.forEach((l, c) => {
+      const m = l.length, L = comps[c].len;
+      l.forEach((e, j) => {
+        const g = base[c] + j, o = X[e.xi].occ[e.k];
+        const span = m > 1 ? mod(l[(j + 1) % m].s - e.s, L) : L;
+        dart[2 * g] = { xi: e.xi, k: e.k, c, arc: g, over: X[e.xi].over === e.k, ang: Math.atan2(o.dy, o.dx), s0: e.s, s1: e.s + span };
+      });
+      l.forEach((e, j) => {
+        const back = base[c] + (j - 1 + m) % m, f = dart[2 * back], o = X[e.xi].occ[e.k];
+        dart[2 * back + 1] = { xi: e.xi, k: e.k, c, arc: back, over: X[e.xi].over === e.k, ang: Math.atan2(-o.dy, -o.dx), s0: f.s1, s1: f.s0 };
+      });
+    });
+    const at = X.map(() => []);
+    for (let d = 0; d < nD; d++) if (dart[d]) at[dart[d].xi].push(d);
+    if (at.some(l => l.length !== 4)) return null;
+    at.forEach(l => l.sort((p, q) => dart[p].ang - dart[q].ang));
+    const rot = new Int32Array(nD);
+    at.forEach(l => l.forEach((d, i) => { rot[d] = l[(i + 1) % 4]; }));
+    const nextInFace = d => rot[d ^ 1];
+
+    const faceOf = new Int32Array(nD).fill(-1), faces = [];
+    for (let d = 0; d < nD; d++) {
+      if (faceOf[d] >= 0) continue;
+      const walk = []; let e = d;
+      do { faceOf[e] = faces.length; walk.push(e); e = nextInFace(e); } while (e !== d);
+      faces.push(walk);
+    }
+
+    const isNA = new Uint8Array(nArc), nonAlt = [];
+    for (let g = 0; g < nArc; g++) if (dart[2 * g].over === dart[2 * g + 1].over) { isNA[g] = 1; nonAlt.push(g); }
+    // Along a face walk the over/under role flips exactly at the nonalternating
+    // arcs, so every face meets an even number of them and the arcs below always
+    // pair up. sigma walks a decomposition curve from marked point to marked
+    // point: leave the arc backwards, run along the face past the alternating
+    // arcs, and stop at the first nonalternating one.
+    const nextNA = d => { let e = nextInFace(d); while (!isNA[e >> 1]) e = nextInFace(e); return e; };
+    const sigma = new Int32Array(nD).fill(-1);
+    for (const g of nonAlt) for (const d of [2 * g, 2 * g + 1]) sigma[d] = nextNA(d ^ 1);
+    const curveOf = new Int32Array(nD).fill(-1), curves = [];
+    for (const g of nonAlt) for (const d of [2 * g, 2 * g + 1]) {
+      if (curveOf[d] >= 0) continue;
+      const cyc = []; let e = d;
+      do { curveOf[e] = curves.length; cyc.push(e); e = sigma[e]; } while (e !== d);
+      curves.push(cyc);
+    }
+
+    // An alternating region is a piece of the sphere cut along the curves that
+    // still holds crossings: exactly a maximal run of alternating arcs.
+    const ru = UF(Math.max(1, X.length));
+    for (let g = 0; g < nArc; g++) if (!isNA[g]) ru.union(dart[2 * g].xi, dart[2 * g + 1].xi);
+    const regionIx = new Map(), regions = [], regionOfX = [];
+    X.forEach((_, i) => {
+      const r = ru.find(i);
+      if (!regionIx.has(r)) { regionIx.set(r, regions.length); regions.push([]); }
+      regionOfX[i] = regionIx.get(r); regions[regionOfX[i]].push(i);
+    });
+    const curveRegion = curves.map(cyc => regionOfX[dart[cyc[0]].xi]);
+    // A region no curve bounds is a whole alternating sphere piece, and the paper
+    // gives it the single vertex that stands for an alternating diagram.
+    const bounded = new Set(curveRegion);
+    const solo = regions.map((_, r) => r).filter(r => !bounded.has(r));
+    const signed = nonAlt.map(g => ({ u: curveOf[2 * g], v: curveOf[2 * g + 1], arc: g, over: !!dart[2 * g].over }));
+    return {
+      dart, rot, nextInFace, faces, faceOf, isNA, nonAlt, sigma, curves, curveOf,
+      regions, regionOfX, curveRegion, solo, nArc, alternating: !nonAlt.length,
+      graph: { n: curves.length + solo.length, edges: signed.map(e => [e.u, e.v]), signed, curves: curves.length, solo: solo.length }
+    };
+  }
+
+  // Proposition 3.5: the Turaev surface of D is the TWISTED embedding of G -- the
+  // sphere embedding carrying a half twist in every edge band. G is bipartite and
+  // every edge joins the two sides, so half-twisting every band is the same as
+  // reflecting the vertex disks on one side, that is, reversing their rotation.
+  // The sphere embedding itself is read straight off the decomposition: the
+  // marked points sit along a curve in the order sigma visits them.
+  function decompositionGenus(dec) {
+    if (!dec) return null;
+    const { curves, curveOf, sigma, nonAlt, graph } = dec;
+    const darts = [];
+    for (const g of nonAlt) darts.push(2 * g, 2 * g + 1);
+    const back = new Int32Array(sigma.length).fill(-1);
+    for (const d of darts) back[sigma[d]] = d;
+    const boundary = (flip) => {
+      const seen = new Set(); let f = 0;
+      for (const d of darts) {
+        if (seen.has(d)) continue;
+        f++; let e = d;
+        do { seen.add(e); e = (flip[curveOf[e]] ? back[e] : sigma[e]) ^ 1; } while (e !== d);
+      }
+      return f;
+    };
+    const colour = new Int8Array(curves.length).fill(-1), adj = curves.map(() => []);
+    graph.edges.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+    let k = graph.solo;
+    for (let v = 0; v < curves.length; v++) {
+      if (colour[v] >= 0) continue;
+      k++; colour[v] = 0;
+      const q = [v];
+      while (q.length) { const w = q.pop(); for (const z of adj[w]) { if (colour[z] < 0) { colour[z] = 1 - colour[w]; q.push(z); } else if (colour[z] === colour[w]) return null; } }
+    }
+    // Isolated vertices are spheres of their own: one vertex, no edge, one face.
+    const e = graph.edges.length, V = curves.length + graph.solo;
+    const flat = boundary(new Uint8Array(curves.length)) + graph.solo, twisted = boundary(colour) + graph.solo;
+    if (V - e + flat !== 2 * k) return null;
+    const genus = (2 * k - (V - e + twisted)) / 2;
+    return Number.isInteger(genus) && genus >= 0 ? { genus, components: k, sphereFaces: flat, twistedFaces: twisted } : null;
+  }
+
+  // Corollary 3.9: the same Turaev genus read straight off the abstract graph,
+  // with no embedding and no diagram. Lemma 3.6 guarantees that one of the two
+  // rules always applies, so the recursion terminates. The rules only mean
+  // anything for an alternating decomposition graph, so a graph that is not one
+  // is refused rather than answered: planarity is assumed of the caller, but the
+  // other two conditions of Proposition 3.3 are checked here.
+  function decompositionGenusRecursive(n, edgeList) {
+    const degree = new Array(n).fill(0), near = Array.from({ length: n }, () => []);
+    for (const [u, v] of edgeList) {
+      if (!(u >= 0 && u < n && v >= 0 && v < n) || u === v) return null;
+      degree[u]++; degree[v]++; near[u].push(v); near[v].push(u);
+    }
+    if (degree.some(d => d % 2)) return null;
+    const side = new Int8Array(n).fill(-1);
+    for (let v = 0; v < n; v++) {
+      if (side[v] >= 0) continue;
+      side[v] = 0;
+      const q = [v];
+      while (q.length) { const w = q.pop(); for (const z of near[w]) { if (side[z] < 0) { side[z] = 1 - side[w]; q.push(z); } else if (side[z] === side[w]) return null; } }
+    }
+    const count = (N, E) => { const u = UF(Math.max(1, N)); E.forEach(e => u.union(e[0], e[1])); const r = new Set(); for (let i = 0; i < N; i++) r.add(u.find(i)); return r.size; };
+    const merge = (N, E, group) => {
+      const id = new Array(N).fill(-1); let next = 0;
+      for (let i = 0; i < N; i++) if (!group.has(i)) id[i] = next++;
+      const gid = next++;
+      group.forEach(i => { id[i] = gid; });
+      return [next, E.map(e => [id[e[0]], id[e[1]]]).filter(e => e[0] !== e[1])];
+    };
+    let guard = 0;
+    const go = (N, E) => {
+      if (++guard > 5000) return null;
+      if (!E.length) return 0;
+      const k = count(N, E), seen = new Map();
+      for (let i = 0; i < E.length; i++) {
+        const key = Math.min(E[i][0], E[i][1]) + ',' + Math.max(E[i][0], E[i][1]);
+        if (seen.has(key)) {
+          const j = seen.get(key), rest = E.filter((_, t) => t !== i && t !== j);
+          if (count(N, rest) === k) { const g = go(N, rest); return g === null ? null : g + 1; }
+          return go(...merge(N, rest, new Set(E[i])));
+        }
+        seen.set(key, i);
+      }
+      const deg = new Array(N).fill(0), inc = Array.from({ length: N }, () => []);
+      E.forEach((e, i) => { deg[e[0]]++; deg[e[1]]++; inc[e[0]].push(i); inc[e[1]].push(i); });
+      for (let v = 0; v < N; v++) if (deg[v] === 2) {
+        const [i, j] = inc[v], rest = E.filter((_, t) => t !== i && t !== j);
+        return go(...merge(N, rest, new Set([v, ...E[i], ...E[j]])));
+      }
+      return null;
+    };
+    return go(n, edgeList.map(e => [e[0], e[1]]));
+  }
+
+  // Geometry for the overlay. A decomposition curve is drawn as the SHORTEST
+  // curve of its kind: it must pass through its marked points, and it must stay
+  // clear of every strand and of every other curve. Length is then minimised
+  // under those two rules, which is what makes it come out round -- a loop pulled
+  // taut around an alternating tangle. The clearance rule is the first
+  // principle, not an afterthought: a point moves a bounded amount per step and
+  // is pushed straight back out of anything it approaches, so a curve can never
+  // cross a strand, and so can never take in a strand belonging to another
+  // tangle, whatever the relaxation does.
+  // The relaxation is the one part of this file that takes long enough to be
+  // felt, so it is written as a generator that gives the thread back between
+  // rounds. Anything that just wants the answer drains it; the app drives it a
+  // few rounds at a time so a gesture never waits on it.
+  function decompositionPaths(comps, dec, opt) {
+    const steps = decompositionSteps(comps, dec, opt);
+    let step; while (!(step = steps.next()).done);
+    return step.value;
+  }
+  function* decompositionSteps(comps, dec, opt) {
+    if (!dec) return null;
+    opt = opt || {};
+    const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
+    const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
+    const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
+    const fine = opt.spacing || 9;                             // point spacing, as drawn
+    const coarse = opt.coarse == null ? 4 : opt.coarse;        // and how far above it the first rounds run
+    const rounds = opt.rounds == null ? 150 : opt.rounds;
+    const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
+    const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
+    const creep = opt.creep == null ? 2 : opt.creep;          // how far a marked point may slide in a round
+    const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
+    const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
+    const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
+    const tail = opt.tail == null ? 12 : opt.tail;            // and settling the corners the last pull leaves
+    const stretch = opt.stretch == null ? 120 : opt.stretch;   // how many points ahead a chord may reach when pulling taut
+    const blunt = opt.blunt == null ? 5 : opt.blunt;          // over how many points either side a dent is filled
+    const passes = opt.smooth == null ? 12 : opt.smooth;      // passes of plain smoothing once the shape is settled
+    const stray = opt.stray == null ? clear : opt.stray;      // and how far that may take a point off what it settled on
+    const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
+    const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
+
+    let h = fine, gait = 1;                                    // the spacing in force, and the step it allows
+
+    // A grid of line segments, asked only for what lies near a point. The curve
+    // grid is rebuilt as the curves move, so it is a plain array of buckets over
+    // a fixed frame rather than anything that allocates per round.
+    const CELL = Math.max(16, 2 * Math.max(clear, apart, fine), pad + 4);
+    const frame = { x0: 0, y0: 0, nx: 1, ny: 1 };
+    const grid = () => ({ cell: Array.from({ length: frame.nx * frame.ny }, () => []), at: [] });
+    const cellsOf = it => {
+      const lo = Math.max(0, Math.floor((Math.min(it[0], it[2]) - frame.x0) / CELL));
+      const hi = Math.min(frame.nx - 1, Math.floor((Math.max(it[0], it[2]) - frame.x0) / CELL));
+      const bo = Math.max(0, Math.floor((Math.min(it[1], it[3]) - frame.y0) / CELL));
+      const bi = Math.min(frame.ny - 1, Math.floor((Math.max(it[1], it[3]) - frame.y0) / CELL));
+      const out = [];
+      for (let cx = lo; cx <= hi; cx++) for (let cy = bo; cy <= bi; cy++) out.push(cy * frame.nx + cx);
+      return out;
+    };
+    const fill = (g, items) => {
+      for (const c of g.cell) c.length = 0;
+      g.at = [];
+      for (let i = 0; i < items.length; i++) {
+        const cells = cellsOf(items[i]);
+        g.at.push(cells);
+        for (const k of cells) g.cell[k].push(i);
+      }
+      return g;
+    };
+    // A curve moves while it is being swept against, so its index is kept exact
+    // point by point rather than rebuilt once a round. A stale index is what let
+    // a curve walk through a part of itself that had already moved on.
+    const relist = (g, items, i) => {
+      for (const k of g.at[i]) { const l = g.cell[k], at = l.indexOf(i); if (at >= 0) l.splice(at, 1); }
+      const cells = cellsOf(items[i]);
+      g.at[i] = cells;
+      for (const k of cells) g.cell[k].push(i);
+    };
+    const box = (g, x0, y0, x1, y1, out) => {
+      out.length = 0;
+      const lo = Math.max(0, Math.floor((Math.min(x0, x1) - frame.x0) / CELL) - 1);
+      const hi = Math.min(frame.nx - 1, Math.floor((Math.max(x0, x1) - frame.x0) / CELL) + 1);
+      const bo = Math.max(0, Math.floor((Math.min(y0, y1) - frame.y0) / CELL) - 1);
+      const bi = Math.min(frame.ny - 1, Math.floor((Math.max(y0, y1) - frame.y0) / CELL) + 1);
+      for (let x = lo; x <= hi; x++) for (let y = bo; y <= bi; y++) {
+        const l = g.cell[y * frame.nx + x];
+        for (let i = 0; i < l.length; i++) out.push(l[i]);
+      }
+      return out;
+    };
+    const near = (g, px, py, out) => box(g, px, py, px, py, out);
+    // A segment sits in every cell it spans, so a range query can hand the same
+    // one back several times. That is harmless when taking a nearest distance and
+    // wrong when counting crossings, so counting goes through a stamp.
+    let visit = 0;
+    const once = new Int32Array(4).fill(-1);
+    const stamps = { strand: once };
+    const fresh = (name, size) => {
+      if (stamps[name].length < size) stamps[name] = new Int32Array(size).fill(-1);
+      return stamps[name];
+    };
+    // The nearest point on a segment, asked for millions of times a run: it
+    // leaves the foot of the perpendicular in `cqx`/`cqy` and returns only the
+    // distance, because handing back a little object for each answer cost more
+    // in collection than the arithmetic did.
+    let cqx = 0, cqy = 0;
+    const closest = (it, px, py) => {
+      const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
+      let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
+      u = u < 0 ? 0 : u > 1 ? 1 : u;
+      cqx = it[0] + u * ex; cqy = it[1] + u * ey;
+      const dx = px - cqx, dy = py - cqy;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const strand = [];
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    comps.forEach(cm => {
+      const q = cm.pts, n = q.length;
+      for (let i = 0; i < n; i++) {
+        strand.push([q[i].x, q[i].y, q[(i + 1) % n].x, q[(i + 1) % n].y]);
+        bx0 = Math.min(bx0, q[i].x); bx1 = Math.max(bx1, q[i].x);
+        by0 = Math.min(by0, q[i].y); by1 = Math.max(by1, q[i].y);
+      }
+    });
+    if (!strand.length) { bx0 = by0 = 0; bx1 = by1 = 1; }
+    const PAD = 4 * CELL;
+    frame.x0 = bx0 - PAD; frame.y0 = by0 - PAD;
+    frame.nx = Math.max(1, Math.ceil((bx1 - bx0 + 2 * PAD) / CELL));
+    frame.ny = Math.max(1, Math.ceil((by1 - by0 + 2 * PAD) / CELL));
+    const strandAt = fill(grid(), strand);
+
+    const sample = (d, from, to) => {
+      const D = dart[d], cm = comps[D.c], f = D.s1 > D.s0 ? 1 : -1;
+      const n = Math.max(1, Math.ceil(Math.abs(to - from) / h)), out = [];
+      for (let i = 0; i <= n; i++) { const P = pointAtS(cm, from + (to - from) * i / n); out.push({ x: P.x, y: P.y, tx: f * P.dx, ty: f * P.dy }); }
+      return out;
+    };
+    // Which side of a face walk the face lies on is one global bit. Under "face
+    // on the left" every walk turns through +2*pi except the one outer walk per
+    // piece, so the total turning over all walks is +2*pi*c(D).
+    let turn = 0;
+    for (const walk of faces) {
+      const pts = [];
+      for (const d of walk) pts.push(...sample(d, dart[d].s0, dart[d].s1));
+      for (let i = 0; i < pts.length; i++) {
+        const u = pts[i], v = pts[(i + 1) % pts.length];
+        turn += Math.atan2(u.tx * v.ty - u.ty * v.tx, u.tx * v.tx + u.ty * v.ty);
+      }
+    }
+    const side = turn >= 0 ? 1 : -1;
+
+    // The two marked points may sit anywhere on their edge, so they are placed
+    // symmetrically about its middle: the piece between them is the edge of G,
+    // and the rest of the edge belongs to the alternating region at either end.
+    // The two marked points may sit anywhere on their edge, so where they sit is
+    // not fixed: each is held as a fraction of the way along from its own end and
+    // is free to slide, subject to keeping clear of the crossings and leaving a
+    // bar between them. Pinning them made every region pinch to a neck at each
+    // nonalternating edge, whatever the rest of the relaxation did.
+    const span = d => Math.abs(dart[d].s1 - dart[d].s0);
+    const frac = new Float64Array(dart.length);
+    const barOf = L => opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
+    const home = new Float64Array(dart.length);
+    for (const g of nonAlt) { const L = span(2 * g); home[2 * g] = home[2 * g + 1] = frac[2 * g] = frac[2 * g + 1] = (1 - barOf(L) / L) / 2; }
+    const markAt = d => { const D = dart[d]; return D.s0 + (D.s1 > D.s0 ? 1 : -1) * frac[d] * span(d); };
+    // A marked point may not crowd the crossing at its end of the edge, and the
+    // two on one edge may not close up on each other.
+    const settle = () => {
+      for (const g of nonAlt) {
+        const L = span(2 * g);
+        const edge = Math.min(0.3, Math.max(9, 0.1 * L) / L), bar = Math.min(0.4, Math.max(16, 0.2 * L) / L);
+        // The slide is meant to take the pinch out of a region, not to choose
+        // where the edge of G goes: left free, shortening walks both points onto
+        // the crossings, which is shorter and says less. So each stays within a
+        // band of where it started.
+        const hold = (d) => {
+          const f = Math.max(home[d] - band, Math.min(home[d] + band, frac[d]));
+          return Math.max(edge, f);
+        };
+        let a = hold(2 * g), b = hold(2 * g + 1);
+        const over = a + b - (1 - bar);
+        if (over > 0) { a = Math.max(edge, a - over / 2); b = Math.max(edge, b - over / 2); }
+        frac[2 * g] = a; frac[2 * g + 1] = b;
+      }
+    };
+
+    // Offsetting a polyline folds it into a little loop at every corner that
+    // turns the wrong way; cutting each loop out keeps the starting curve simple.
+    const meet = (a, b, c, d) => {
+      const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+      const den = rx * sy - ry * sx;
+      if (den > -1e-12 && den < 1e-12) return null;
+      const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+      const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+      if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) return null;
+      return { x: a.x + t * rx, y: a.y + t * ry };
+    };
+    const dropLoops = pts => {
+      const out = [];
+      let i = 0;
+      while (i < pts.length - 1) {
+        out.push(pts[i]);
+        let cut = -1, at = null;
+        for (let j = pts.length - 2; j > i + 1; j--) {
+          const q = meet(pts[i], pts[i + 1], pts[j], pts[j + 1]);
+          if (q) { cut = j; at = q; break; }
+        }
+        if (cut < 0) { i++; continue; }
+        out.push(at); i = cut + 1;
+      }
+      out.push(pts[pts.length - 1]);
+      return out;
+    };
+    const respace = pts => {
+      const cum = [0];
+      for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+      const total = cum[cum.length - 1], n = Math.max(1, Math.round(total / h)), out = [];
+      let j = 0;
+      for (let k = 0; k <= n; k++) {
+        const at = total * k / n;
+        while (j < cum.length - 2 && cum[j + 1] < at) j++;
+        const f = (at - cum[j]) / ((cum[j + 1] - cum[j]) || 1);
+        out.push({ x: pts[j].x + f * (pts[j + 1].x - pts[j].x), y: pts[j].y + f * (pts[j + 1].y - pts[j].y) });
+      }
+      return out;
+    };
+
+    // The starting curve: hug the face boundary a clearance away. It is already
+    // the right curve, just far longer than it needs to be.
+    const arcStart = x => {
+      const back = x ^ 1, end = sigma[x], pts = [];
+      const take = arr => arr.forEach(P => pts.push({ x: P.x - side * P.ty * clear, y: P.y + side * P.tx * clear }));
+      take(sample(back, markAt(x), dart[back].s1));
+      for (let e = nextInFace(back); e !== end; e = nextInFace(e)) take(sample(e, dart[e].s0, dart[e].s1));
+      take(sample(end, dart[end].s0, markAt(end)));
+      return respace(dropLoops(pts));
+    };
+    // Each curve is kept as its list of arcs, one per marked point it passes
+    // through. An arc's two ends are pinned to that marked point and never move;
+    // every other point is free, and its neighbours are always inside the same
+    // arc, so shortening never has to reason across a pin.
+    const curveArcs = curves.map(cyc => cyc.map(x => arcStart(x)));
+    const flatten = () => {
+      const flat = [], pin = [], where = [];
+      curveArcs.forEach((arcs, c) => {
+        const pts = [], mark = [], at = [];
+        arcs.forEach((arc, a) => arc.forEach((P, i) => { pts.push(P); mark.push(i === 0 || i === arc.length - 1); at.push(a * 1e5 + i); }));
+        flat.push(pts); pin.push(mark); where.push(at);
+      });
+      return { flat, pin, where };
+    };
+
+    // Cut out any small loop inside an arc, leaving its two pinned ends alone.
+    const mend = arc => {
+      for (let sweep = 0; sweep < 2; sweep++) {
+        let cut = false;
+        for (let i = 0; i + 3 < arc.length; i++) {
+          for (let d = 2; d <= 8 && i + d + 1 < arc.length; d++) {
+            const at = meet(arc[i], arc[i + 1], arc[i + d], arc[i + d + 1]);
+            if (!at) continue;
+            arc.splice(i + 1, d, at); cut = true; break;
+          }
+        }
+        if (!cut) break;
+      }
+      return arc;
+    };
+
+    // A curve is still legal when it is simple and misses every other curve. Both
+    // halves matter: convexifying pushes curves outwards, and the one thing that
+    // must never happen is two of them crossing, since that is a region taking in
+    // a piece of a tangle that is not its own.
+    const check = grid();
+    const legal = () => {
+      const segs = [], tag = [], ok = curveArcs.map(() => true);
+      curveArcs.forEach((arcs, c) => {
+        const pts = [].concat(...arcs), n = pts.length;
+        for (let i = 0; i < n; i++) { segs.push([pts[i].x, pts[i].y, pts[(i + 1) % n].x, pts[(i + 1) % n].y]); tag.push(c * 1e6 + i); }
+      });
+      fill(check, segs);
+      const look = [];
+      const size = curveArcs.map(arcs => arcs.reduce((t, arc) => t + arc.length, 0));
+      for (let k = 0; k < segs.length; k++) {
+        const c = Math.floor(tag[k] / 1e6), i = tag[k] % 1e6, n = size[c];
+        for (const j of box(check, segs[k][0], segs[k][1], segs[k][2], segs[k][3], look)) {
+          if (j <= k) continue;
+          const oc = Math.floor(tag[j] / 1e6), oi = tag[j] % 1e6;
+          if (oc === c && Math.min(Math.abs(oi - i), n - Math.abs(oi - i)) <= 1) continue;
+          const a = segs[k], b = segs[j];
+          if (meet({ x: a[0], y: a[1] }, { x: a[2], y: a[3] }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) { ok[c] = false; ok[oc] = false; }
+        }
+      }
+      // And it must meet the diagram exactly at its own marked points, one per
+      // arc. Sweeping a point's path cannot see the segments it drags, so a curve
+      // can slip past a strand without any point crossing one; counting settles
+      // it, and a curve that has slipped is put back.
+      const crossings = curveArcs.map(() => 0), seen = fresh('strand', strand.length);
+      for (let k = 0; k < segs.length; k++) {
+        const c = Math.floor(tag[k] / 1e6), a = segs[k], here = ++visit;
+        for (const j of box(strandAt, a[0], a[1], a[2], a[3], look)) {
+          if (seen[j] === here) continue;
+          seen[j] = here;
+          const b = strand[j];
+          if (meet({ x: a[0], y: a[1] }, { x: a[2], y: a[3] }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) crossings[c]++;
+        }
+      }
+      curveArcs.forEach((arcs, c) => { if (crossings[c] !== arcs.length) ok[c] = false; });
+      return ok;
+    };
+
+    // Shorten every curve at once, so two sharing a face meet in the middle
+    // instead of one taking the room before the other has moved.
+    // Where a curve meets a marked point it crosses the edge on a short chord: the
+    // end of one arc a clearance out on one side, the start of the next the same
+    // distance out on the other.
+    const wide = new Float64Array(dart.length).fill(clear), wideBack = new Float64Array(dart.length).fill(clear);
+    const chordAt = x => {
+      const P = pointAtS(comps[dart[x].c], markAt(x)), f = dart[x].s1 > dart[x].s0 ? 1 : -1;
+      const tx = f * P.dx, ty = f * P.dy, nx = -side * ty, ny = side * tx;
+      const a = wide[x], b = wideBack[x];
+      return { tx, ty, into: { x: P.x + nx * a, y: P.y + ny * a }, outOf: { x: P.x - nx * b, y: P.y - ny * b } };
+    };
+    // A marked point moves under the same rule as everything else: the segments
+    // it carries must go on crossing the diagram exactly as often as they did,
+    // and the chord itself must still cross its own edge once. A proposal that
+    // fails is dropped and the mark stays where it was.
+    const setChords = () => curves.forEach((cyc, c) => {
+      const arcs = curveArcs[c], m = cyc.length;
+      cyc.forEach((x, j) => {
+        const before = arcs[(j - 1 + m) % m], after = arcs[j];
+        const wasIn = before[before.length - 1], wasOut = after[0];
+        const u = before[before.length - 2] || wasOut, v = after[1] || wasIn;
+        const keepFrac = frac[x], keepWide = wide[x], keepBack = wideBack[x];
+        const at = chordAt(x);
+        const fine = cuts(u.x, u.y, at.into.x, at.into.y) === cuts(u.x, u.y, wasIn.x, wasIn.y)
+          && cuts(v.x, v.y, at.outOf.x, at.outOf.y) === cuts(v.x, v.y, wasOut.x, wasOut.y)
+          && cuts(at.into.x, at.into.y, at.outOf.x, at.outOf.y) === 1;
+        if (!fine) { frac[x] = keepFrac; wide[x] = keepWide; wideBack[x] = keepBack; return; }
+        before[before.length - 1] = at.into;
+        after[0] = at.outOf;
+      });
+    });
+    // Slide each marked point along its own edge towards whichever way shortens
+    // the two arcs meeting there. It is the same length that the rest of the
+    // relaxation is minimising, with one more degree of freedom.
+    const slide = () => {
+      curves.forEach((cyc, c) => {
+        const arcs = curveArcs[c], m = cyc.length;
+        cyc.forEach((x, j) => {
+          const before = arcs[(j - 1 + m) % m], after = arcs[j];
+          if (before.length < 2 || after.length < 2) return;
+          const at = chordAt(x), u = before[before.length - 2], v = after[1];
+          const du = Math.hypot(u.x - at.into.x, u.y - at.into.y) || 1;
+          const dv = Math.hypot(v.x - at.outOf.x, v.y - at.outOf.y) || 1;
+          const pull = ((u.x - at.into.x) / du + (v.x - at.outOf.x) / dv) * at.tx
+                     + ((u.y - at.into.y) / du + (v.y - at.outOf.y) / dv) * at.ty;
+          frac[x] += Math.max(-creep, Math.min(creep, creep * pull)) / span(x);
+        });
+      });
+      settle();
+      setChords();
+    };
+
+    const bag = [], sack = [], pouch = [], curveAt = grid();
+    // How many times a segment crosses the diagram. A move may not change this
+    // for either of the two segments the point carries.
+    const cuts = (x0, y0, x1, y1) => {
+      const seen = fresh('strand', strand.length), here = ++visit;
+      let k = 0;
+      for (const j of box(strandAt, x0, y0, x1, y1, sack)) {
+        if (seen[j] === here) continue;
+        seen[j] = here;
+        const b = strand[j];
+        if (meet({ x: x0, y: y0 }, { x: x1, y: y1 }, { x: b[0], y: b[1] }, { x: b[2], y: b[3] })) k++;
+      }
+      return k;
+    };
+    // A curve under tension is a string: where it is not held against something
+    // it runs straight, and a dent left in it is a dent nothing is holding. The
+    // relaxation walks each point downhill a step at a time and settles into
+    // whatever local minimum it is nearest, which does leave such dents behind.
+    // So the arcs are also pulled taut outright: the chord between two points of
+    // an arc replaces everything between them whenever that chord is one the
+    // curve is allowed to take. It is the same rule the relaxation obeys, asked
+    // globally instead of a step at a time, and it is what takes out a groove
+    // the flow would have needed hundreds of rounds to reach.
+    const chordFree = (A, B, c, curveSeg, owner) => {
+      // Nothing crossed, and no closer to anything than the relaxation may come.
+      if (cuts(A.x, A.y, B.x, B.y) !== 0) return false;
+      const dx = B.x - A.x, dy = B.y - A.y, L = Math.hypot(dx, dy);
+      const steps = Math.max(2, Math.ceil(L / (0.5 * fine)));
+      for (let step = 0; step <= steps; step++) {
+        const px = A.x + dx * step / steps, py = A.y + dy * step / steps;
+        for (const k of near(strandAt, px, py, bag)) if (closest(strand[k], px, py) < clear) return false;
+        for (const k of near(curveAt, px, py, pouch)) {
+          if (Math.floor(owner[k] / 1e6) === c) continue;
+          if (closest(curveSeg[k], px, py) < apart) return false;
+        }
+      }
+      return true;
+    };
+    // A chord can miss every strand and still close over one: a strand that loops
+    // inside the pocket it cuts off crosses neither the chord nor the arc. Taking
+    // the shortcut would swallow it whole, and a count of crossings would never
+    // notice, so the pocket is asked directly whether anything is in it.
+    const swallows = (arc, i, j) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let k = i; k <= j; k++) {
+        const Q = arc[k];
+        if (Q.x < x0) x0 = Q.x; if (Q.x > x1) x1 = Q.x;
+        if (Q.y < y0) y0 = Q.y; if (Q.y > y1) y1 = Q.y;
+      }
+      const held = (px, py) => {
+        let w = false;
+        for (let a = i, b = j; a <= j; b = a++) {
+          const A = arc[a], B = arc[b];
+          if ((A.y > py) !== (B.y > py) && px < (B.x - A.x) * (py - A.y) / (B.y - A.y) + A.x) w = !w;
+        }
+        return w;
+      };
+      const seen = fresh('strand', strand.length), here = ++visit;
+      for (const k of box(strandAt, x0, y0, x1, y1, sack)) {
+        if (seen[k] === here) continue;
+        seen[k] = here;
+        if (held(strand[k][0], strand[k][1])) return true;
+      }
+      return false;
+    };
+    // A chord is probed by sampling along it, so a long one costs more to test
+    // than a short one, and letting the reach run to the end of the arc makes the
+    // pull quadratic in its length -- on a curve with a long open run that is
+    // unbounded work for no gain. Capped, it is linear: a dent wider than the
+    // reach is one the relaxation itself fills, since wide is exactly what it is
+    // good at.
+    function* pullTaut(curveSeg, owner) {
+      for (let c = 0; c < curveArcs.length; c++) {
+        const arcs = curveArcs[c];
+        for (let a = 0; a < arcs.length; a++) {
+          yield 'pull';
+          const arc = arcs[a];
+          if (arc.length < 4) continue;
+          const out = [arc[0]];
+          let i = 0;
+          while (i < arc.length - 1) {
+            const stop = Math.min(arc.length, i + 1 + stretch);
+            let best = i + 1;
+            for (let j = i + 2; j < stop; j++) { if (!chordFree(arc[i], arc[j], c, curveSeg, owner)) break; best = j; }
+            while (best > i + 1 && swallows(arc, i, best)) best--;
+            out.push(arc[best]); i = best;
+          }
+          arcs[a] = respace(out);
+        }
+      }
+    }
+
+    let shaping = false, pulled = false;
+    const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
+    const stuck = curveArcs.map(() => false), trips = curveArcs.map(() => 0);
+    const keep = curves.map(cyc => cyc.map(x => [frac[x], wide[x], wideBack[x]]));
+    let limit = rounds, quiet = 0, was = Infinity;
+    // The ladder: the spacing in force, and the round this level gives way at.
+    // A third of the budget each is a cap rather than a share, since a level
+    // that has stopped moving hands what is left to the next one straight away,
+    // and everything it does not spend goes to the spacing that is drawn.
+    let level = Math.max(1, coarse), levelEnd = Math.ceil(rounds / 3);
+    for (let round = 0; round < limit; round++) {
+      if (round) yield round;
+      // Shortening a curve is a heat flow, so a dent takes about as many rounds
+      // to fill as the square of its width in points. At nine pixels a point the
+      // wide dents in a big diagram are never reached inside any budget worth
+      // paying for: 400 rounds still left grooves in a 63-crossing diagram. So
+      // the curve is pulled taut on a coarse copy of itself first -- four times
+      // the spacing, a quarter of the points, and the same shape sixteen times
+      // sooner -- and the spacing is halved back down to the drawn one as it
+      // goes. Every rule still holds at every level, since they are all written
+      // in pixels rather than in points, and the last rounds are at the spacing
+      // that is actually drawn.
+      if (level * fine !== h) {
+        h = level * fine; gait = level;
+        curveArcs.forEach(arcs => arcs.forEach((arc, a) => { arcs[a] = respace(arc); }));
+      }
+      // Points crowd towards a pin as the curve shortens, and once one lands on
+      // top of a pin the curve folds over its own marked point. Spreading each
+      // arc out again every so often is what stops that happening.
+      if (round && round % 10 === 0) curveArcs.forEach(arcs => arcs.forEach((arc, a) => { arcs[a] = respace(arc); }));
+      const { flat, pin, where } = flatten();
+      const curveSeg = [], owner = [], base = [];
+      flat.forEach((pts, c) => {
+        base[c] = curveSeg.length;
+        for (let i = 0; i < pts.length; i++) {
+          const j = (i + 1) % pts.length;
+          curveSeg.push([pts[i].x, pts[i].y, pts[j].x, pts[j].y]); owner.push(c * 1e6 + i);
+        }
+      });
+      fill(curveAt, curveSeg);
+      let shift = 0;
+      for (let c = 0; c < flat.length; c++) {
+        // A round is a pass over every point of every curve, which on a big
+        // diagram is long enough to drop a frame on its own, so the thread comes
+        // back between curves as well as between rounds. Nothing outside reads
+        // the curves while it is away: a gesture meanwhile replaces the analysis,
+        // and the run is dropped rather than resumed.
+        if (c) yield 'curve';
+        const pts = flat[c], n = pts.length;
+        // Filling a dent outwards is done against a window rather than against
+        // the two neighbours: a three-point mean fills over a couple of points,
+        // which at nine pixels apart still leaves a corner. Over eleven it reads
+        // as a curve. The sums are taken once for the round, so every point is
+        // filtered against the same curve.
+        let sumX = null, sumY = null;
+        if (shaping && n > 2 * blunt + 2) {
+          sumX = new Float64Array(n + 1); sumY = new Float64Array(n + 1);
+          for (let i = 0; i < n; i++) { sumX[i + 1] = sumX[i] + pts[i].x; sumY[i + 1] = sumY[i] + pts[i].y; }
+        }
+        const sumOver = (S, i) => {
+          const lo = i - blunt, hi = i + blunt;
+          if (lo < 0) return S[n] - S[n + lo] + S[hi + 1];
+          if (hi >= n) return S[n] - S[lo] + S[hi - n + 1];
+          return S[hi + 1] - S[lo];
+        };
+        for (let i = 0; i < n; i++) {
+          if (pin[c][i]) continue;
+          const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n];
+          const ox = pts[i].x, oy = pts[i].y;
+          let px = ox, py = oy;
+          let dx = (a.x + b.x) / 2 - px, dy = (a.y + b.y) / 2 - py;
+          if (sumX) { dx = sumOver(sumX, i) / (2 * blunt + 1) - px; dy = sumOver(sumY, i) / (2 * blunt + 1) - py; }
+          if (shaping) {
+            const tx = b.x - a.x, ty = b.y - a.y, tl = Math.hypot(tx, ty);
+            if (tl > 1e-9) {
+              const nx = side * -ty / tl, ny = side * tx / tl, inward = dx * nx + dy * ny;
+              // Nothing already bulging is pulled back in, and a point with
+              // nothing to fill stays where it is: sliding it along the curve
+              // instead only bunches points up and leaves the curve ragged.
+              if (inward < 0) { dx = 0; dy = 0; }
+              // Once taut, what is left to fill is shallow, so the outward half is
+              // taken at a gain; the step clamp and the sweep still bound it.
+              else { dx += nx * inward * (gain - 1); dy += ny * inward * (gain - 1); }
+            }
+          }
+          const len = Math.hypot(dx, dy), cap = stride * gait;
+          if (len > cap) { dx = dx * cap / len; dy = dy * cap / len; }
+          px += dx; py += dy;
+          for (let pass = 0; pass < 2; pass++) {
+            let hit = false, want = 0, worst = 0, hx = 0, hy = 0;
+            for (const k of near(curveAt, px, py, bag)) {
+              // Only the two segments that contain this point are exempt. A wider
+              // exemption lets a point drift onto a pinned one two places along
+              // and fold the curve over its own marked point. A curve needs only
+              // a hair of room from itself to stay unfolded; the gap that has to
+              // read on screen is the one between different curves.
+              const tag = owner[k], oc = Math.floor(tag / 1e6), oi = tag % 1e6;
+              const mine = oc === c;
+              if (mine && (oi === i || oi === (i - 1 + n) % n)) continue;
+              const keep = mine ? 0.8 * h : apart;
+              const d = closest(curveSeg[k], px, py);
+              if (keep - d > worst) { worst = keep - d; hit = true; hx = cqx; hy = cqy; want = keep; }
+            }
+            if (!hit) break;
+            const ux = px - hx, uy = py - hy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            px = hx + ux / L * want; py = hy + uy / L * want;
+          }
+          // A region should be a comfortable neighbourhood of its tangle, not a
+          // sleeve on it. Shortening will always pull the curve back onto the
+          // strand it came from, so the thickness is set rather than pushed for:
+          // the curve is placed halfway across whatever corridor it is in, up to
+          // `pad`. Where the corridor is narrow that is the middle of it, and
+          // where it opens out the curve stops at `pad` instead of drifting off.
+          {
+            let near1 = Infinity, ux = 0, uy = 0, near2 = Infinity;
+            for (const k of near(strandAt, px, py, bag)) {
+              const d = closest(strand[k], px, py);
+              if (d < near1) { near1 = d; ux = px - cqx; uy = py - cqy; }
+            }
+            const L = Math.hypot(ux, uy);
+            if (L > 1e-9 && near1 < pad) {
+              ux /= L; uy /= L;
+              for (const k of near(strandAt, px, py, bag)) {
+                const d = closest(strand[k], px, py);
+                const vx = px - cqx, vy = py - cqy;
+                if (vx * ux + vy * uy < 0 && d < near2) near2 = d;
+              }
+              const across = near1 + (near2 === Infinity ? 2 * pad : near2);
+              const want = Math.min(pad, across / 2);
+              if (want > near1) { px += ux * (want - near1); py += uy * (want - near1); }
+            }
+          }
+          // Strand clearance goes last, so it is the rule that always holds: a
+          // curve that cannot reach a strand cannot cross one, and so cannot take
+          // in a strand that belongs to a different tangle.
+          for (let pass = 0; pass < 2; pass++) {
+            let hit = false, worst = clear, hx = 0, hy = 0;
+            for (const k of near(strandAt, px, py, bag)) {
+              const d = closest(strand[k], px, py);
+              if (d < worst) { worst = d; hit = true; hx = cqx; hy = cqy; }
+            }
+            if (!hit) break;
+            const ux = px - hx, uy = py - hy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            px = hx + ux / L * clear; py = hy + uy / L * clear;
+          }
+          // Whatever the rules above asked for, the move itself is swept against
+          // everything nearby and stopped short of the first thing it would have
+          // crossed. That bounds the point, but not the two segments it drags:
+          // one of those can sweep over a strand while the point's own path never
+          // touches it, which is how a curve slips out of its face. So the move
+          // is also required to leave both segments crossing the diagram exactly
+          // as often as they did before, and is halved until it does.
+          let mx = px - ox, my = py - oy;
+          const far = Math.hypot(mx, my), most = reach * gait;
+          if (far > most) { mx = mx * most / far; my = my * most / far; }
+          if (mx || my) {
+            let stop = 1;
+            const block = (items, from, skipSelf) => {
+              for (const k of box(from, ox, oy, ox + mx, oy + my, bag)) {
+                if (skipSelf) {
+                  const tag = owner[k], oc = Math.floor(tag / 1e6), oi = tag % 1e6;
+                  if (oc === c && (oi === i || oi === (i - 1 + n) % n)) continue;
+                }
+                const it = items[k], ex = it[2] - it[0], ey = it[3] - it[1];
+                const den = mx * ey - my * ex;
+                if (den > -1e-12 && den < 1e-12) continue;
+                const rx = it[0] - ox, ry = it[1] - oy;
+                const t = (rx * ey - ry * ex) / den, u = (rx * my - ry * mx) / den;
+                if (t >= 0 && t < stop && u >= 0 && u <= 1) stop = t;
+              }
+            };
+            block(strand, strandAt, false);
+            block(curveSeg, curveAt, true);
+            // Stop a fixed distance short of what was in the way, rather than a
+            // fixed fraction, so a long move is held off by as much as a short one.
+            if (stop < 1) {
+              const travel = Math.hypot(mx, my) || 1;
+              const back = Math.max(0, stop - Math.min(clear, apart) / 2 / travel);
+              mx *= back; my *= back;
+            }
+          }
+          if (mx || my) {
+            const wasA = cuts(a.x, a.y, ox, oy), wasB = cuts(ox, oy, b.x, b.y);
+            for (let f = 1; ; f /= 3) {
+              if (f < 0.3) { mx = 0; my = 0; break; }
+              const tx = ox + mx * f, ty = oy + my * f;
+              if (cuts(a.x, a.y, tx, ty) === wasA && cuts(tx, ty, b.x, b.y) === wasB) { mx *= f; my *= f; break; }
+            }
+          }
+          const step = Math.hypot(mx, my);
+          if (step > shift) shift = step;
+          const moved = { x: ox + mx, y: oy + my };
+          pts[i] = moved;
+          const tag = where[c][i];
+          curveArcs[c][Math.floor(tag / 1e5)][tag % 1e5] = moved;
+          const prev = base[c] + (i - 1 + n) % n, here = base[c] + i;
+          curveSeg[prev][2] = moved.x; curveSeg[prev][3] = moved.y;
+          curveSeg[here][0] = moved.x; curveSeg[here][1] = moved.y;
+          relist(curveAt, curveSeg, prev); relist(curveAt, curveSeg, here);
+        }
+      }
+      // Relaxation with a bounded step can, very occasionally, walk a curve
+      // through itself. Rather than hope it does not, the last state that was
+      // checked and found simple is kept, and a curve that ties itself up is put
+      // back to it and left alone. The drawing is then always a simple curve.
+      slide();
+      // Sweeping a point's own path is not the whole story: each of the two
+      // segments it carries sweeps a triangle, and an obstacle's end can sit
+      // inside one without the path ever crossing it. That leaves a small fold,
+      // always inside one arc and only a few points wide. Combing each arc out
+      // here, before anything looks at the curve, is what keeps a curve from
+      // being frozen at the first state it tripped over -- which is what left
+      // notches in a curve that was supposed to be pulled straight.
+      curveArcs.forEach(arcs => arcs.forEach(mend));
+      // Whether it is still going anywhere is asked of the length it is
+      // minimising, not of the furthest point: one point stuck against a strand
+      // held the old test open for ever, so on anything big the curve never
+      // reached the second phase at all and never came out convex.
+      let now = 0;
+      curveArcs.forEach(arcs => arcs.forEach(arc => { for (let i = 1; i < arc.length; i++) now += Math.hypot(arc[i].x - arc[i - 1].x, arc[i].y - arc[i - 1].y); }));
+      quiet = Math.abs(was - now) < 6e-4 * now && shift < 4 * gait ? quiet + 1 : 0;
+      was = now;
+      const settled = quiet >= 3;
+      if (round % 5 === 4 || round === limit - 1 || settled) {
+        const ok = legal();
+        for (let c = 0; c < curveArcs.length; c++) {
+          if (stuck[c]) continue;
+          if (ok[c]) { safe[c] = curveArcs[c].map(arc => arc.map(P => ({ x: P.x, y: P.y }))); keep[c] = curves[c].map(x => [frac[x], wide[x], wideBack[x]]); }
+          else {
+            // A curve that trips is put back to its last legal state and allowed
+            // to try again; only one that keeps tripping is left where it is.
+            // Tripping is normal here -- widening a region walks it up against
+            // its neighbours -- so the budget is generous, and every attempt that
+            // does come back legal is kept.
+            curveArcs[c] = safe[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+            curves[c].forEach((x, j) => { [frac[x], wide[x], wideBack[x]] = keep[c][j]; });
+            if (++trips[c] >= 40) stuck[c] = true;
+          }
+        }
+        if (stuck.every(Boolean)) break;
+      }
+      // Shortening first pulls the curve taut, which is what takes the slack and
+      // the notches out of it. Taut is not the same as convex, though: wherever
+      // the curve comes round an obstacle it leaves a dip behind it. So once it
+      // has stopped moving, the same step is run again with only its outward half
+      // kept. Dips fill, nothing already bulging is pulled back in, and the curve
+      // walks out towards its own convex hull as far as the clearances allow.
+      if (level > 1) {
+        if (settled || round + 1 >= levelEnd) {
+          yield* pullTaut(curveSeg, owner);
+          level = Math.max(1, level >> 1);
+          levelEnd = level > 1 ? round + 1 + Math.ceil(rounds / 3) : rounds;
+          quiet = 0;
+        }
+      } else if (!shaping) { if (settled || round + 1 >= rounds) { yield* pullTaut(curveSeg, owner); shaping = true; quiet = 0; limit = round + 1 + shape; } }
+      else if (!pulled) {
+        // Convexifying pushes outwards everywhere it can, which puts a little
+        // slack back into the parts that were already taut. It is pulled out
+        // once more at the end, and the rounds after that settle the corners it
+        // leaves back against the clearances.
+        if (settled || round + 1 >= limit) { yield* pullTaut(curveSeg, owner); pulled = true; quiet = 0; limit = round + 1 + tail; }
+      }
+      else if (settled) break;
+    }
+    // Whatever the loop ended on, every curve is left at a state that was checked.
+    for (let pass = 0; pass < 3; pass++) {
+      const ok = legal();
+      if (ok.every(Boolean)) break;
+      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) { curveArcs[c] = safe[c]; curves[c].forEach((x, j) => { [frac[x], wide[x], wideBack[x]] = keep[c][j]; }); }
+    }
+
+    // The shape is settled; what is left on it is a pixel or two of raggedness.
+    // Every point is placed against whichever strand happens to be nearest it,
+    // and where the nearest one changes from a point to the next the placement
+    // jumps. Plain smoothing takes that off, with two rules that keep it from
+    // being another relaxation: no point may end up further than a clearance from
+    // where the relaxation left it, so the curve cannot drift off the shape it
+    // settled on, and the clearance is re-imposed after every move, so smoothing
+    // can never walk a curve into a strand.
+    const rested = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
+    for (let pass = 0; pass < passes; pass++) {
+      yield 'smooth';
+      for (let c = 0; c < curveArcs.length; c++) curveArcs[c].forEach((arc, a) => {
+        const home = rested[c][a], was = arc.map(P => ({ x: P.x, y: P.y }));
+        for (let i = 1; i < arc.length - 1; i++) {
+          let x = (was[i - 1].x + 2 * was[i].x + was[i + 1].x) / 4;
+          let y = (was[i - 1].y + 2 * was[i].y + was[i + 1].y) / 4;
+          const ox = x - home[i].x, oy = y - home[i].y, off = Math.hypot(ox, oy);
+          if (off > stray) { x = home[i].x + ox * stray / off; y = home[i].y + oy * stray / off; }
+          for (let push = 0; push < 2; push++) {
+            let hit = false, worst = clear, hx = 0, hy = 0;
+            for (const k of near(strandAt, x, y, bag)) {
+              const d = closest(strand[k], x, y);
+              if (d < worst) { worst = d; hit = true; hx = cqx; hy = cqy; }
+            }
+            if (!hit) break;
+            const ux = x - hx, uy = y - hy, L = Math.hypot(ux, uy);
+            if (L < 1e-9) break;
+            x = hx + ux / L * clear; y = hy + uy / L * clear;
+          }
+          arc[i] = { x, y };
+        }
+      });
+    }
+    {
+      const ok = legal();
+      for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) curveArcs[c] = rested[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
+    }
+    yield 'draw';
+    const curvePts = curveArcs.map(arcs => [].concat(...arcs));
+    const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
+
+    // Bounded steps can still leave a fold of a few segments knotted up where the
+    // curve turns hard. Each is a small loop; cutting it out is safe as long as
+    // no marked point is caught inside, which would take the curve off its edge.
+    curvePts.forEach((pts, c) => {
+      const pin = held[c];
+      for (let sweep = 0; sweep < 6; sweep++) {
+        let cut = false;
+        for (let i = 0; i < pts.length && !cut; i++) {
+          for (let d = 2; d <= 12; d++) {
+            const j = i + d;
+            if (j + 1 > pts.length) break;
+            const at = meet(pts[i], pts[i + 1], pts[j], pts[(j + 1) % pts.length]);
+            if (!at) continue;
+            if (pin.slice(i + 1, j + 1).some(Boolean)) continue;
+            pts.splice(i + 1, j - i, at); pin.splice(i + 1, j - i, false);
+            cut = true; break;
+          }
+        }
+        if (!cut) break;
+      }
+    });
+
+    // For drawing, drop the points that sit on a straight run. What is left is
+    // the corners, which a fillet can then round properly; kept at full density
+    // every corner is only one point wide and rounds over almost nothing. The
+    // tolerance is a fraction of the clearance, so the drawn line still runs
+    // where the relaxed one does.
+    const outline = curvePts.map(pts => {
+      const n = pts.length;
+      if (n < 4) return pts;
+      const off = (a, b, q) => {                       // how far q is off the chord a-b
+        const ex = b.x - a.x, ey = b.y - a.y, L2 = ex * ex + ey * ey;
+        let u = L2 ? ((q.x - a.x) * ex + (q.y - a.y) * ey) / L2 : 0;
+        u = u < 0 ? 0 : u > 1 ? 1 : u;
+        return Math.hypot(a.x + u * ex - q.x, a.y + u * ey - q.y);
+      };
+      const keep = [pts[0]];
+      let anchor = 0;
+      for (let i = 2; i < n; i++) {
+        // The chord is kept only while every point it skips still lies on it,
+        // so the line cannot drift away from the curve a fraction at a time.
+        let fits = true;
+        for (let j = anchor + 1; j < i && fits; j++) if (off(pts[anchor], pts[i], pts[j]) > tidy) fits = false;
+        if (!fits) { keep.push(pts[i - 1]); anchor = i - 1; }
+      }
+      let fits = true;
+      for (let j = anchor + 1; j < n && fits; j++) if (off(pts[anchor], pts[0], pts[j]) > tidy) fits = false;
+      if (!fits) keep.push(pts[n - 1]);
+      return keep.length >= 3 ? keep : pts;
+    });
+
+    const marks = [], gEdges = [];
+    for (const g of nonAlt) {
+      const a = markAt(2 * g), b = markAt(2 * g + 1), pts = sample(2 * g, a, b);
+      marks.push(pts[0], pts[pts.length - 1]);
+      gEdges.push({ pts, over: !!dart[2 * g].over, arc: g, s: [a, b] });
+    }
+    // To shade an alternating region, fill its own boundary curves by the
+    // even-odd rule: crossing any of them toggles in and out of the region, so
+    // the parity at a point says whether it is inside -- once it is known which
+    // way round that reads. One crossing of the region settles it, and when the
+    // parity there is even the region is the one holding the point at infinity,
+    // so the fill has to be taken the other way about.
+    const turns = (pts, q) => {
+      let t = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        const ax = a.x - q.x, ay = a.y - q.y, bx = b.x - q.x, by = b.y - q.y;
+        t += Math.atan2(ax * by - ay * bx, ax * bx + ay * by);
+      }
+      return Math.round(t / (2 * Math.PI));
+    };
+    // The region that holds the point at infinity is bounded by the curves that
+    // nothing else contains, and those are not the ones the combinatorics assigns
+    // to it: a curve belongs to the region whose tangle it encircles, so a split
+    // diagram can leave the outer region with no curves at all. Filling it then
+    // covers the whole picture, which only showed once the fill became opaque.
+    const holds = (pts, q) => {
+      let w = false;
+      for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
+        const A = pts[a], B = pts[b];
+        if ((A.y > q.y) !== (B.y > q.y) && q.x < (B.x - A.x) * (q.y - A.y) / (B.y - A.y) + A.x) w = !w;
+      }
+      return w;
+    };
+    const bounds = curvePts.map(pts => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of pts) {
+        if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
+        if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;
+      }
+      return { x0, y0, x1, y1 };
+    });
+    const outermost = curvePts.map((_, i) => i).filter(i => {
+      const q = curvePts[i][0];
+      return !curvePts.some((other, j) => {
+        if (j === i) return false;
+        const B = bounds[j];
+        return q.x >= B.x0 && q.x <= B.x1 && q.y >= B.y0 && q.y <= B.y1 && holds(other, q);
+      });
+    });
+    const regions = dec.regions.map((_, r) => {
+      const own = [];
+      dec.curveRegion.forEach((cr, ci) => { if (cr === r) own.push(ci); });
+      if (!own.length) return { region: r, curves: own, outer: true };
+      const d = curves[own[0]][0], here = pointAtS(comps[dart[d].c], dart[d].s0);
+      const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
+      return { region: r, curves: own, outer: parity === 0 };
+    });
+    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side };
+  }
+
   // Adjacent occurrences on every closed component must have opposite heights.
   // Crossing bits satisfy over[a] XOR over[b] = 1 XOR occurrence[a] XOR occurrence[b].
   function alternatingAssignment(comps,crossings) {
@@ -1218,7 +2322,8 @@ const KC = (function () {
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
     attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
-    braidCurves, analyze, alternatingAssignment, circD, mod
+    braidCurves, analyze, alternatingAssignment, circD, mod,
+    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths, decompositionSteps
   };
 })();
 
@@ -1231,7 +2336,8 @@ const KC = (function () {
   let W = 0, H = 0, dpr = 1;
   const view = { ox: 0, oy: 0, s: 1 };
   let tool = 'draw', viewMode = 'diagram', analysis = null;
-  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
+  let decompCache = null, decompRuns = 0, decompSoon = false;
+  const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adFill: true, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
   let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, doubleTap: true, fingerDrag: true };
@@ -1619,6 +2725,23 @@ const KC = (function () {
     if (e.key === 'Enter') { setPanel(false,true); return; }
     rememberPanelWidth(e.key === 'Home' ? min : e.key === 'End' ? max : width + (e.key === 'ArrowLeft' ? 1 : -1) * (e.shiftKey ? 48 : 24));
   });
+  // Full screen puts the canvas on its own: the title, the file tabs and the
+  // view bar are the app's own chrome and go, and the inspector goes with them,
+  // which leaves the arrow that brings it back. The toolbar floats on the canvas
+  // and stays, so there is always a way out. Whether the inspector was open is
+  // remembered, so leaving full screen puts the window back as it was.
+  let fullOpen = false, panelBeforeFull = false;
+  function setFull(on, focus = false) {
+    if (on === fullOpen) return;
+    fullOpen = on;
+    document.body.classList.toggle('stage-full', on);
+    $('fullBtn').setAttribute('aria-pressed', String(on));
+    if (on) { panelBeforeFull = panelOpen; if (panelOpen) setPanel(false); }
+    else if (panelBeforeFull) setPanel(true);
+    resize();
+    if (focus) $('fullBtn').focus();
+  }
+  $('fullBtn').onclick = () => setFull(!fullOpen);
   $('panelToggle').onclick = () => setPanel(!panelOpen, true);
   $('panelClose').onclick = $('panelScrim').onclick = () => setPanel(false, true);
   function showPanelPage(page) {
@@ -1635,7 +2758,11 @@ const KC = (function () {
   narrowPanel.addEventListener('change', () => setPanel(!narrowPanel.matches));
   window.addEventListener('resize', () => { stopPanelDrag(true); drawPanelWidth(panelWidth); });
   document.addEventListener('keydown', e => {
-    if(e.key === 'Escape' && panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); }
+    // One press does one thing: close the inspector if it is open, and leave
+    // full screen otherwise. Two handlers acting on the same press did both.
+    if(e.key !== 'Escape') return;
+    if(panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); return; }
+    if(fullOpen && !sel) setFull(false, true);
   });
   setPanel(panelOpen);
   function importPD(code) {
@@ -1685,11 +2812,19 @@ const KC = (function () {
     const frame = () => {
       if(epoch!==relaxEpoch)return;
       if (ownerTab!==activeTabId || relaxing <= 0 || active) { stopRelax(); return; }
-      for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
-        const r = KC.relaxStep(S);
-        if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
+      // Anything thrown while stepping or redrawing would otherwise break the
+      // chain of frames and leave the run stuck part-way, with the button still
+      // offering to stop it. Whatever happens, this run ends.
+      try {
+        for (let k = 0; k < 6 && relaxing > 0; k++, relaxing--) {
+          const r = KC.relaxStep(S);
+          if (!r.ok) { blockedOnce = true; relaxing = 0; break; }
+        }
+        changed();
+      } catch (err) {
+        relaxing = 0; stopRelax(); toast('Auto-relax stopped');
+        throw err;
       }
-      changed();
       if (relaxing > 0) requestAnimationFrame(frame); else {
         stopRelax();if (blockedOnce) toast('Auto-relax reached a topology limit');
       }
@@ -1786,7 +2921,7 @@ const KC = (function () {
     if (t === 'flip' && cursor) hoverX = nearestCrossing(cursor, 13 / view.s * 1.4);
     $('optDraw').hidden = t !== 'draw'; $('optErase').hidden = t !== 'erase'; $('optLasso').hidden = t !== 'lasso'; $('optMove').hidden = t !== 'move';
     $('toolopts').hidden = !['draw', 'erase', 'lasso', 'move'].includes(t);
-    updateHint(); render();
+    render();
   }
   function toggleEraser() {
     if (tool === 'erase') setTool(prevTool && prevTool !== 'erase' ? prevTool : 'draw'); else setTool('erase');
@@ -1794,23 +2929,23 @@ const KC = (function () {
   }
   function setLassoMode(m) {
     opts.lassoMode = m; document.querySelectorAll('#lassoModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lasso === m));
-    clearSel(); updateHint(); render();
+    clearSel(); render();
   }
   document.querySelectorAll('#lassoModes button').forEach(b => b.onclick = () => setLassoMode(b.dataset.lasso));
   function setEraseMode(m) {
     opts.eraseMode = m; document.querySelectorAll('#eraseModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.erase === m));
-    $('eraseSizeWrap').hidden = m !== 'precise'; hoverErase = null; updateHint(); render();
+    $('eraseSizeWrap').hidden = m !== 'precise'; hoverErase = null; render();
   }
   document.querySelectorAll('#eraseModes button').forEach(b => b.onclick = () => setEraseMode(b.dataset.erase));
   function setLassoShape(sh) {
     opts.lassoShape = sh; document.querySelectorAll('#lassoShapes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === sh));
-    updateHint(); render();
+    render();
   }
   document.querySelectorAll('#lassoShapes button').forEach(b => b.onclick = () => setLassoShape(b.dataset.shape));
   $('eraseSize').oninput = e => { opts.eraseSize = +e.target.value; render(); };
-  $('autoClose').onchange = e => { opts.autoClose = e.target.checked; updateHint(); };
+  $('autoClose').onchange = e => { opts.autoClose = e.target.checked; };
   $('grid').onchange = e => { opts.grid = e.target.checked; render(); };
-  function setView(v) { viewMode = v; document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v)); render(); updateLegend(); }
+  function setView(v) { viewMode = v; document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v)); render(); }
   document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
   document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
   // One way in for the radius, so the slider and the +/- keys cannot disagree.
@@ -1824,9 +2959,11 @@ const KC = (function () {
     if (announce) toast(`Drag radius ${n}`);
   }
   $('sigma').oninput = e => setSigma(+e.target.value);
-  $('under').onchange = e => { opts.under = e.target.checked; updateHint(); };
+  $('under').onchange = e => { opts.under = e.target.checked; };
   $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
   $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
+  $('adSigns').onchange = e => { opts.adSigns = e.target.checked; render(); };
+  $('adFill').onchange = e => { opts.adFill = e.target.checked; render(); };
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
@@ -1848,6 +2985,7 @@ const KC = (function () {
     // replacing whichever tool was active, and releasing C restores it.
     if (k === 'c') { if (!e.repeat && momentaryFlipTool === null) { momentaryFlipTool = tool; setTool('flip'); } return; }
     if (k === 'a') { if (!e.repeat) toggleRelax(); return; }
+    if (k === 'f') { if (!e.repeat) setFull(!fullOpen); return; }
     if (k === 'v') setTool('move'); else if (k === 'd') setTool('draw'); else if (k === 'x') setTool('flip'); else if (k === 'l') setTool('lasso');
     else if (k === 'e') { if (tool === 'erase') setEraseMode({ strand: 'precise', precise: 'component', component: 'strand' }[opts.eraseMode]); else setTool('erase'); }
     else if (k === '1') setView('diagram'); else if (k === '2') setView('A'); else if (k === '3') setView('B'); else if (k === '4') setView('S');
@@ -1904,7 +3042,6 @@ const KC = (function () {
   function setPenOnly(v, announce) {
     input.penOnly = v; $('penOnly').checked = v;
     if (announce) toast(v ? 'Pen-only mode: use fingers to pan and zoom' : 'Pen-only mode off');
-    updateHint();
   }
   $('penOnly').onchange = e => setPenOnly(e.target.checked, true);
   $('palm').onchange = e => { input.palm = e.target.checked; };
@@ -2837,24 +3974,11 @@ const KC = (function () {
     if (did) { erasing && (erasing.changed = true); hoverErase = null; changed(); } else render();
   }
 
-  // ---------- toast / hint / panel ----------
+  // ---------- toast / panel ----------
   let toastTimer = null;
   function toast(msg, warn) {
     const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (warn ? '' : ' info');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast' + (warn ? '' : ' info'), 1800);
-  }
-  function updateHint() {
-    const penNote = input.penOnly ? ' Pan with one finger; zoom with two.' : '';
-    $('hint').textContent = tool === 'move' ? (opts.under ? 'Drag a strand to move it. It passes under at new crossings (hold Shift to pass over).' : 'Drag a strand to move it. It passes over at new crossings (hold Shift to pass under).')
-      : tool === 'draw' ? (opts.autoClose ? 'Draw a stroke to create a closed curve. Start or finish at an open endpoint to join it; connecting segments pass under existing arcs.' : 'Strokes remain open. Join endpoints to complete a loop; connecting segments pass under existing arcs.')
-        : tool === 'lasso' ? (opts.lassoMode === 'curve'
-          ? (opts.lassoShape === 'rect' ? 'Drag a rectangle over curves to select them.' : 'Enclose curves to select them.') + ' Drag to move, the corner grip to resize, the top handle to rotate, or use the menu to copy, cut, or delete. Tap an empty area to paste.'
-          : (opts.lassoShape === 'rect' ? 'Drag a rectangle to select only that region.' : 'Select only the enclosed region.') + ' Curves are cut at the boundary; you can rejoin their endpoints to close them.')
-        : tool === 'erase' ? (opts.eraseMode === 'strand' ? 'Erase one strand between crossings or endpoints. Rejoin the remaining endpoints to close the curve.'
-          : opts.eraseMode === 'component' ? 'Tap a curve to erase the whole thing. On a link this removes one component and leaves the others.'
-          : 'Erase only the touched segments. Rejoin endpoints to close the curve; surviving crossings keep their over/under assignments.')
-          : 'Tap a crossing to swap its over/under strands.';
-    if (penNote) $('hint').textContent += penNote;
   }
   function setText(id, v) { $(id).textContent = v; }
   function invariantSnapshot() {
@@ -2937,20 +4061,190 @@ const KC = (function () {
     let pdText = '';
     if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# Components without crossings omitted from PD code: ${a.free}`; }
     $('pd').value = S.comps.length ? (pdText || 'No crossings') : '';
-    updateLegend();
+    updateDecompositionPanel();
   }
   const fmt = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
-  function updateLegend() {
-    const L = $('legend'), a = analysis;
-    if (viewMode === 'diagram' || !a || !S.comps.length) { L.style.display = 'none'; return; }
-    L.style.display = 'block';
-    if (viewMode === 'A') L.innerHTML = `<b>all-A state</b>, ${a.sA.count} circles<div class="sub">Dashed lines are chords at A-smoothing sites. ${a.sA.adequate ? 'A-adequate' : 'Not A-adequate: a chord has both endpoints on the same circle'}</div>`;
-    else if (viewMode === 'B') L.innerHTML = `<b>all-B state</b>, ${a.sB.count} circles<div class="sub">Dashed lines are chords at B-smoothing sites. ${a.sB.adequate ? 'B-adequate' : 'Not B-adequate: a chord has both endpoints on the same circle'}</div>`;
-    else L.innerHTML = `<b>Seifert state</b>, ${a.sS.count} circles<div class="sub">Smoothing follows the strand orientations</div>`;
+  // The decomposition is derived data, so it is memoised on the analysis object
+  // it was read from and thrown away whenever that is replaced.
+  function decompInfo() {
+    if (!analysis || !S.comps.length) return null;
+    if (!decompCache || decompCache.for !== analysis) {
+      let dec = null;
+      try { dec = KC.decompose(S.comps, S.crossings, analysis); } catch (err) { dec = null; }
+      decompCache = { for: analysis, dec, paths: undefined,
+        genus: dec ? KC.decompositionGenusRecursive(dec.graph.n, dec.graph.edges) : null,
+        ribbon: dec ? KC.decompositionGenus(dec) : null };
+    }
+    return decompCache;
+  }
+  function decomposition() { const i = decompInfo(); return i && i.dec; }
+  // Only the overlay needs the geometry, and it costs a ray cast per sample, so
+  // it waits until that view actually asks for it rather than being paid for on
+  // every edit.
+  // Relaxing the curves takes a few hundred milliseconds, which is long enough
+  // to be felt at the end of a gesture, so it never runs on the way to the
+  // screen. The diagram is painted at once without the overlay, and the curves
+  // are then worked out a few rounds per frame, so the thread is handed back
+  // between them and the next drag starts on time. The overlay appears when the
+  // run finishes. (Starting a run from the previous one's curves was tried: it
+  // is twice as quick, but the error in it accumulates over a chain of edits
+  // until curves are crossing strands, so every run starts clean.)
+  const SLICE = 6;                           // ms of relaxation before handing back
+  // Handing back to the browser between slices, without waiting for the next
+  // frame to be painted. An animation frame comes round every sixteen
+  // milliseconds whatever it is given, so six milliseconds of work per frame
+  // spends two thirds of the wait idle and takes three times as long to finish
+  // as it need. A message to ourselves is an ordinary task: the browser takes
+  // input and paints between them, and the work runs at the rate it can.
+  // It holds one callback, which is all it needs: only one run is ever in
+  // flight, so only one thing is ever waiting on it.
+  const handBack = (() => {
+    if (typeof MessageChannel !== 'function') return fn => setTimeout(fn, 0);
+    let next = null;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { const fn = next; next = null; if (fn) fn(); };
+    return fn => { next = fn; channel.port2.postMessage(0); };
+  })();
+  function decompositionPaths() {
+    const info = decompInfo();
+    if (!info || !info.dec) return null;
+    if (info.paths !== undefined) return info.paths;
+    // One run at a time: the flag is held for the whole of it, not just until it
+    // starts, or every repaint on the way would queue another run beside it.
+    if (!decompSoon) {
+      decompSoon = true;
+      const done = paths => { decompSoon = false; if (decompCache === info) info.paths = paths; render(); };
+      // After a frame, not just off the current task: a bare timeout still runs
+      // before the browser has painted, and the gesture ends on a stall anyway.
+      requestAnimationFrame(() => setTimeout(() => {
+        if (decompCache !== info || info.paths !== undefined) { decompSoon = false; render(); return; }
+        decompRuns++;
+        let steps;
+        try { steps = KC.decompositionSteps(S.comps, info.dec); } catch (err) { done(null); return; }
+        const slice = () => {
+          // A gesture that starts meanwhile is moving the strands this run was
+          // measured against, so the run is dropped rather than finished.
+          if (decompCache !== info || info.paths !== undefined) { decompSoon = false; render(); return; }
+          if (drag || erasing || relaxing) { requestAnimationFrame(slice); return; }
+          const until = performance.now() + SLICE;
+          try {
+            let step;
+            do { step = steps.next(); } while (!step.done && performance.now() < until);
+            if (!step.done) { handBack(slice); return; }
+            done(step.value);
+          } catch (err) { done(null); }
+        };
+        slice();
+      }, 0));
+    }
+    return null;
+  }
+
+  // Theorem 1.2: a reduced alternating decomposition graph has Turaev genus one
+  // exactly when it is a doubled cycle of even length -- the shape of Figure 2.
+  function doubledCycle(g) {
+    const n = g.n;
+    if (n < 2 || g.edges.length !== 2 * n) return 0;
+    const nb = Array.from({ length: n }, () => new Map());
+    for (const [u, v] of g.edges) { if (u === v) return 0; nb[u].set(v, (nb[u].get(v) || 0) + 1); nb[v].set(u, (nb[v].get(u) || 0) + 1); }
+    if (n === 2) return nb[0].get(1) === 4 ? 2 : 0;
+    for (const m of nb) { if (m.size !== 2) return 0; for (const count of m.values()) if (count !== 2) return 0; }
+    const seen = new Set([0]), q = [0];
+    while (q.length) for (const w of nb[q.pop()].keys()) if (!seen.has(w)) { seen.add(w); q.push(w); }
+    return seen.size === n ? n : 0;
+  }
+
+  // The graph on its own, drawn the way the paper draws it beside the diagram:
+  // one disk per decomposition curve, and one arc per nonalternating edge of D,
+  // with the arcs of a parallel class bowed apart so the multiplicity is
+  // countable. Vertices are laid out on a circle in depth-first order, so a
+  // doubled cycle comes out as a cycle and the components stay in one piece.
+  function graphFigure(dec) {
+    const host = $('adGraphView'), g = dec && dec.graph;
+    if (!g || !g.n) { host.replaceChildren(); host.hidden = true; return; }
+    const adj = Array.from({ length: g.n }, () => []);
+    g.edges.forEach(([u, v]) => { adj[u].push(v); adj[v].push(u); });
+    const order = [], seen = new Array(g.n).fill(false);
+    for (let v = 0; v < g.n; v++) {
+      if (seen[v]) continue;
+      const stack = [v]; seen[v] = true;
+      while (stack.length) { const w = stack.pop(); order.push(w); for (const z of adj[w]) if (!seen[z]) { seen[z] = true; stack.push(z); } }
+    }
+    const WIDTH = 300, HEIGHT = g.n > 4 ? 300 : 230, cx = WIDTH / 2, cy = HEIGHT / 2;
+    const radius = Math.min(cx, cy) - 30, at = [];
+    order.forEach((v, i) => {
+      const t = -Math.PI / 2 + 2 * Math.PI * i / order.length;
+      at[v] = order.length === 1 ? { x: cx, y: cy } : { x: cx + radius * Math.cos(t), y: cy + radius * Math.sin(t) };
+    });
+    const classes = new Map();
+    g.signed.forEach(e => {
+      const key = Math.min(e.u, e.v) + ',' + Math.max(e.u, e.v);
+      if (!classes.has(key)) classes.set(key, { u: e.u, v: e.v, signs: [] });
+      classes.get(key).signs.push(e.over);
+    });
+    // Interleave the signs across a parallel class. Two arcs of the same colour
+    // side by side read as one thick line; alternating them keeps each countable,
+    // and it is how the signs sit around a vertex anyway.
+    for (const c of classes.values()) {
+      const plus = c.signs.filter(Boolean), minus = c.signs.filter(x => !x), mixed = [];
+      for (let i = 0; i < c.signs.length; i++) mixed.push((i % 2 ? minus : plus).pop() ?? (i % 2 ? plus : minus).pop());
+      c.signs = mixed;
+    }
+    const parts = [];
+    for (const { u, v, signs } of classes.values()) {
+      const a = at[u], b = at[v], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+      // Bow the arcs of a parallel class symmetrically about the straight line,
+      // over a span that stays in proportion to how far apart the vertices are.
+      const nx = -dy / len, ny = dx / len;
+      const step = Math.min(0.55 * len, 96) / Math.max(1, signs.length - 1);
+      signs.forEach((over, i) => {
+        const k = (i - (signs.length - 1) / 2) * step;
+        const qx = (a.x + b.x) / 2 + nx * k, qy = (a.y + b.y) / 2 + ny * k;
+        parts.push(`<path d="M${a.x.toFixed(1)} ${a.y.toFixed(1)}Q${qx.toFixed(1)} ${qy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}" fill="none" stroke="var(${over ? '--c1' : '--c0'})" stroke-width="2.2"></path>`);
+      });
+    }
+    for (let v = 0; v < g.n; v++)
+      parts.push(`<circle cx="${at[v].x.toFixed(1)}" cy="${at[v].y.toFixed(1)}" r="13" fill="var(${REGION_TINT})" fill-opacity="0.38" stroke="var(--ink)" stroke-width="1.6"></circle>`);
+    const svg = `<svg viewBox="0 0 ${WIDTH} ${HEIGHT}" role="img" aria-label="The alternating decomposition graph G: ${g.n} vertices and ${g.edges.length} edges"><g>${parts.join('')}</g></svg>`;
+    const caption = g.edges.length
+      ? 'G, with a vertex per decomposition curve. Edge colour is the sign, blue for an overstrand edge and orange for an understrand one; the signs alternate around every vertex.'
+      : 'G, one vertex per connected piece of an alternating diagram and no edges.';
+    host.hidden = false;
+    host.innerHTML = svg + `<figcaption>${caption}</figcaption>`;
+  }
+
+  function updateDecompositionPanel() {
+    const info = decompInfo(), d = info && info.dec;
+    if (!d) {
+      ['adEdges', 'adCurves', 'adRegions'].forEach(id => setText(id, 0));
+      setText('adGraph', '\u2014'); setText('adGenus', '\u2014');
+      $('adFlags').innerHTML = ''; graphFigure(null);
+      $('adNote').textContent = S.comps.length ? 'The decomposition is unavailable for this diagram.' : 'Draw a closed diagram to decompose it.';
+      return;
+    }
+    const g = d.graph, plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    graphFigure(d);
+    setText('adEdges', g.edges.length); setText('adCurves', g.curves); setText('adRegions', d.regions.length);
+    setText('adGraph', `${g.n} ${g.n === 1 ? 'vertex' : 'vertices'}, ${plural(g.edges.length, 'edge')}`);
+    setText('adGenus', info.genus === null ? '\u2014' : fmt(info.genus));
+    const flags = [], cycle = doubledCycle(g);
+    if (d.alternating) flags.push(['Alternating: G is one vertex per piece', true]);
+    if (cycle) flags.push([`G is the doubled cycle C\u00b2 of length ${cycle}`, true]);
+    if (info.genus !== null) flags.push([info.genus === analysis.gT ? 'Agrees with g\u209c(D)' : `Disagrees with g\u209c(D) = ${fmt(analysis.gT)}`, info.genus === analysis.gT]);
+    $('adFlags').innerHTML = flags.map(([t, on]) => `<span class="flag${on ? ' on' : ''}">${t}</span>`).join('');
+    $('adNote').textContent = d.alternating
+      ? 'No nonalternating edges, so there are no decomposition curves and G is a single vertex for each connected piece of D.'
+      : `${plural(g.curves, 'curve')} bound ${plural(d.regions.length, 'alternating region')}. Switch the view above the canvas to Alt. decomposition to see them.`;
   }
 
   // ---------- rendering ----------
   function palette() { return ['--c0', '--c1', '--c2', '--c3', '--c4', '--c5', '--c6', '--c7', '--c8', '--c9'].map(cssv); }
+  // Every alternating region is tinted the same. They are already told apart by
+  // the curves that separate them, and a colour per region only suggested a
+  // difference between tangles that is not there. --c0 and --c1 are reserved:
+  // they are what the sign of an edge of G means wherever this is drawn.
+  const REGION_TINT = '--c5';
+  function regionColor() { return cssv(REGION_TINT); }
 
   function tracePiece(comp, s0, s1) {
     const L = comp.len, n = comp.pts.length, cum = comp.cum, p = comp.pts;
@@ -2996,7 +4290,7 @@ const KC = (function () {
       ctx.restore();
     }
     const draft=draftGeometry();
-    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(draft.crossings); else drawState(viewMode); }
+    if (analysis && S.comps.length) { if (viewMode === 'diagram') drawDiagram(draft.crossings); else if (viewMode === 'AD') drawDecomposition(); else drawState(viewMode); }
     drawOpen(draft);
     if (sel) {
       const b = selBox(), pad = 10 / view.s;
@@ -3156,6 +4450,110 @@ const KC = (function () {
     ctx.stroke();
   }
 
+  // Alternating decomposition overlay, drawn the way the paper's figures are:
+  // the alternating regions shaded, the decomposition curves solid on top of
+  // them, and the middle piece of each nonalternating edge -- the part that is an
+  // edge of G -- a heavy bar running from one shaded region to the next.
+  function drawDecomposition() {
+    const dec = decomposition();
+    // The curves are relaxed against the whole diagram, which is worth a moment
+    // once but not once a frame. Anything that is still moving strands about --
+    // a gesture, or auto-relax stepping the whole diagram -- shows the plain
+    // diagram, and the decomposition comes back when it stops. Recomputing it
+    // per frame made auto-relax look as though it had hung.
+    if (!dec || drag || erasing || relaxing) { drawDiagram(); return; }
+    const paths = decompositionPaths();
+    if (!paths) { drawDiagram(); return; }
+    const gap = Math.min(12, 8 / view.s);
+    // Round every corner with a fillet as the path is drawn: run straight up to a
+    // short way before the corner, curve through it, and carry on. The curve stays
+    // inside the corner it cuts, so the clearances the geometry established hold.
+    const FILLET = 14;
+    const trace = pts => {
+      const n = pts.length;
+      if (n < 3) { ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < n; i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.closePath(); return; }
+      const at = i => pts[(i % n + n) % n];
+      const towards = (p, q) => {
+        const dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1, t = Math.min(FILLET, d / 2) / d;
+        return { x: p.x + dx * t, y: p.y + dy * t };
+      };
+      const start = towards(at(0), at(-1));
+      ctx.moveTo(start.x, start.y);
+      for (let i = 0; i < n; i++) {
+        const p = at(i), out = towards(p, at(i + 1));
+        ctx.quadraticCurveTo(p.x, p.y, out.x, out.y);
+        const next = at(i + 1);
+        const into = towards(next, p);
+        ctx.lineTo(into.x, into.y);
+      }
+      ctx.closePath();
+    };
+    ctx.setLineDash([]);
+    // The diagram itself stays neutral, as it is in the paper's figures: the
+    // shading says which region a strand is in, so colouring it again would only
+    // compete with the two things that carry the structure, the curves and the
+    // edges of G.
+    ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--ink');
+    for (let g = 0; g < dec.nArc; g++) {
+      const a = dec.dart[2 * g], b = dec.dart[2 * g + 1], cm = S.comps[a.c];
+      const s0 = a.s0 + (a.over ? 0 : gap), s1 = a.s1 - (b.over ? 0 : gap);
+      if (s1 <= s0) continue;
+      ctx.beginPath(); tracePiece(cm, s0, s1); ctx.stroke();
+    }
+    // A region is its own boundary curves filled by the even-odd rule, taken the
+    // other way about for the one region that holds the point at infinity. An
+    // alternating diagram has no curves at all, and its one region is everything.
+    // The fill goes over the diagram rather than under it, and is opaque, so a
+    // shaded region hides the tangle inside it completely: what is left on the
+    // canvas is G itself, a blob for each vertex and the nonalternating edge
+    // between them for each edge. It is two passes -- paper, then the tint over
+    // it -- so a filled region is exactly the colour it used to be when the
+    // diagram showed through.
+    if (opts.adFill) {
+      const fill = () => paths.regions.forEach(R => {
+        // What bounds the region on the canvas: its own curves, and for the one
+        // holding the point at infinity every curve nothing else contains. A
+        // region with nothing bounding it at all is the whole picture -- an
+        // alternating diagram is one such region -- and painting that out would
+        // leave a blank canvas, so it is left alone.
+        const edge = R.outer ? paths.outermost.filter(ci => !R.curves.includes(ci)) : [];
+        if (!R.curves.length && !edge.length) return;
+        ctx.beginPath();
+        if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
+        edge.forEach(ci => trace(paths.outline[ci]));
+        R.curves.forEach(ci => trace(paths.outline[ci]));
+        ctx.fill('evenodd');
+      });
+      ctx.save();
+      ctx.globalAlpha = 1; ctx.fillStyle = cssv('--paper'); fill();
+      ctx.globalAlpha = 0.22; ctx.fillStyle = regionColor(); fill();
+      ctx.restore();
+    }
+    // Each edge of G is the middle piece of a nonalternating edge. Its sign is
+    // what the colour and the + or - beside it say, and both are one setting:
+    // with them off the edge is still drawn, in a neutral colour, since where it
+    // runs is the structure and the sign is the annotation on it. Its two ends
+    // are the marked points, so they need no dot of their own.
+    const signed = opts.adSigns;
+    ctx.lineWidth = 3 / view.s;
+    paths.gEdges.forEach(e => {
+      ctx.beginPath(); ctx.strokeStyle = cssv(signed ? (e.over ? '--c1' : '--c0') : '--accent');
+      ctx.moveTo(e.pts[0].x, e.pts[0].y);
+      for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
+      ctx.stroke();
+    });
+    ctx.lineWidth = 3 / view.s; ctx.strokeStyle = cssv('--warn');
+    paths.outline.forEach(pts => { if (pts.length > 1) { ctx.beginPath(); trace(pts); ctx.stroke(); } });
+    if (signed) {
+      ctx.font = `700 ${14 / view.s}px ${cssv('--sans')}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      paths.gEdges.forEach(e => {
+        const m = e.pts[e.pts.length >> 1];
+        ctx.fillStyle = cssv(e.over ? '--c1' : '--c0');
+        ctx.fillText(e.over ? '+' : '\u2212', m.x + 14 / view.s, m.y - 14 / view.s);
+      });
+    }
+  }
+
   function drawState(key) {
     const a = analysis, st = key === 'A' ? a.sA : key === 'B' ? a.sB : a.sS, uf = st.uf, pal = palette();
     const pairKey = key === 'S' ? 'Sf' : key;
@@ -3206,7 +4604,7 @@ const KC = (function () {
     ctx.restore();
   }
 
-  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
+  window.knotLab = { state: S, view, opts, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, get __decompRuns(){return decompRuns;}, get __decompPaths(){return decompCache && decompCache.paths;}, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };
   if (document.modelContext?.registerTool) {
     const lifecycle = new AbortController();
     const register = tool => { try { Promise.resolve(document.modelContext.registerTool(tool, { signal:lifecycle.signal })).catch(() => {}); } catch {} };
@@ -3220,7 +4618,6 @@ const KC = (function () {
     }).catch(() => { $('offlineStatus').textContent = 'Please stay connected to the internet for now.'; });
   } else { $('offlineStatus').textContent = 'Open the site via a web address to enable offline access.'; }
   // ---------- boot ----------
-  updateHint();
   resize();
   let restored=false, recoveryFailed=false;
   try {
@@ -3229,7 +4626,7 @@ const KC = (function () {
       const data=JSON.parse(saved);
       if(data.format!=='knot-lab-workspace'||!Array.isArray(data.tabs)||!data.tabs.length)throw new Error('Invalid saved tab format');
       const recovered=data.tabs.map((t,i)=>({id:String(i+1),title:typeof t.title==='string'?t.title:'New diagram '+(i+1),fileName:typeof t.fileName==='string'?t.fileName:'',pdInput:typeof t.pdInput==='string'?t.pdInput:'',dirty:!!t.dirty,
-        state:deserialize(t.document),undo:[],redo:[],view:t.view&&['ox','oy','s'].every(k=>Number.isFinite(t.view[k]))&&t.view.s>0?t.view:null,viewMode:['diagram','A','B','S'].includes(t.viewMode)?t.viewMode:'diagram'}));
+        state:deserialize(t.document),undo:[],redo:[],view:t.view&&['ox','oy','s'].every(k=>Number.isFinite(t.view[k]))&&t.view.s>0?t.view:null,viewMode:['diagram','A','B','S','AD'].includes(t.viewMode)?t.viewMode:'diagram'}));
       const activeIndex=Math.max(0,data.tabs.findIndex(t=>t.id===data.activeId));
       tabs.push(...recovered);nextTabId=tabs.length+1;activeTabId=tabs[activeIndex].id;restored=true;
     } else {

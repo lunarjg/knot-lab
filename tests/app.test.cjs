@@ -1,23 +1,23 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
 function boot(saved,narrow=true,Worker){
- const arcs=[],paths=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ const arcs=[],paths=[],texts=[],fills=[],strokes=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
   setAttribute(k,v){this.attrs[k]=String(v)} removeAttribute(k){delete this.attrs[k]} getAttribute(k){return this.attrs[k]}
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
-  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8})},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
+  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8}),fillText:function(txt,x,y){assert(Number.isFinite(x)&&Number.isFinite(y));texts.push(String(txt))},fill:function(){fills.push({style:this.fillStyle,alpha:this.globalAlpha})},stroke:function(){strokes.push(this.strokeStyle)}},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
   focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
- const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':'#16263a'}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
+ const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
   key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
@@ -38,6 +38,185 @@ const flip=t.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip'
 const cr=lab.state.crossings[0],old=cr.over,e={pointerType:'mouse',pointerId:1,clientX:cr.x*lab.view.s+lab.view.ox,clientY:cr.y*lab.view.s+lab.view.oy,button:0,preventDefault(){}};
 t.fire(t.ids.get('cv'),'pointerdown',e);t.fire(t.ids.get('cv'),'pointerup',e);assert.equal(cr.over,1-old);t.ids.get('undo').click();
 console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear, all state views, autosave/reload, panel and crossing flip: PASS');
+
+// The alternating decomposition has its own state view and inspector section.
+// An alternating diagram is a single vertex with no edges; flipping one crossing
+// of the trefoil turns it into the doubled 2-cycle of Turaev genus one.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ const ad=p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD');
+ assert(ad,'Alternating decomposition view button');
+ ad.click();assert.equal(ad.getAttribute('aria-pressed'),'true');
+ assert.equal(p.ids.get('adEdges').textContent,0);
+ assert.equal(p.ids.get('adGraph').textContent,'1 vertex, 0 edges');
+ assert.equal(p.ids.get('adGenus').textContent,'0');
+ const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
+ const cr=api.state.crossings[0];
+ const e={pointerType:'mouse',pointerId:1,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',e);p.fire(p.ids.get('cv'),'pointerup',e);
+ assert.equal(api.analysis.gT,1);
+ assert.equal(p.ids.get('adEdges').textContent,4);
+ assert.equal(p.ids.get('adCurves').textContent,2);
+ assert.equal(p.ids.get('adRegions').textContent,2);
+ assert.equal(p.ids.get('adGraph').textContent,'2 vertices, 4 edges');
+ assert.equal(p.ids.get('adGenus').textContent,'1');
+ // Drawing the overlay goes through the same canvas guard as every other view.
+ p.flush();
+ // G is drawn in the inspector too: a disk per vertex and an arc per edge, with
+ // the arcs of a parallel class interleaved by sign so each stays countable.
+ const figure=p.ids.get('adGraphView');
+ assert(!figure.hidden,'The graph figure is shown');
+ assert.equal((figure.innerHTML.match(/<circle/g)||[]).length,2);
+ assert.equal((figure.innerHTML.match(/<path/g)||[]).length,4);
+ const signs=[...figure.innerHTML.matchAll(/stroke="var\(--c([01])\)"/g)].map(m=>m[1]);
+ assert.equal(signs.length,4);
+ assert.equal(signs.filter(x=>x==='1').length,2,'two overstrand edges');
+ assert(signs.every((x,i)=>i===0||x!==signs[i-1]),'the signs alternate across the class');
+ p.ids.get('undo').click();
+ assert.equal(p.ids.get('adEdges').textContent,0);
+ assert.equal((p.ids.get('adGraphView').innerHTML.match(/<path/g)||[]).length,0,'an alternating diagram has no edges to draw');
+}
+console.log('Alternating decomposition view and inspector section: PASS');
+
+// Auto-relax has to finish in the decomposition view too. Relaxing the curves
+// against the whole diagram costs a moment, and doing it on every frame of the
+// run turned a second into half a minute, which reads as a hang; anything thrown
+// while stepping now ends the run rather than breaking the chain of frames.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();
+ const runs=api.__decompRuns;
+ p.ids.get('smoothBtn').click();
+ assert.equal(p.ids.get('smoothBtn').textContent,'Stop relaxing');
+ p.flush();
+ assert.equal(p.ids.get('smoothBtn').textContent,'Auto-relax','Auto-relax must stop on its own');
+ // The run takes 25 frames. Relaxing the curves once per frame is what made it
+ // look hung, so the overlay may be rebuilt once at the end and no more.
+ assert(api.__decompRuns - runs <= 1,
+  `The decomposition was rebuilt ${api.__decompRuns - runs} times during one auto-relax run`);
+ p.ids.get('undo').click();
+}
+console.log('Auto-relax finishes in the alternating decomposition view: PASS');
+
+// The signs on the overlay are an annotation on the edges of G, not the edges
+// themselves, so they switch off on their own: the bar stays, drawn neutral,
+// and the + and - go. The shading has a strength, down to none at all. The
+// marked points need no dot of their own, since the two ends of a bar are
+// exactly where they are.
+{
+ const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ // Everything pending is run first -- the overlay is worked out off a timer --
+ // and only then is the log cleared and one synchronous repaint forced, so what
+ // is recorded is one frame of the settled view rather than the fallbacks on the
+ // way to it.
+ const draw=()=>{
+  p.flush();for(const f of p.timers.values())if(f.ms===0)f.f();p.flush();
+  p.texts.length=0;p.fills.length=0;p.strokes.length=0;p.arcs.length=0;
+  p.ids.get('grid').onchange({target:{checked:true}});
+ };
+ // An alternating diagram has no decomposition curves, so its one region is the
+ // whole picture and nothing bounds it. Shading is opaque, so filling that
+ // region would paint the diagram out and leave a blank canvas.
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();draw();
+ assert.equal(p.ids.get('adCurves').textContent,'0','the trefoil as imported is alternating');
+ assert.equal(p.ids.get('adFill').checked,true,'with the shading on');
+ assert.equal(p.fills.length,0,'an alternating diagram is not painted out by its own region');
+ assert(p.paths.length>0,'and the diagram itself is still drawn');
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='diagram').click();
+ // One crossing flipped, so there is something to decompose.
+ const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
+ const cr=api.state.crossings[0];
+ const at={pointerType:'mouse',pointerId:1,clientX:cr.x*api.view.s+api.view.ox,clientY:cr.y*api.view.s+api.view.oy,button:0,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',at);p.fire(p.ids.get('cv'),'pointerup',at);
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();
+ const edges=+p.ids.get('adEdges').textContent;
+ assert(edges>0,'the flipped trefoil has edges of G to sign');
+ const signs=()=>p.texts.filter(t=>t==='+'||t==='\u2212').length;
+ const tinted=()=>p.fills.filter(f=>f.style==='--c5'&&f.alpha>0).length;
+ // A shaded region is painted opaque paper first, so the tangle under it is
+ // gone, and the tint goes over that -- so it reads exactly as it used to.
+ const hidden=()=>p.fills.filter(f=>f.style==='--paper'&&f.alpha===1).length;
+ // Defaults: signed, shaded, and no dot at a marked point.
+ assert.equal(p.ids.get('adSigns').checked,true);
+ assert.equal(p.ids.get('adFill').checked,true);
+ draw();
+ assert.equal(signs(),edges,`one + or - per edge of G, got ${signs()} for ${edges}`);
+ assert(tinted()>0,'the alternating regions are shaded');
+ assert.equal(hidden(),tinted(),'and painted out under the tint, so the tangle inside does not show');
+ assert(p.strokes.includes('--c0')||p.strokes.includes('--c1'),'the edges of G are drawn in their sign colour');
+ assert.equal(p.arcs.length,0,'nothing is drawn as a disk on the decomposition overlay');
+ // Signs off: the bars stay, in a neutral colour, and the glyphs go.
+ p.ids.get('adSigns').onchange({target:{checked:false}});
+ draw();
+ assert.equal(signs(),0,'the + and - go with the setting');
+ assert(p.strokes.includes('--accent'),'the edges of G are still drawn, neutrally');
+ assert(!p.strokes.includes('--c0')&&!p.strokes.includes('--c1'),'and not in a sign colour');
+ assert(tinted()>0,'the shading is untouched by the signs setting');
+ // Shading off, signs back on.
+ p.ids.get('adFill').onchange({target:{checked:false}});
+ p.ids.get('adSigns').onchange({target:{checked:true}});
+ draw();
+ assert.equal(tinted(),0,'nothing is shaded with the setting off');
+ assert.equal(hidden(),0,'and nothing is painted out, so the diagram shows');
+ assert.equal(signs(),edges,'the signs come back');
+}
+console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, an alternating diagram is not painted out, and the marked points carry no dot: PASS');
+
+// Import PD, Save and Fit used to sit under the view bar, which on a phone is a
+// row of header taken off the drawing. They belong with Open files.
+{
+ const acts=html.slice(html.indexOf('<div class="fileacts">'),html.indexOf('<div class="bar">'));
+ assert(acts&&acts.length<900,'the file actions are one group');
+ for(const id of ['openBtn','pdOpen','saveBtn','fit'])
+  assert(acts.includes(`id="${id}"`),`${id} sits with Open files, above the view bar`);
+ const bar=html.slice(html.indexOf('<div class="bar">'),html.indexOf('<div class="canvaswrap"'));
+ assert(!bar.includes('class="iconbtn"'),'and the view bar carries nothing but the views');
+ // Five view names do not fit across a phone, so the long ones have a short
+ // form. The full name stays on the button for anything reading it aloud.
+ for(const [view,brief] of [['A','all-A'],['B','all-B'],['AD','Alt. dec.']]){
+  const at=html.indexOf(`data-view="${view}"`),end=html.indexOf('</button>',at);
+  const markup=html.slice(at,end);
+  assert(markup.includes(`<span class="brief">${brief}</span>`),`the ${view} view has a short name`);
+  assert(/aria-label="[^"]+"/.test(markup),`and keeps its full name for a reader`);
+ }
+}
+console.log('Import PD, Save and Fit share the row with Open files, and the view names have a short form: PASS');
+
+// Full screen is the app's own chrome going away: the title, the file tabs and
+// the view bar, and the inspector with them, leaving the canvas, the toolbar
+// floating on it and the arrow that brings the inspector back.
+{
+ const p=boot(undefined,false),api=p.ctx.knotLab;api.importPD(pd);
+ const full=()=>p.doc.body.classList.contains('stage-full');
+ const panel=()=>p.doc.body.classList.contains('panel-open');
+ assert(!full());assert(panel(),'the inspector starts open on a wide window');
+ p.ids.get('fullBtn').onclick();
+ assert(full(),'the button turns full screen on');
+ assert.equal(p.ids.get('fullBtn').getAttribute('aria-pressed'),'true');
+ assert(!panel(),'the inspector goes with the rest of the chrome');
+ assert(p.doc.body.classList.contains('panel-hidden'),'so its arrow is there to bring it back');
+ // Escape is the way out when nothing else is open to close.
+ p.key('keydown',{key:'Escape'});
+ assert(!full(),'Escape leaves full screen');
+ assert(panel(),'and the inspector comes back as it was');
+ // So is the shortcut, and it is a toggle.
+ p.key('keydown',{key:'f'});assert(full(),'F turns it on');
+ p.key('keydown',{key:'f'});assert(!full(),'and off again');
+ assert.equal(p.ids.get('fullBtn').getAttribute('aria-pressed'),'false');
+ // A diagram left closed stays closed on the way out.
+ p.ids.get('panelToggle').onclick();
+ assert(!panel(),'the inspector is closed by hand');
+ p.ids.get('fullBtn').onclick();p.ids.get('fullBtn').onclick();
+ assert(!full()&&!panel(),'and full screen does not open it on the way out');
+ // The toolbar is the one thing that has to survive, or there is no way back.
+ assert(p.ids.get('fullBtn'),'the way out is on the toolbar itself');
+ assert(html.indexOf('id="fullBtn"')>html.indexOf('<div class="toolbar"'));
+ assert(html.indexOf('id="fullBtn"')<html.indexOf('<div class="toolopts"'));
+}
+console.log('Full screen hides the header, the tabs, the view bar and the inspector, and the toolbar keeps the way out: PASS');
 
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
