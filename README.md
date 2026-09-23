@@ -163,7 +163,7 @@ The owning account manages source editing and publication through Sites. Visitor
 
 When a drawn stroke starts or ends at an existing open endpoint, its new connecting segments pass **under** existing arcs at new crossings, including older parts of the same arc and closed components. Previously assigned crossings retain their heights. Open arcs display undercrossing gaps, but remain excluded from knot/link invariant calculations until closed.
 
-The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. The draw hint explains the joining rule in English. Free strokes and the separate drag-under setting keep their existing defaults.
+The crossing choices survive later joins and closure, either closure order, undo/redo, document tabs, JSON export/import, and browser autosave. JSON files may contain an optional `crossingMemory` array of `[x, y, overDirectionX, overDirectionY]` records; older files without that field remain supported. Free strokes and the separate drag-under setting keep their existing defaults.
 
 Self-crossings are allowed through valid R1/R2 moves: a drag can cross a strand over itself to form a new curl, and can straighten one out again, with no automatic assistance either way. A step that carries a strand clean across another one is accepted too, since it is just the reverse of the R2 that would undo it; only a contradictory height order (R2 with different overstrands, or a cyclic R3) is still rejected.
 

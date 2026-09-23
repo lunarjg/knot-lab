@@ -11,6 +11,7 @@ as a new release yet.
 - **Import PD, Save and Fit have moved up beside Open files.** On a phone they wrapped onto a row of their own under the view bar, which is a row of header taken off the drawing for three buttons.
 - **Full screen.** The button at the end of the toolbar takes the app's own chrome away — the title, the file tabs, the view bar, and the inspector with them — and leaves the canvas, the toolbar floating on it, and the arrow that brings the inspector back. On a phone that is 600px of canvas becoming the whole 844px screen. <kbd>F</kbd> toggles it and <kbd>Escape</kbd> leaves it; whether the inspector was open is remembered, so leaving puts the window back as it was. It is the app's chrome, not the browser's: the Fullscreen API does not work on an ordinary element in Safari on iOS, where this matters most.
 - One press of <kbd>Escape</kbd> does one thing: it closes the inspector if that is open, and leaves full screen otherwise. Both handlers were acting on the same press.
+- **The line of instructions under the canvas is gone.** It said what the tool in hand does, which is a sentence of prose under every diagram for something the toolbar and the options bar beside it already show; Controls & shortcuts in the inspector still spells it out.
 - **The last view button ran off the edge of a phone**, where it could not be reached at all — five view names do not fit across 390px, let alone 320px. The long ones now have a short form on narrow screens (all-A, all-B, Alt. dec.), with the full name still on the button for a screen reader, and the row scrolls if even those are too wide.
 
 ## Alternating decomposition (Claude Code, unreleased, not on main)
@@ -60,7 +61,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - An alternating diagram must not be painted out by its own region: with the shading on, nothing is filled at all. The test fails without the guard.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.
-- Service-worker cache bumped to `knot-lab-v41-full-screen`.
+- Service-worker cache bumped to `knot-lab-v42-no-hint`.
 
 ## Drag radius on +/-, and new defaults (Claude Code, unreleased)
 
