@@ -1427,6 +1427,7 @@ const KC = (function () {
     const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
     const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
     const tail = opt.tail == null ? 12 : opt.tail;            // and settling the corners the last pull leaves
+    const stretch = opt.stretch == null ? 120 : opt.stretch;   // how many points ahead a chord may reach when pulling taut
     const blunt = opt.blunt == null ? 5 : opt.blunt;          // over how many points either side a dent is filled
     const passes = opt.smooth == null ? 12 : opt.smooth;      // passes of plain smoothing once the shape is settled
     const stray = opt.stray == null ? clear : opt.stray;      // and how far that may take a point off what it settled on
@@ -1820,18 +1821,32 @@ const KC = (function () {
       }
       return false;
     };
-    const pullTaut = (curveSeg, owner) => curveArcs.forEach((arcs, c) => arcs.forEach((arc, a) => {
-      if (arc.length < 4) return;
-      const out = [arc[0]];
-      let i = 0;
-      while (i < arc.length - 1) {
-        let best = i + 1;
-        for (let j = i + 2; j < arc.length; j++) { if (!chordFree(arc[i], arc[j], c, curveSeg, owner)) break; best = j; }
-        while (best > i + 1 && swallows(arc, i, best)) best--;
-        out.push(arc[best]); i = best;
+    // A chord is probed by sampling along it, so a long one costs more to test
+    // than a short one, and letting the reach run to the end of the arc makes the
+    // pull quadratic in its length -- on a curve with a long open run that is
+    // unbounded work for no gain. Capped, it is linear: a dent wider than the
+    // reach is one the relaxation itself fills, since wide is exactly what it is
+    // good at.
+    function* pullTaut(curveSeg, owner) {
+      for (let c = 0; c < curveArcs.length; c++) {
+        const arcs = curveArcs[c];
+        for (let a = 0; a < arcs.length; a++) {
+          yield 'pull';
+          const arc = arcs[a];
+          if (arc.length < 4) continue;
+          const out = [arc[0]];
+          let i = 0;
+          while (i < arc.length - 1) {
+            const stop = Math.min(arc.length, i + 1 + stretch);
+            let best = i + 1;
+            for (let j = i + 2; j < stop; j++) { if (!chordFree(arc[i], arc[j], c, curveSeg, owner)) break; best = j; }
+            while (best > i + 1 && swallows(arc, i, best)) best--;
+            out.push(arc[best]); i = best;
+          }
+          arcs[a] = respace(out);
+        }
       }
-      arcs[a] = respace(out);
-    }));
+    }
 
     let shaping = false, pulled = false;
     const safe = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
@@ -1875,6 +1890,12 @@ const KC = (function () {
       fill(curveAt, curveSeg);
       let shift = 0;
       for (let c = 0; c < flat.length; c++) {
+        // A round is a pass over every point of every curve, which on a big
+        // diagram is long enough to drop a frame on its own, so the thread comes
+        // back between curves as well as between rounds. Nothing outside reads
+        // the curves while it is away: a gesture meanwhile replaces the analysis,
+        // and the run is dropped rather than resumed.
+        if (c) yield 'curve';
         const pts = flat[c], n = pts.length;
         // Filling a dent outwards is done against a window rather than against
         // the two neighbours: a three-point mean fills over a couple of points,
@@ -2078,18 +2099,18 @@ const KC = (function () {
       // walks out towards its own convex hull as far as the clearances allow.
       if (level > 1) {
         if (settled || round + 1 >= levelEnd) {
-          pullTaut(curveSeg, owner);
+          yield* pullTaut(curveSeg, owner);
           level = Math.max(1, level >> 1);
           levelEnd = level > 1 ? round + 1 + Math.ceil(rounds / 3) : rounds;
           quiet = 0;
         }
-      } else if (!shaping) { if (settled || round + 1 >= rounds) { pullTaut(curveSeg, owner); shaping = true; quiet = 0; limit = round + 1 + shape; } }
+      } else if (!shaping) { if (settled || round + 1 >= rounds) { yield* pullTaut(curveSeg, owner); shaping = true; quiet = 0; limit = round + 1 + shape; } }
       else if (!pulled) {
         // Convexifying pushes outwards everywhere it can, which puts a little
         // slack back into the parts that were already taut. It is pulled out
         // once more at the end, and the rounds after that settle the corners it
         // leaves back against the clearances.
-        if (settled || round + 1 >= limit) { pullTaut(curveSeg, owner); pulled = true; quiet = 0; limit = round + 1 + tail; }
+        if (settled || round + 1 >= limit) { yield* pullTaut(curveSeg, owner); pulled = true; quiet = 0; limit = round + 1 + tail; }
       }
       else if (settled) break;
     }
@@ -2110,6 +2131,7 @@ const KC = (function () {
     // can never walk a curve into a strand.
     const rested = curveArcs.map(arcs => arcs.map(arc => arc.map(P => ({ x: P.x, y: P.y }))));
     for (let pass = 0; pass < passes; pass++) {
+      yield 'smooth';
       for (let c = 0; c < curveArcs.length; c++) curveArcs[c].forEach((arc, a) => {
         const home = rested[c][a], was = arc.map(P => ({ x: P.x, y: P.y }));
         for (let i = 1; i < arc.length - 1; i++) {
@@ -2136,6 +2158,7 @@ const KC = (function () {
       const ok = legal();
       for (let c = 0; c < curveArcs.length; c++) if (!ok[c]) curveArcs[c] = rested[c].map(arc => arc.map(P => ({ x: P.x, y: P.y })));
     }
+    yield 'draw';
     const curvePts = curveArcs.map(arcs => [].concat(...arcs));
     const held = curveArcs.map(arcs => [].concat(...arcs.map(arc => arc.map((_, i) => i === 0 || i === arc.length - 1))));
 
@@ -2224,8 +2247,22 @@ const KC = (function () {
       }
       return w;
     };
-    const outermost = curvePts.map((_, i) => i)
-      .filter(i => !curvePts.some((other, j) => j !== i && holds(other, curvePts[i][0])));
+    const bounds = curvePts.map(pts => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const q of pts) {
+        if (q.x < x0) x0 = q.x; if (q.x > x1) x1 = q.x;
+        if (q.y < y0) y0 = q.y; if (q.y > y1) y1 = q.y;
+      }
+      return { x0, y0, x1, y1 };
+    });
+    const outermost = curvePts.map((_, i) => i).filter(i => {
+      const q = curvePts[i][0];
+      return !curvePts.some((other, j) => {
+        if (j === i) return false;
+        const B = bounds[j];
+        return q.x >= B.x0 && q.x <= B.x1 && q.y >= B.y0 && q.y <= B.y1 && holds(other, q);
+      });
+    });
     const regions = dec.regions.map((_, r) => {
       const own = [];
       dec.curveRegion.forEach((cr, ci) => { if (cr === r) own.push(ci); });
@@ -4026,7 +4063,22 @@ const KC = (function () {
   // run finishes. (Starting a run from the previous one's curves was tried: it
   // is twice as quick, but the error in it accumulates over a chain of edits
   // until curves are crossing strands, so every run starts clean.)
-  const SLICE = 6;                           // ms of relaxation per frame
+  const SLICE = 6;                           // ms of relaxation before handing back
+  // Handing back to the browser between slices, without waiting for the next
+  // frame to be painted. An animation frame comes round every sixteen
+  // milliseconds whatever it is given, so six milliseconds of work per frame
+  // spends two thirds of the wait idle and takes three times as long to finish
+  // as it need. A message to ourselves is an ordinary task: the browser takes
+  // input and paints between them, and the work runs at the rate it can.
+  // It holds one callback, which is all it needs: only one run is ever in
+  // flight, so only one thing is ever waiting on it.
+  const handBack = (() => {
+    if (typeof MessageChannel !== 'function') return fn => setTimeout(fn, 0);
+    let next = null;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => { const fn = next; next = null; if (fn) fn(); };
+    return fn => { next = fn; channel.port2.postMessage(0); };
+  })();
   function decompositionPaths() {
     const info = decompInfo();
     if (!info || !info.dec) return null;
@@ -4052,7 +4104,7 @@ const KC = (function () {
           try {
             let step;
             do { step = steps.next(); } while (!step.done && performance.now() < until);
-            if (!step.done) { requestAnimationFrame(slice); return; }
+            if (!step.done) { handBack(slice); return; }
             done(step.value);
           } catch (err) { done(null); }
         };
@@ -4433,11 +4485,16 @@ const KC = (function () {
     // diagram showed through.
     if (opts.adFill) {
       const fill = () => paths.regions.forEach(R => {
+        // What bounds the region on the canvas: its own curves, and for the one
+        // holding the point at infinity every curve nothing else contains. A
+        // region with nothing bounding it at all is the whole picture -- an
+        // alternating diagram is one such region -- and painting that out would
+        // leave a blank canvas, so it is left alone.
+        const edge = R.outer ? paths.outermost.filter(ci => !R.curves.includes(ci)) : [];
+        if (!R.curves.length && !edge.length) return;
         ctx.beginPath();
-        if (R.outer) {
-          ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
-          paths.outermost.forEach(ci => { if (!R.curves.includes(ci)) trace(paths.outline[ci]); });
-        }
+        if (R.outer) ctx.rect(-view.ox / view.s, -view.oy / view.s, W / view.s, H / view.s);
+        edge.forEach(ci => trace(paths.outline[ci]));
         R.curves.forEach(ci => trace(paths.outline[ci]));
         ctx.fill('evenodd');
       });

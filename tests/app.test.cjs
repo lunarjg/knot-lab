@@ -106,6 +106,25 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
 // exactly where they are.
 {
  const p=boot(),api=p.ctx.knotLab;api.importPD(pd);
+ // Everything pending is run first -- the overlay is worked out off a timer --
+ // and only then is the log cleared and one synchronous repaint forced, so what
+ // is recorded is one frame of the settled view rather than the fallbacks on the
+ // way to it.
+ const draw=()=>{
+  p.flush();for(const f of p.timers.values())if(f.ms===0)f.f();p.flush();
+  p.texts.length=0;p.fills.length=0;p.strokes.length=0;p.arcs.length=0;
+  p.ids.get('grid').onchange({target:{checked:true}});
+ };
+ // An alternating diagram has no decomposition curves, so its one region is the
+ // whole picture and nothing bounds it. Shading is opaque, so filling that
+ // region would paint the diagram out and leave a blank canvas.
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();
+ p.flush();draw();
+ assert.equal(p.ids.get('adCurves').textContent,'0','the trefoil as imported is alternating');
+ assert.equal(p.ids.get('adFill').checked,true,'with the shading on');
+ assert.equal(p.fills.length,0,'an alternating diagram is not painted out by its own region');
+ assert(p.paths.length>0,'and the diagram itself is still drawn');
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='diagram').click();
  // One crossing flipped, so there is something to decompose.
  const flip=p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='flip');flip.click();
  const cr=api.state.crossings[0];
@@ -115,8 +134,6 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
  p.flush();
  const edges=+p.ids.get('adEdges').textContent;
  assert(edges>0,'the flipped trefoil has edges of G to sign');
- const draw=()=>{p.texts.length=0;p.fills.length=0;p.strokes.length=0;p.arcs.length=0;p.flush();
-  for(const f of p.timers.values())if(f.ms===0)f.f();p.flush();};
  const signs=()=>p.texts.filter(t=>t==='+'||t==='\u2212').length;
  const tinted=()=>p.fills.filter(f=>f.style==='--c5'&&f.alpha>0).length;
  // A shaded region is painted opaque paper first, so the tangle under it is
@@ -146,7 +163,7 @@ console.log('Auto-relax finishes in the alternating decomposition view: PASS');
  assert.equal(hidden(),0,'and nothing is painted out, so the diagram shows');
  assert.equal(signs(),edges,'the signs come back');
 }
-console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, and the marked points carry no dot: PASS');
+console.log('Overlay signs and region shading switch off on their own, a shaded region hides its tangle, an alternating diagram is not painted out, and the marked points carry no dot: PASS');
 
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
