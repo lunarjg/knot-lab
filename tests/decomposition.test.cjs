@@ -156,12 +156,18 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
  assert.equal(isDoubledCycle(d.graph),2,'one flipped crossing gives C_2^2');
  const off=9,P=KC.decompositionPaths(S.comps,d,{clearance:off});
  assert.equal(P.curves.length,2);assert.equal(P.marks.length,2*d.nonAlt.length);assert.equal(P.gEdges.length,d.nonAlt.length);
- // A curve crosses the strand at each marked point, so it leaves one side and
- // comes back on the other: the closing chord is exactly twice the offset.
+ // Marks must lie on the actual boundary, including when a circular fit moves
+ // them along their diagram edges. The first polygon segment need not be a
+ // perpendicular chord centred at a mark.
  P.curves.forEach((pts,i)=>{
   assert(pts.length>3,`curve ${i} has points`);
-  const gap=Math.hypot(pts[0].x-pts[pts.length-1].x,pts[0].y-pts[pts.length-1].y);
-  assert(Math.abs(gap-2*off)<1.5,`curve ${i} closes across the strand: ${gap}`);
+  for(const dart of d.curves[i]){
+   const edge=P.gEdges.find(e=>e.arc===(dart>>1)),q=edge.pts[(dart&1)?edge.pts.length-1:0];
+   const distance=Math.min(...pts.map((a,j)=>{const b=pts[(j+1)%pts.length],dx=b.x-a.x,dy=b.y-a.y;
+    const u=Math.max(0,Math.min(1,((q.x-a.x)*dx+(q.y-a.y)*dy)/(dx*dx+dy*dy||1)));
+    return Math.hypot(a.x+u*dx-q.x,a.y+u*dy-q.y);}));
+   assert(distance<1e-6,`curve ${i}: marked point is ${distance} from its boundary`);
+  }
  });
  // The edges of G run between the two marked points of their arc.
  P.gEdges.forEach(e=>{
@@ -175,6 +181,47 @@ console.log('Corollary 3.9 on C_2^2, doubled cycles, disjoint unions and one-sum
  for(let v=0;v<d.graph.n;v++)assert.equal(plus[v],minus[v],`vertex ${v} balances + and - edges`);
 }
 console.log('Overlay geometry: closed curves crossing at the marked points, and edges of G between them: PASS');
+
+// Long nonalternating connectors must not dictate the size of their tangles.
+// Move the marks along those connectors and fit the alternating cores instead.
+{
+ const build=()=>KC.fromCurves3D(KC.braidCurves([1,1,1,-1,-1,-1]),800);
+ for(const angle of [0,.7,1.9]){
+  const S=build(),co=Math.cos(angle),si=Math.sin(angle);
+  S.comps.forEach(cm=>{cm.pts.forEach(p=>{const x=p.x,y=p.y;p.x=co*x-si*y+1234;p.y=si*x+co*y-567;});KC.updateGeom(cm);});
+  const raw=KC.computeRaw(S.comps);raw.forEach((x,i)=>{x.id=i+1;x.over=S.crossings[i].over;});S.crossings=raw;
+  const before=JSON.stringify(S),d=KC.decompose(S.comps,S.crossings),P=KC.decompositionPaths(S.comps,d);
+  assert.equal(JSON.stringify(S),before,'rounding must not edit the knot or its crossings');
+  assert.equal(P.rounded.length,2,'both separated alternating cores admit round disks');
+  for(const ci of P.rounded){
+   const pts=P.curves[ci],cx=pts.reduce((s,p)=>s+p.x,0)/pts.length,cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+   const radii=pts.map(p=>Math.hypot(p.x-cx,p.y-cy));
+   assert(Math.max(...radii)-Math.min(...radii)<1e-7,'an unobstructed tangle must be circular, without a groove');
+  }
+  for(const e of P.gEdges)assert(e.s[0]<e.s[1],'the two marks must stay in order on their nonalternating edge');
+  const fallback=KC.decompositionPaths(S.comps,d,{round:false});
+  assert(P.marks.some((p,i)=>Math.hypot(p.x-fallback.marks[i].x,p.y-fallback.marks[i].y)>50),'the fit must release the old halfway-along-edge pins');
+ }
+ console.log('Long connectors: circular tangle boundaries, ordered sliding marks, and unchanged knot geometry in three orientations: PASS');
+ const obstacle=x=>{const S=build(),cm={pts:Array.from({length:32},(_,i)=>({x:x+4*Math.cos(i*Math.PI/16),y:-158+4*Math.sin(i*Math.PI/16),u:i/32}))};
+  KC.updateGeom(cm);S.comps.push(cm);assert.equal(KC.computeRaw(S.comps).length,S.crossings.length,'the obstacle is disjoint from the knot');return S;};
+ const S=obstacle(20),d=KC.decompose(S.comps,S.crossings),P=KC.decompositionPaths(S.comps,d);
+ assert(P.rounded.includes(0),'an ellipse can fit beside the obstacle');
+ const pts=P.curves[0],cx=pts.reduce((s,p)=>s+p.x,0)/pts.length,cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+ const radii=pts.map(p=>Math.hypot(p.x-cx,p.y-cy));
+ assert(Math.max(...radii)-Math.min(...radii)>20,'the obstructed circle must deform');
+ for(const q of S.comps.at(-1).pts){
+  let winding=0;
+  for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];
+   winding+=Math.atan2((a.x-q.x)*(b.y-q.y)-(a.y-q.y)*(b.x-q.x),(a.x-q.x)*(b.x-q.x)+(a.y-q.y)*(b.y-q.y));}
+  assert(Math.abs(winding)<1e-7,'the ellipse must leave the foreign component outside');
+ }
+ const blocked=obstacle(0),bd=KC.decompose(blocked.comps,blocked.crossings);
+ const bp=KC.decompositionPaths(blocked.comps,bd),original=KC.decompositionPaths(blocked.comps,bd,{round:false});
+ assert(!bp.rounded.includes(0),'a blocked disk must not be forced through an obstacle');
+ assert.deepEqual(bp.curves[0],original.curves[0],'an obstructed tangle keeps its existing boundary');
+ console.log('Round fitting deforms around a crossing-free neighbour and retains the fallback when blocked: PASS');
+}
 
 // ---- The relaxation gives the thread back ----
 // Relaxing the curves takes a few hundred milliseconds, which is long enough to
