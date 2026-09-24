@@ -1479,15 +1479,12 @@ const KC = (function () {
     return go(n, edgeList.map(e => [e[0], e[1]]));
   }
 
-  // Geometry for the overlay. A decomposition curve is drawn as the SHORTEST
-  // curve of its kind: it must pass through its marked points, and it must stay
-  // clear of every strand and of every other curve. Length is then minimised
-  // under those two rules, which is what makes it come out round -- a loop pulled
-  // taut around an alternating tangle. The clearance rule is the first
-  // principle, not an afterthought: a point moves a bounded amount per step and
-  // is pushed straight back out of anything it approaches, so a curve can never
-  // cross a strand, and so can never take in a strand belonging to another
-  // tangle, whatever the relaxation does.
+  // Start with a boundary following the faces of the diagram, and shorten it
+  // subject to strand and boundary clearances. This is also the fallback for a
+  // tangle that cannot fit in a round disk in the current drawing. A final pass
+  // tries circles, then ellipses, around the alternating core: marked points
+  // may move along their nonalternating edges instead of holding long grooves
+  // in the boundary halfway along a winding connector.
   // The relaxation is the one part of this file that takes long enough to be
   // felt, so it is written as a generator that gives the thread back between
   // rounds. Anything that just wants the answer drains it; the app drives it a
@@ -2276,12 +2273,164 @@ const KC = (function () {
       }
     });
 
+    const rounded = [];
+    if (opt.round !== false) {
+      // Use the actual vertices of every diagram edge, including the wrap at
+      // the component seam. Sampling can miss a small excursion across a disk.
+      const edgePoints = dart.filter((_, i) => !(i & 1)).map(D => {
+        const cm = comps[D.c], pts = [{ ...pointAtS(cm, D.s0), s: D.s0 }];
+        for (let i = 0; i < cm.pts.length; i++) {
+          let s = cm.cum[i];
+          if (s <= D.s0) s += cm.len;
+          if (s < D.s1) pts.push({ ...cm.pts[i], s });
+        }
+        pts.sort((a, b) => a.s - b.s);
+        pts.push({ ...pointAtS(cm, D.s1), s: D.s1 });
+        return pts;
+      });
+      const inPoly = (p, q) => {
+        let yes = false;
+        for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+          const a = p[i], b = p[j];
+          if ((a.y > q.y) !== (b.y > q.y) && q.x < (b.x - a.x) * (q.y - a.y) / (b.y - a.y) + a.x) yes = !yes;
+        }
+        return yes;
+      };
+      const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      const boundsOf = p => p.reduce((b, q) => ({ x0: Math.min(b.x0, q.x), y0: Math.min(b.y0, q.y), x1: Math.max(b.x1, q.x), y1: Math.max(b.y1, q.y) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+      const overlaps = (a, b, gap = 0) => a.x0 <= b.x1 + gap && b.x0 <= a.x1 + gap && a.y0 <= b.y1 + gap && b.y0 <= a.y1 + gap;
+      const separated = (a, b, gap = apart) => {
+        if (!overlaps(boundsOf(a), boundsOf(b), gap)) return true;
+        for (let i = 0; i < a.length; i++) for (let j = 0; j < b.length; j++) {
+          const u = a[i], v = a[(i + 1) % a.length], p = b[j], q = b[(j + 1) % b.length];
+          if (meet(u, v, p, q) || closest([p.x, p.y, q.x, q.y], u.x, u.y) < gap
+            || closest([u.x, u.y, v.x, v.y], p.x, p.y) < gap) return false;
+        }
+        return true;
+      };
+      const freeComponents = comps.filter((_, c) => !dart.some(d => d.c === c));
+      const proposal = curvePts.map(() => null);
+      for (let c = 0; c < curves.length; c++) {
+        yield 'round';
+        const region = dec.curveRegion[c];
+        // A disk cannot describe a region with holes or one containing infinity.
+        if (dec.curveRegion.filter(r => r === region).length !== 1) continue;
+        const core = [];
+        edgePoints.forEach((pts, g) => {
+          if (dec.regionOfX[dart[2 * g].xi] === region) {
+            core.push(pts[0]);
+            if (!dec.isNA[g]) core.push(...pts.slice(1));
+          }
+          if (dec.regionOfX[dart[2 * g + 1].xi] === region) core.push(pts[pts.length - 1]);
+        });
+        if (!core.length || !inPoly(curvePts[c], core[0])) continue;
+        const box = boundsOf(core), cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+        let xx = 0, xy = 0, yy = 0;
+        for (const p of core) { const x = p.x - cx, y = p.y - cy; xx += x * x; xy += x * y; yy += y * y; }
+        const angle = Math.atan2(2 * xy, xx - yy) / 2;
+        // Prefer an actual circle. Only try modest elongation if the circle
+        // would include a foreign strand or cut a connector more than once.
+        for (const ratio of [1, 1.25, 1.6, 2, 3]) {
+          yield 'round-fit';
+          const co = Math.cos(angle), si = Math.sin(angle);
+          const local = core.map(p => ({ x: (p.x - cx) * co + (p.y - cy) * si, y: -(p.x - cx) * si + (p.y - cy) * co }));
+          const b = boundsOf(local), ox = (b.x0 + b.x1) / 2, oy = (b.y0 + b.y1) / 2;
+          const radius = local.reduce((r, p) => Math.max(r, Math.hypot((p.x - ox) / ratio, p.y - oy)), 0) + Math.max(pad, clear);
+          const x = cx + ox * co - oy * si, y = cy + ox * si + oy * co;
+          const n = Math.max(96, Math.ceil(2 * Math.PI * radius * ratio / fine));
+          const pts = Array.from({ length: n }, (_, i) => {
+            const t = 2 * Math.PI * (i + 0.371) / n, u = radius * ratio * Math.cos(t), v = radius * Math.sin(t);
+            return { x: x + co * u - si * v, y: y + si * u + co * v };
+          });
+          const B = boundsOf(pts), segmentBounds = pts.map((p, i) => boundsOf([p, pts[(i + 1) % n]]));
+          const hits = [], positions = new Map();
+          let valid = !freeComponents.some(cm => inPoly(pts, cm.pts[0]));
+          // Check which *edge* is cut, its arclength, and its order around the
+          // disk, not just the total number of intersections with the diagram.
+          for (let g = 0; g < edgePoints.length && valid; g++) {
+            if (g && g % 16 === 0) yield 'round-edge';
+            const edge = edgePoints[g], expected = [2 * g, 2 * g + 1].filter(d => dec.curveOf[d] === c);
+            if (expected.length > 1) { valid = false; break; }
+            if (inPoly(pts, edge[0]) !== (dec.regionOfX[dart[2 * g].xi] === region)
+              || inPoly(pts, edge[edge.length - 1]) !== (dec.regionOfX[dart[2 * g + 1].xi] === region)) { valid = false; break; }
+            const cut = [];
+            for (let j = 1; j < edge.length && valid; j++) {
+              const a = edge[j - 1], b = edge[j], segmentBox = boundsOf([a, b]);
+              if (!overlaps(B, segmentBox)) continue;
+              for (let k = 0; k < pts.length; k++) {
+                const u = pts[k], v = pts[(k + 1) % pts.length];
+                if (!overlaps(segmentBox, segmentBounds[k])) continue;
+                const den = cross({ x: 0, y: 0 }, { x: b.x - a.x, y: b.y - a.y }, { x: v.x - u.x, y: v.y - u.y });
+                if (Math.abs(den) < 1e-10) continue;
+                const t = ((u.x - a.x) * (v.y - u.y) - (u.y - a.y) * (v.x - u.x)) / den;
+                const q = ((u.x - a.x) * (b.y - a.y) - (u.y - a.y) * (b.x - a.x)) / den;
+                if (t < -1e-8 || t > 1 + 1e-8 || q < -1e-8 || q > 1 + 1e-8) continue;
+                // Tangencies and vertex contacts are ambiguous; keep the
+                // already checked fallback instead of guessing their topology.
+                if (t < 1e-8 || t > 1 - 1e-8 || q < 1e-8 || q > 1 - 1e-8) { valid = false; break; }
+                cut.push({ s: a.s + t * (b.s - a.s), at: k + q });
+              }
+            }
+            if (cut.length !== expected.length) valid = false;
+            if (valid && cut.length === 1) {
+              positions.set(expected[0], cut[0].s); hits.push({ d: expected[0], at: cut[0].at });
+            }
+          }
+          // Crossing-free components are not in edgePoints, but must stay out
+          // of the disk too, including those whose first vertex lies outside.
+          if (valid && freeComponents.some(cm => !separated(pts, cm.pts, clear))) valid = false;
+          if (!valid) continue;
+          const order = hits.sort((a, b) => a.at - b.at).map(h => h.d), cyc = curves[c];
+          const start = order.indexOf(cyc[0]);
+          const same = sign => cyc.every((d, i) => order[mod(start + sign * i, order.length)] === d);
+          if (!same(1) && !same(-1)) continue;
+          proposal[c] = { pts, positions };
+          break;
+        }
+      }
+      // Choose the replacements together. A neighbour's old long sleeve may
+      // disappear at the same time; rejecting disks against every old sleeve
+      // would prevent either tangle from becoming round. If a replacement is
+      // withdrawn, recheck its neighbours against the restored boundary.
+      let changed;
+      do {
+        changed = false;
+        for (let c = 0; c < proposal.length; c++) {
+          if (!proposal[c]) continue;
+          yield 'round-check';
+          for (let j = 0; j < proposal.length; j++) {
+            if (j === c) continue;
+            const other = proposal[j] ? proposal[j].pts : curvePts[j];
+            if (!separated(proposal[c].pts, other)
+              || inPoly(proposal[c].pts, other[0]) !== inPoly(curvePts[c], curvePts[j][0])
+              || inPoly(other, proposal[c].pts[0]) !== inPoly(curvePts[j], curvePts[c][0])) {
+              proposal[c] = null; changed = true; break;
+            }
+          }
+        }
+        for (const g of nonAlt) {
+          const a = dec.curveOf[2 * g], b = dec.curveOf[2 * g + 1];
+          const s0 = proposal[a]?.positions.get(2 * g) ?? markAt(2 * g);
+          const s1 = proposal[b]?.positions.get(2 * g + 1) ?? markAt(2 * g + 1);
+          if (s1 - s0 < Math.min(2 * clear, span(2 * g) * 0.1) && (proposal[a] || proposal[b])) {
+            proposal[a] = proposal[b] = null; changed = true;
+          }
+        }
+      } while (changed);
+      proposal.forEach((p, c) => {
+        if (!p) return;
+        curvePts[c] = p.pts; rounded.push(c);
+        for (const [d, s] of p.positions) frac[d] = Math.abs(s - dart[d].s0) / span(d);
+      });
+    }
+
     // For drawing, drop the points that sit on a straight run. What is left is
     // the corners, which a fillet can then round properly; kept at full density
     // every corner is only one point wide and rounds over almost nothing. The
     // tolerance is a fraction of the clearance, so the drawn line still runs
     // where the relaxed one does.
     const outline = curvePts.map(pts => {
+      if (rounded.some(c => curvePts[c] === pts)) return pts;
       const n = pts.length;
       if (n < 4) return pts;
       const off = (a, b, q) => {                       // how far q is off the chord a-b
@@ -2365,7 +2514,7 @@ const KC = (function () {
       const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
       return { region: r, curves: own, outer: parity === 0 };
     });
-    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side };
+    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side, rounded };
   }
 
   // Adjacent occurrences on every closed component must have opposite heights.

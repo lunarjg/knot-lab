@@ -5,6 +5,13 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Round alternating regions (unreleased)
+
+- Fit circles around the crossings and alternating edges of each bounded tangle, trying ellipses where a circle cannot fit. Long nonalternating connectors no longer pin the boundary into deep grooves.
+- Slide marked points along their original edges while preserving their cyclic order, two distinct endpoints per connector, and the decomposition graph. Knot geometry and crossing assignments are unchanged.
+- Check actual diagram segments, foreign components, neighbouring boundaries and containment before accepting a fit. Keep the existing boundary when a round fit is obstructed.
+- Cover long connectors in three orientations, elliptical fits beside obstacles, blocked fits, and marked points on their actual boundaries. Refresh the offline cache.
+
 ## Full-screen view menu (unreleased)
 
 - Keep the current view in a compact top-left dropdown in full screen. Selecting another view closes the menu and updates its label.
