@@ -174,7 +174,7 @@ h2{font-size:15px}
 .chk{margin:10px 0}
 .panel-hidden .app{grid-template-columns:1fr}
 .panel-hidden aside{display:none}
-.panel-reveal{display:none;position:fixed;right:env(safe-area-inset-right);top:50%;transform:translateY(-50%);z-index:7;width:44px;height:68px;padding:0;place-items:center;border:1px solid var(--rule);border-right:0;border-radius:16px 0 0 16px;background:var(--paper);color:var(--accent);box-shadow:-3px 2px 14px #0002;cursor:pointer;touch-action:manipulation}
+.panel-reveal{display:none;position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:7;width:44px;height:68px;padding:0;place-items:center;border:1px solid var(--rule);border-right:0;border-radius:16px 0 0 16px;background:var(--paper);color:var(--accent);box-shadow:-3px 2px 14px #0002;cursor:pointer;touch-action:manipulation}
 .panel-hidden .panel-reveal{display:grid}
 .panel-reveal:hover{background:var(--accent-soft)}
 .panel-reveal:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}
@@ -225,13 +225,25 @@ h2{font-size:15px}
 .new-tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .document-tabs>.iconbtn{flex-shrink:0}
 .fileacts{display:flex;align-items:stretch;gap:6px;flex-shrink:0}
-/* Full screen is the app's own chrome, not the browser's: the title, the file
-   tabs and the view bar go, and what is left is the canvas, the toolbar on it
-   and the arrow that brings the inspector back. On a phone that is most of the
-   header given back to the drawing. */
-.stage-full .apphead,.stage-full .document-tabs,.stage-full .bar{display:none}
+/* Full screen keeps the existing views in a compact disclosure at the top left. */
+.full-view-toggle{display:none}
+.stage-full .apphead,.stage-full .document-tabs{display:none}
 .stage-full .stage{padding:0}
 .stage-full .canvaswrap{border:0;border-radius:0}
+.stage-full #viewMenu{position:absolute;top:10px;left:10px;z-index:6;display:block;width:210px;max-width:calc(100% - 20px);margin:0;border:1px solid var(--rule);border-radius:12px;background:var(--paper);box-shadow:0 6px 18px -10px color-mix(in srgb,var(--ink) 45%,transparent);overflow:hidden}
+.stage-full .full-view-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:46px;padding:10px 14px;border:0;background:transparent;text-align:left;cursor:pointer;touch-action:manipulation;font-weight:500}
+.full-view-toggle svg{flex:none;transition:transform .15s}
+.full-view-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.stage-full #viewChoices{display:none;width:100%;padding:0;gap:0;border:0;border-radius:0;max-height:calc(100dvh - 86px - env(safe-area-inset-top) - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+.stage-full .full-view-toggle[aria-expanded="true"] + #viewChoices{display:flex;flex-direction:column}
+.stage-full #viewChoices button{flex:none;min-height:46px;border-top:1px solid var(--rule);border-radius:0;padding:10px 14px;text-align:left;color:var(--ink);touch-action:manipulation}
+.stage-full #viewChoices button[aria-pressed="true"]{display:none}
+.stage-full #viewChoices button:hover,.stage-full .full-view-toggle:hover{background:var(--bg)}
+.stage-full #viewMenu button:focus-visible{outline-offset:-3px}
+.stage-full #viewChoices .full{display:inline}
+.stage-full #viewChoices .brief{display:none}
+.stage-full.panel-open .dock{top:66px}
+@media(max-width:1000px){.stage-full .dock{top:66px}}
 #fullBtn .exit,.stage-full #fullBtn .enter{display:none}
 .stage-full #fullBtn .exit{display:block}
 @media(max-width:600px){.document-tabs{flex-wrap:wrap}.tab-list{flex-basis:100%;order:1}}
@@ -277,8 +289,12 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         <button class="iconbtn" id="fit" title="Fit to view">Fit</button>
       </div>
     </div>
-    <div class="bar">
-      <div class="seg views" role="group" aria-label="Views">
+    <div class="bar" id="viewMenu">
+      <button class="full-view-toggle" id="fullViewToggle" aria-expanded="false" aria-controls="viewChoices" aria-label="Change view: Diagram">
+        <span id="fullViewLabel">Diagram</span>
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>
+      </button>
+      <div class="seg views" id="viewChoices" role="group" aria-label="Views">
         <button data-view="diagram" aria-pressed="true" aria-label="Diagram">Diagram</button>
         <button data-view="A" aria-pressed="false" aria-label="all-A state"><span class="full">all-A state</span><span class="brief">all-A</span></button>
         <button data-view="B" aria-pressed="false" aria-label="all-B state"><span class="full">all-B state</span><span class="brief">all-B</span></button>
@@ -339,6 +355,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       </div>
       <div class="empty" id="empty"><div><strong>Draw a curve to begin</strong>Or select Import PD above to enter a code</div></div>
       <div class="toast" id="toast"></div>
+      <button id="panelToggle" class="panel-reveal" aria-label="Show calculations and settings" aria-controls="inspector" aria-expanded="false" title="Show calculations and settings">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+      </button>
     </div>
   </div>
 
@@ -510,9 +529,6 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   </aside>
 </div>
 
-<button id="panelToggle" class="panel-reveal" aria-label="Show calculations and settings" aria-controls="inspector" aria-expanded="false" title="Show calculations and settings">
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
-</button>
 <div id="panelScrim" hidden></div>
 <script src="./pd-import.js"></script>
 <script>
@@ -2786,20 +2802,26 @@ const KC = (function () {
     rememberPanelWidth(e.key === 'Home' ? min : e.key === 'End' ? max : width + (e.key === 'ArrowLeft' ? 1 : -1) * (e.shiftKey ? 48 : 24));
   });
   // Full screen puts the canvas on its own: the title, the file tabs and the
-  // view bar are the app's own chrome and go, and the inspector goes with them,
-  // which leaves the arrow that brings it back. The toolbar floats on the canvas
+  // view bar are folded away, and the inspector goes with them. A compact view
+  // menu and the inspector's reveal arrow stay. The toolbar floats on the canvas
   // and stays, so there is always a way out. Whether the inspector was open is
   // remembered, so leaving full screen puts the window back as it was.
-  let fullOpen = false, panelBeforeFull = false;
+  let fullOpen = false, panelBeforeFull = false, viewMenuOpen = false;
+  function setViewMenuOpen(on, focus = false) {
+    viewMenuOpen = fullOpen && on;
+    $('fullViewToggle').setAttribute('aria-expanded', String(viewMenuOpen));
+    if (focus) $('fullViewToggle').focus();
+  }
   function setFull(on, focus = false) {
     if (on === fullOpen) return;
     fullOpen = on;
+    setViewMenuOpen(false);
     document.body.classList.toggle('stage-full', on);
     $('fullBtn').setAttribute('aria-pressed', String(on));
     if (on) { panelBeforeFull = panelOpen; if (panelOpen) setPanel(false); }
     else if (panelBeforeFull) setPanel(true);
     resize();
-    if (focus) $('fullBtn').focus();
+    if (focus || (!on && $('viewMenu').contains(document.activeElement))) $('fullBtn').focus();
   }
   $('fullBtn').onclick = () => setFull(!fullOpen);
   $('panelToggle').onclick = () => setPanel(!panelOpen, true);
@@ -2821,6 +2843,7 @@ const KC = (function () {
     // One press does one thing: close the inspector if it is open, and leave
     // full screen otherwise. Two handlers acting on the same press did both.
     if(e.key !== 'Escape') return;
+    if(viewMenuOpen) { e.preventDefault(); e.stopPropagation(); setViewMenuOpen(false, true); return; }
     if(panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); return; }
     if(fullOpen && !sel) setFull(false, true);
   });
@@ -3000,9 +3023,33 @@ const KC = (function () {
   $('eraseSize').oninput = e => { opts.eraseSize = +e.target.value; render(); };
   $('autoClose').onchange = e => { opts.autoClose = e.target.checked; };
   $('grid').onchange = e => { opts.grid = e.target.checked; render(); };
-  function setView(v) { viewMode = v; document.querySelectorAll('.views button').forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v)); render(); }
+  function setView(v) {
+    viewMode = v;
+    document.querySelectorAll('.views button').forEach(b => {
+      b.setAttribute('aria-pressed', b.dataset.view === v);
+      if (b.dataset.view === v) {
+        const label = b.getAttribute('aria-label');
+        $('fullViewLabel').textContent = v === 'AD' ? 'Alt. decomposition' : label;
+        $('fullViewToggle').setAttribute('aria-label', 'Change view: ' + label);
+      }
+    });
+    setViewMenuOpen(false); render();
+  }
   document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-  document.querySelectorAll('.views button').forEach(b => b.onclick = () => setView(b.dataset.view));
+  document.querySelectorAll('.views button').forEach(b => b.onclick = () => { setView(b.dataset.view); if (fullOpen) $('fullViewToggle').focus(); });
+  $('fullViewToggle').onclick = () => setViewMenuOpen(!viewMenuOpen);
+  document.addEventListener('pointerdown', e => { if (viewMenuOpen && !$('viewMenu').contains(e.target)) setViewMenuOpen(false); });
+  $('viewMenu').addEventListener('focusout', e => { if (viewMenuOpen && !$('viewMenu').contains(e.relatedTarget)) setViewMenuOpen(false); });
+  $('viewMenu').addEventListener('keydown', e => {
+    if (!fullOpen || !['ArrowDown','ArrowUp','Home','End'].includes(e.key)) return;
+    e.preventDefault(); e.stopPropagation();
+    const choices = [...document.querySelectorAll('.views button')].filter(b => b.dataset.view !== viewMode);
+    const i = choices.indexOf(document.activeElement);
+    setViewMenuOpen(true);
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? choices.length - 1 :
+      i < 0 ? (e.key === 'ArrowUp' ? choices.length - 1 : 0) : (i + (e.key === 'ArrowUp' ? -1 : 1) + choices.length) % choices.length;
+    choices[next].focus();
+  });
   // One way in for the radius, so the slider and the +/- keys cannot disagree.
   function setSigma(v, announce) {
     const el = $('sigma'), lo = +el.min || 10, hi = +el.max || 160;

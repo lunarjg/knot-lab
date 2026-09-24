@@ -5,6 +5,14 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Full-screen view menu (unreleased)
+
+- Keep the current view in a compact top-left dropdown in full screen. Selecting another view closes the menu and updates its label.
+- Reuse the existing five view controls, with touch-sized rows, keyboard navigation, outside-tap dismissal and Escape closing the menu before leaving full screen.
+- Leave room above the floating toolbar on narrow screens and when the inspector is open.
+- Anchor the inspector's reveal arrow to the canvas so it does not cover the full-screen button on short phone screens.
+- Refresh the offline cache for the updated interface.
+
 ## Geometry and regression audit fixes (unreleased)
 
 - Make crossing detection independent of intersection-coordinate rounding at grid boundaries.

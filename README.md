@@ -112,7 +112,9 @@ Method: [Armond and Lowrance, "Turaev genus and alternating decompositions", *Al
 
 ## Full screen
 
-The button at the end of the toolbar takes the app's own chrome away: the title, the file tabs, the view bar, and the inspector with them. What is left is the canvas, the toolbar floating on it, and the arrow that brings the inspector back — so there is always a way out. <kbd>F</kbd> toggles it, <kbd>Escape</kbd> leaves it, and whether the inspector was open is remembered so that leaving puts the window back as it was. It is the app's chrome rather than the browser's, since the Fullscreen API does not work on an ordinary element in Safari on iOS, which is where the screen is smallest.
+The button at the end of the toolbar hides the title, file tabs and inspector, leaving the canvas and floating tools. A compact menu at the top left shows the current view. Tap it to choose Diagram, all-A state, all-B state, Seifert state or Alt. decomposition; choosing a view closes the menu. Tap outside or press <kbd>Escape</kbd> to dismiss it. The arrow keys also navigate the choices.
+
+<kbd>F</kbd> toggles full screen. <kbd>Escape</kbd> closes an open view menu first, then the inspector if open, and otherwise leaves full screen. The inspector returns to its previous open/closed state. This is the app's full-screen layout, so it also works on iPad without the browser's Fullscreen API.
 
 Import PD, Save and Fit sit with Open files rather than under the view bar, which on a phone was a row of header spent on three buttons. The view names have a short form on narrow screens — all-A, all-B, Alt. dec. — with the full name still on the button for a screen reader; five long names do not fit across a phone, and the last of them used to run off the edge where it could not be reached.
 

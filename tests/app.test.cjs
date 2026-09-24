@@ -208,11 +208,11 @@ console.log('Overlay signs and region shading switch off on their own, the shadi
 // Import PD, Save and Fit used to sit under the view bar, which on a phone is a
 // row of header taken off the drawing. They belong with Open files.
 {
- const acts=html.slice(html.indexOf('<div class="fileacts">'),html.indexOf('<div class="bar">'));
+ const acts=html.slice(html.indexOf('<div class="fileacts">'),html.indexOf('<div class="bar"'));
  assert(acts&&acts.length<900,'the file actions are one group');
  for(const id of ['openBtn','pdOpen','saveBtn','fit'])
   assert(acts.includes(`id="${id}"`),`${id} sits with Open files, above the view bar`);
- const bar=html.slice(html.indexOf('<div class="bar">'),html.indexOf('<div class="canvaswrap"'));
+ const bar=html.slice(html.indexOf('<div class="bar"'),html.indexOf('<div class="canvaswrap"'));
  assert(!bar.includes('class="iconbtn"'),'and the view bar carries nothing but the views');
  // Five view names do not fit across a phone, so the long ones have a short
  // form. The full name stays on the button for anything reading it aloud.
