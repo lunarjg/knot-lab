@@ -2,9 +2,18 @@
 
 Entries `v1`–`v17` (tagged releases), and the codebase state this repository
 started from, were built by an earlier Codex-based development process.
-Everything below this line was implemented by a Claude Code session
-continuing that work, across two pull requests; none of it has been tagged
-as a new release yet.
+The subsequent entries document the continued development work. They have
+not been assigned new version tags.
+
+## Geometry and regression audit fixes (unreleased)
+
+- Make crossing detection independent of intersection-coordinate rounding at grid boundaries.
+- Keep no-op and unrelated components unchanged during geometry maintenance. Preserve small crossing-bearing corners; accept point reduction only when it preserves the moved projection's crossings.
+- Limit drag-release corner smoothing to the dragged component. The explicit Smooth corners action still handles the whole diagram.
+- Keep crossing-free components visible in Alt. decomposition and represent each as an isolated graph vertex.
+- Measure decomposition performance by point updates and distance checks rather than unequal generator slices; retain the length and drawing-legality checks.
+- Add macOS regression coverage and require all regression jobs to succeed before Pages deployment, including manual runs.
+- Bump the offline cache so existing installations receive the fixes.
 
 ## Shading strength, and the pen double-tap out (Claude Code, unreleased)
 
@@ -19,7 +28,7 @@ as a new release yet.
 - **The line of instructions under the canvas is gone.** It said what the tool in hand does, which is a sentence of prose under every diagram for something the toolbar and the options bar beside it already show; Controls & shortcuts in the inspector still spells it out.
 - **The last view button ran off the edge of a phone**, where it could not be reached at all — five view names do not fit across 390px, let alone 320px. The long ones now have a short form on narrow screens (all-A, all-B, Alt. dec.), with the full name still on the button for a screen reader, and the row scrolls if even those are too wide.
 
-## Alternating decomposition (Claude Code, unreleased, not on main)
+## Alternating decomposition (Claude Code, unreleased)
 
 Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in the form used by Armond and Lowrance, ["Turaev genus and alternating decompositions", *Algebr. Geom. Topol.* 17 (2017) 793–830](https://doi.org/10.2140/agt.2017.17.793). Built on a branch for review, deliberately not merged to main.
 
@@ -62,7 +71,7 @@ Thistlethwaite's decomposition of a diagram into maximal alternating pieces, in 
 - The recursion refuses a graph that is not an alternating decomposition graph rather than answering anyway: odd degrees or a non-bipartite component return `null`. A doubled cycle of odd length is one such graph, which is why Theorem 1.2's family is the even ones.
 - Other properties tested against the paper: an alternating diagram gives one vertex per connected piece; every vertex of G has even degree and G is bipartite; the sphere embedding really is spherical (V − E + F = 2k); doubled cycles, disjoint unions and one-sums have the genus the classification theorems give them; and 117 doubled path extensions leave the genus alone (Proposition 3.11).
 - The drawing is tested, not only the numbers. One pass over the fixtures requires every drawn curve to be simple, disjoint from the others, and to meet D exactly at its own marked points — that last count is the strong one, since it says the curve encircles its own tangle and never strays into a neighbouring one — to separate the crossings of the region it bounds from the middle pieces of the edges of G that meet it, and then requires the shading to cover the first set and none of the second. **166** curves, **163** regions, **1302** points, 10 of the regions holding the point at infinity.
-- The relaxation is tested as something that can be run in slices: draining the generator in one go and stepping it must land on exactly the same curves, and no single slice may carry the whole run. Pulling the curves taut coarse-first is tested against doing it at the drawn spacing throughout: it must reach the same length, within 3%, in less than half the rounds.
+- The relaxation is tested as something that can be run in slices: draining the generator in one go and stepping it must land on exactly the same curves. Pulling the curves taut coarse-first must reach the same length within 3%, with fewer point updates and distance checks than working at the drawn spacing throughout.
 - Smoothness is tested as a number rather than looked at: over the same 166 curves, the mean turning must stay under 6 half-turns and no single curve over 30.
 - An alternating diagram must not be painted out by its own region: with the shading on, nothing is filled at all. The test fails without the guard.
 - So is the absence of grooves: every concave stretch of every drawn curve, taken between consecutive vertices of its convex hull, must either be shallower than 30px or have a strand or one of the curve's own marked points inside it. A dent with neither is one the relaxation settled for.

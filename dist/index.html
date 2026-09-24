@@ -570,7 +570,7 @@ const KC = (function () {
     return X.map(c => ({ id: c.id, over: c.over, x: c.x, y: c.y, occ: c.occ.map(o => ({ ...o })) }));
   }
 
-  function resampleComp(comp) {
+  function resampleComp(comp, simplify = false) {
     const p = comp.pts, n = p.length, out = [];
     for (let i = 0; i < n; i++) {
       const a = p[i], b = p[(i + 1) % n];
@@ -585,15 +585,24 @@ const KC = (function () {
       }
     }
     if (out.length > 16) {
+      // Standalone resampling only drops straight, redundant points. A caller
+      // checking the resulting projection may also simplify gentle bends.
+      // Sharp corners and reversals survive even when their edges are tiny.
+      const redundant = (a, b, c) => {
+        const ux = b.x - a.x, uy = b.y - a.y, vx = c.x - b.x, vy = c.y - b.y;
+        const cross = Math.abs(ux * vy - uy * vx), dot = ux * vx + uy * vy;
+        return dot >= 0 && (simplify ? Math.atan2(cross, dot) < 0.45 :
+          cross <= 1e-12 * Math.max(1, Math.hypot(ux, uy) * Math.hypot(vx, vy)));
+      };
       const kept = [out[0]];
       for (let i = 1; i < out.length; i++) {
         const q = kept[kept.length - 1];
-        if (Math.hypot(out[i].x - q.x, out[i].y - q.y) < 0.45 * SEG) continue;
+        if (Math.hypot(out[i].x - q.x, out[i].y - q.y) < 0.45 * SEG && redundant(q, out[i], out[(i + 1) % out.length])) continue;
         kept.push(out[i]);
       }
       while (kept.length > 16) {
         const l = kept[kept.length - 1], f = kept[0];
-        if (Math.hypot(l.x - f.x, l.y - f.y) < 0.45 * SEG) kept.pop(); else break;
+        if (Math.hypot(l.x - f.x, l.y - f.y) < 0.45 * SEG && redundant(kept[kept.length - 2], l, f)) kept.pop(); else break;
       }
       comp.pts = kept;
     } else comp.pts = out;
@@ -632,6 +641,11 @@ const KC = (function () {
           const c2 = l[B], j = l[B + 1];
           if (c1 === c2) { if (j === i || (j + 1) % n1 === i || (i + 1) % n1 === j) continue; }
           const Q = comps[c2].pts, n2 = Q.length, b1 = Q[j], b2 = Q[(j + 1) % n2];
+          // Test the pair in the first cell shared by its bounding boxes.
+          // Ownership must use the same bounds as insertion, not a rounded
+          // intersection coordinate that can drift across a cell boundary.
+          if (cx !== Math.max(Math.floor(Math.min(a1.x, a2.x) / CELL), Math.floor(Math.min(b1.x, b2.x) / CELL)) ||
+              cy !== Math.max(Math.floor(Math.min(a1.y, a2.y) / CELL), Math.floor(Math.min(b1.y, b2.y) / CELL))) continue;
           const rx = a2.x - a1.x, ry = a2.y - a1.y, sx = b2.x - b1.x, sy = b2.y - b1.y;
           const den = rx * sy - ry * sx;
           if (Math.abs(den) < 1e-12) continue;
@@ -639,7 +653,6 @@ const KC = (function () {
           const t = (qx * sy - qy * sx) / den, w = (qx * ry - qy * rx) / den;
           if (t < 0 || t >= 1 || w < 0 || w >= 1) continue;
           const x = a1.x + t * rx, y = a1.y + t * ry;
-          if (Math.floor(x / CELL) !== cx || Math.floor(y / CELL) !== cy) continue;
           res.push({ x, y, id: 0, over: 0, occ: [mkOcc(comps, c1, i, t), mkOcc(comps, c2, j, w)] });
         }
       }
@@ -852,8 +865,39 @@ const KC = (function () {
   function attemptStep(S, mutator, opt) {
     const backup = cloneComps(S.comps);
     mutator(S.comps);
-    S.comps.forEach(resampleComp);
-    const raw = computeRaw(S.comps);
+    S.comps.forEach(updateGeom);
+    // Decimation is a numerical maintenance step, not a Reidemeister move.
+    // Keep its pre-resample projection if shortening a run touches a crossing.
+    // This lets smooth strands shed crowded samples without erasing a tiny
+    // bigon, inventing crossings, or changing an unrelated component.
+    const moved = cloneComps(S.comps), projected = computeRaw(S.comps);
+    S.comps.forEach((cm, c) => {
+      const old = backup[c].pts;
+      if (cm.pts.length !== old.length || cm.pts.some((p, i) => p.x !== old[i].x || p.y !== old[i].y || p.u !== old[i].u)) resampleComp(cm, true);
+    });
+    let raw = computeRaw(S.comps);
+    const sameProjection = sampled => {
+      const remaining = new Set(sampled);
+      const same = (a, b) => a.c === b.c && a.dx * b.dx + a.dy * b.dy > 1 - 1e-8;
+      return projected.length === sampled.length && projected.every(X => {
+        for (const Y of remaining) {
+          if (Math.hypot(X.x - Y.x, X.y - Y.y) > 1e-7) continue;
+          if ((same(X.occ[0], Y.occ[0]) && same(X.occ[1], Y.occ[1])) ||
+              (same(X.occ[0], Y.occ[1]) && same(X.occ[1], Y.occ[0]))) { remaining.delete(Y); return true; }
+        }
+        return false;
+      });
+    };
+    if (!sameProjection(raw)) {
+      S.comps = cloneComps(moved);
+      S.comps.forEach((cm, c) => {
+        if (cm.pts.length !== backup[c].pts.length || cm.pts.some((p, i) => p.x !== backup[c].pts[i].x || p.y !== backup[c].pts[i].y)) resampleComp(cm);
+      });
+      raw = computeRaw(S.comps);
+      // Even subdivision can expose floating-point endpoint degeneracies.
+      // Prefer the actual requested geometry if that happens.
+      if (!sameProjection(raw)) { S.comps = moved; raw = projected; }
+    }
     const r = reconcile(S.crossings, backup, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; return r; }
     S.crossings = r.crossings;
@@ -951,6 +995,11 @@ const KC = (function () {
       const backup = { comps: cloneComps(S.comps), crossings: cloneCrossings(S.crossings), nextId: S.nextId };
       const before2 = S.crossings.length;
       const r = attemptStep(S, comps => {
+        // A stationary component may still be a sparse imported polygon.
+        // Densify only the strands this nudge touches before locating its grip;
+        // otherwise a crossing can snap to a distant corner of that polygon.
+        const involved = new Set([...a.occ, ...b.occ].map(o => o.c));
+        involved.forEach(c => resampleComp(comps[c]));
         [[a, -1], [b, 1]].forEach(([Xc, sign]) => Xc.occ.forEach(o => {
           const cm = comps[o.c];
           moveWeighted(cm, indexOfU(cm, o.u), sign * ux * push, sign * uy * push, sigma);
@@ -1307,6 +1356,8 @@ const KC = (function () {
       if (!regionIx.has(r)) { regionIx.set(r, regions.length); regions.push([]); }
       regionOfX[i] = regionIx.get(r); regions[regionOfX[i]].push(i);
     });
+    // A crossing-free component is a whole alternating piece too.
+    occ.forEach(l => { if (!l.length) regions.push([]); });
     const curveRegion = curves.map(cyc => regionOfX[dart[cyc[0]].xi]);
     // A region no curve bounds is a whole alternating sphere piece, and the paper
     // gives it the single vertex that stands for an alternating diagram.
@@ -1433,6 +1484,9 @@ const KC = (function () {
   function* decompositionSteps(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
+    // Optional deterministic work counters, independent of task slicing.
+    const work = opt.work;
+    if (work) { work.rounds = 0; work.pointUpdates = 0; work.distanceChecks = 0; }
     const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
     const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
     const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
@@ -1518,6 +1572,7 @@ const KC = (function () {
     // in collection than the arithmetic did.
     let cqx = 0, cqy = 0;
     const closest = (it, px, py) => {
+      if (work) work.distanceChecks++;
       const ex = it[2] - it[0], ey = it[3] - it[1], L2 = ex * ex + ey * ey;
       let u = L2 ? ((px - it[0]) * ex + (py - it[1]) * ey) / L2 : 0;
       u = u < 0 ? 0 : u > 1 ? 1 : u;
@@ -1878,6 +1933,7 @@ const KC = (function () {
     // and everything it does not spend goes to the spacing that is drawn.
     let level = Math.max(1, coarse), levelEnd = Math.ceil(rounds / 3);
     for (let round = 0; round < limit; round++) {
+      if (work) work.rounds++;
       if (round) yield round;
       // Shortening a curve is a heat flow, so a dent takes about as many rounds
       // to fill as the square of its width in points. At nine pixels a point the
@@ -1916,6 +1972,7 @@ const KC = (function () {
         // and the run is dropped rather than resumed.
         if (c) yield 'curve';
         const pts = flat[c], n = pts.length;
+        if (work) work.pointUpdates += n;
         // Filling a dent outwards is done against a window rather than against
         // the two neighbours: a three-point mean fills over a couple of points,
         // which at nine pixels apart still leaves a corner. Over eleven it reads
@@ -2283,6 +2340,8 @@ const KC = (function () {
       });
     });
     const regions = dec.regions.map((_, r) => {
+      // Crossing-free pieces have no bounded tangle to cover with a fill.
+      if (!dec.regions[r].length) return { region: r, curves: [], outer: false };
       const own = [];
       dec.curveRegion.forEach((cr, ci) => { if (cr === r) own.push(ci); });
       if (!own.length) return { region: r, curves: own, outer: true };
@@ -2836,13 +2895,13 @@ const KC = (function () {
   // drag can fold this into its own instead of adding a second one. Purely
   // cosmetic: a pass that would add or remove a crossing is rolled back, so
   // tidying up never quietly undoes the curl the user just made.
-  function smoothSharpCorners() {
+  function smoothSharpCorners(component = null) {
     let blocked = false, moved = 0;
-    S.open.forEach(st => { moved += KC.smoothCorners(st.pts, false, { angle: 0.45, iters: 40, strength: 0.5 }); });
+    if (component === null) S.open.forEach(st => { moved += KC.smoothCorners(st.pts, false, { angle: 0.45, iters: 40, strength: 0.5 }); });
     for (let it = 0; it < 40; it++) {
       let m = 0;
       const before = { comps: KC.cloneComps(S.comps), crossings: KC.cloneCrossings(S.crossings), nextId: S.nextId };
-      const r = KC.attemptStep(S, comps => comps.forEach(cm => { m += KC.smoothCorners(cm.pts, true, { angle: 0.45, iters: 1, strength: 0.5 }); }), {});
+      const r = KC.attemptStep(S, comps => comps.forEach((cm, c) => { if (component === null || c === component) m += KC.smoothCorners(cm.pts, true, { angle: 0.45, iters: 1, strength: 0.5 }); }), {});
       if (!r.ok || r.ev.r1 || r.ev.r2 || r.ev.r3 || S.crossings.length !== before.crossings.length) {
         S.comps = before.comps; S.crossings = before.crossings; S.nextId = before.nextId;
         blocked = true; break;
@@ -3163,7 +3222,7 @@ const KC = (function () {
       // so one undo takes back all of it: first ease apart any crossings the
       // drag pushed into each other, then smooth the kinks -- including any
       // the separation itself introduced.
-      if (drag.changed) { separateCrowdedCrossings(drag.before); smoothSharpCorners(); openFlattenedCrossings(drag.beforeAngles); }
+      if (drag.changed) { separateCrowdedCrossings(drag.before); smoothSharpCorners(drag.c); openFlattenedCrossings(drag.beforeAngles); }
       else undoStack.pop();
       drag = null; cv.style.cursor = 'grab'; changed();
     }
@@ -4515,6 +4574,13 @@ const KC = (function () {
       ctx.globalAlpha = 0.22; ctx.fillStyle = regionColor(); fill();
       ctx.restore();
     }
+    // Crossing-free pieces have no darts or region boundaries. Draw them after
+    // the fills too, so another piece's outer region cannot paint them out.
+    const crossed = new Set(S.crossings.flatMap(X => X.occ.map(o => o.c)));
+    S.comps.forEach((cm, c) => {
+      if (crossed.has(c)) return;
+      ctx.beginPath(); tracePiece(cm, 0, cm.len); ctx.closePath(); ctx.stroke();
+    });
     // Each edge of G is the middle piece of a nonalternating edge. Its sign is
     // what the colour and the + or - beside it say, and both are one setting:
     // with them off the edge is still drawn, in a neutral colour, since where it

@@ -45,10 +45,38 @@ const forbidden=state(fixture(-1),true),before=JSON.stringify(forbidden.comps);c
 // Previously even a no-op deleted these two crossings and incremented R2.
 const kink=y=>poly([[-20,10],[-1,1],[0,y],[1,1],[20,10],[20,20],[-20,20]]);
 const bar=()=>poly([[-30,0],[30,0],[30,-20],[-30,-20]]);
-// At normal screen scale (unlike the subpixel scales exercised below), a
-// no-op resample must not touch which crossings exist.
-const scaleUp=cm=>poly(cm.pts.map(p=>[p.x*80,p.y*80]));
-const noop=state([scaleUp(kink(-1)),scaleUp(bar())]);const n=KC.attemptStep(noop,()=>{},{});assert(n.ok);assert.equal(noop.crossings.length,2);assert.deepEqual(n.ev,{r1:0,r2:0,r3:0});
+// Translation across positive and negative grid boundaries must not change
+// crossings, including a very shallow but genuinely transverse intersection.
+for(const height of [1,.001,1e-7])for(const offset of [0,24,-24,.37])for(const reverse of [false,true]){
+ const comps=[kink(-height),bar()].map(cm=>{
+  const points=cm.pts.map(p=>[p.x+offset,p.y+offset]);
+  return poly(reverse?points.reverse():points);
+ });
+ const s=state(comps),before=JSON.stringify(s.comps);
+ assert.equal(s.crossings.length,2,`Crossing count must be translation invariant: ${height}, ${offset}, ${reverse}`);
+ assert.equal(INV.calculate(KC.analyze(s.comps,s.crossings)).jones.status,'ready');
+ const r=KC.attemptStep(s,()=>{},{});
+ assert(r.ok);assert.equal(s.crossings.length,2);assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});
+ assert.equal(JSON.stringify(s.comps),before,'No-op steps must leave point placement intact');
+ const sampled=KC.cloneComps(comps);sampled.forEach(cm=>KC.resampleComp(cm));
+ assert.equal(KC.computeRaw(sampled).length,2,'Standalone resampling must retain crossing-bearing corners');
+}
+// A real move on a third, distant component must not simplify a small bigon.
+{
+ const s=state([kink(-1),bar(),poly([[500,500],[600,500],[600,600],[500,600]])]);
+ const before=JSON.stringify(s.comps.slice(0,2));
+ const r=KC.attemptStep(s,cm=>cm[2].pts.forEach(p=>p.x+=1),{});
+ assert(r.ok);assert.equal(s.crossings.length,2);assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});
+ assert.equal(JSON.stringify(s.comps.slice(0,2)),before,'Unmoved components must not be resampled');
+}
+// A nearly flat bump can carry two crossings too: decimation must not erase
+// it merely because its turn is below the corner threshold.
+{
+ const s=state([poly([[-20,1],[-1,1e-4],[0,-1e-4],[1,1e-4],[20,1],[20,20],[-20,20]]),bar()]);
+ assert.equal(s.crossings.length,2);
+ const r=KC.attemptStep(s,cm=>cm.forEach(c=>c.pts.forEach(p=>p.x+=.1)),{});
+ assert(r.ok);assert.equal(s.crossings.length,2);assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});
+}
 let id=100;const a=[kink(-1),bar()],b=[kink(.5),bar()],x=state(a).crossings;
 const death=KC.reconcile(x,a,b,KC.computeRaw(b),{nextId:()=>id++});assert(death.ok);assert.deepEqual(death.ev,{r1:0,r2:1,r3:0});
 const birth=KC.reconcile([],b,a,KC.computeRaw(a),{nextId:()=>id++});assert(birth.ok);assert.deepEqual(birth.ev,{r1:0,r2:1,r3:0});
