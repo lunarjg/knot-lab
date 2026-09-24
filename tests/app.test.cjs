@@ -1,14 +1,14 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
 function boot(saved,narrow=true,Worker){
- const arcs=[],paths=[],texts=[],fills=[],strokes=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ const arcs=[],paths=[],texts=[],fills=[],strokes=[],paints=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
   setAttribute(k,v){this.attrs[k]=String(v)} removeAttribute(k){delete this.attrs[k]} getAttribute(k){return this.attrs[k]}
   querySelector(q){return this.children.find(x=>x.classList.contains(q.slice(1)))||new El()}
   getBoundingClientRect(){return {left:0,top:0,width:this.id==='inspector'?parseFloat(doc.documentElement.style['--panel-width']||'400'):(narrow?768:1400),height:900}}
-  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8}),fillText:function(txt,x,y){assert(Number.isFinite(x)&&Number.isFinite(y));texts.push(String(txt))},fill:function(){fills.push({style:this.fillStyle,alpha:this.globalAlpha})},stroke:function(){strokes.push(this.strokeStyle)}},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
+  getContext(){return new Proxy({beginPath:()=>paths.push([]),moveTo:(x,y)=>paths.at(-1).push({x,y,move:true}),lineTo:(x,y)=>paths.at(-1).push({x,y,move:false}),arc:(...a)=>{assert(a.every(Number.isFinite));arcs.push(a)},measureText:t=>({width:t.length*8}),fillText:function(txt,x,y){assert(Number.isFinite(x)&&Number.isFinite(y));texts.push(String(txt))},fill:function(){fills.push({style:this.fillStyle,alpha:this.globalAlpha});paints.push({type:'fill'})},stroke:function(){strokes.push(this.strokeStyle);paints.push({type:'stroke',path:paths.at(-1)})}},{get:(t,k)=>t[k]||((...a)=>{for(const x of a)if(typeof x==='number')assert(Number.isFinite(x),'Non-finite canvas '+k);}),set:(t,k,v)=>{t[k]=v;return true}})}
   focus(){doc.activeElement=this} blur(){if(doc.activeElement===this)doc.activeElement=doc.body} scrollIntoView(){} appendChild(x){this.children.push(x)} replaceChildren(...xs){this.children=xs} remove(){} select(){} setPointerCapture(){} releasePointerCapture(){} contains(e){return e===this} click(){if(this.onclick)this.onclick({target:this});}
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
@@ -17,7 +17,7 @@ function boot(saved,narrow=true,Worker){
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,paints,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
   key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
@@ -77,6 +77,32 @@ console.log('App initialization, PD UI, error isolation, undo/redo, mirror/clear
  assert.equal((p.ids.get('adGraphView').innerHTML.match(/<path/g)||[]).length,0,'an alternating diagram has no edges to draw');
 }
 console.log('Alternating decomposition view and inspector section: PASS');
+
+// Wait for the overlay to finish, then inspect a fresh cached render: its
+// temporary plain-diagram fallback must not hide a missing-component bug.
+{
+ const circle=Array.from({length:24},(_,i)=>[900+80*Math.cos(i*Math.PI/12),900+80*Math.sin(i*Math.PI/12)]);
+ for(const mixed of [0,1,2]){
+  const p=boot(),api=p.ctx.knotLab;
+  if(mixed)api.importPD(pd);
+  if(mixed===2)api.state.crossings[0].over=1-api.state.crossings[0].over;
+  const saved=api.serialize();saved.comps.push(circle);
+  api.openTab(api.deserialize(saved),'Crossing-free piece');api.opts.grid=false;api.opts.arrows=false;
+  const ad=p.doc.querySelectorAll('.views button').find(x=>x.dataset.view==='AD');ad.click();
+  for(let i=0;i<10000;i++){
+   p.flush();const jobs=[...p.timers].filter(([,v])=>v.ms===0);if(!jobs.length)break;
+   assert(i<9999,'decomposition must finish');for(const [id,v]of jobs){p.timers.delete(id);v.f();}
+  }
+  p.paths.length=0;p.strokes.length=0;p.paints.length=0;ad.click();
+  const circleStroke=p.paints.findIndex(x=>x.type==='stroke'&&x.path.length>20&&x.path.every(q=>q.x>=819&&q.y>=819));
+  assert(circleStroke>=0,'The cached decomposition must still draw the crossing-free circle');
+  assert(circleStroke>p.paints.findLastIndex(x=>x.type==='fill'),'Region shading must not paint out the crossing-free piece');
+  if(mixed<2)assert.equal(p.ids.get('adGraph').textContent,mixed?'2 vertices, 0 edges':'1 vertex, 0 edges');
+  else assert(p.paints.some(x=>x.type==='fill'),'Exercise a nonalternating region with opaque shading too');
+  assert.equal(api.analysis.mu,mixed?2:1);
+ }
+}
+console.log('Crossing-free components remain visible and count as isolated decomposition vertices: PASS');
 
 // Auto-relax has to finish in the decomposition view too. Relaxing the curves
 // against the whole diagram costs a moment, and doing it on every frame of the
@@ -505,6 +531,31 @@ console.log('Auto-relax from the move options bar and the A shortcut: PASS');
  assert.equal(JSON.stringify(api.serialize().comps),settled);
 }
 console.log('A finished drag smooths its own sharp corners inside the drag undo step: PASS');
+
+// Cleanup belongs to the dragged component. Both open arcs and another
+// closed component must stay byte-for-byte unchanged, with either setting.
+for(const cornerFix of [false,true]){
+ const p=boot(),api=p.ctx.knotLab;
+ const circle=Array.from({length:24},(_,i)=>[300+100*Math.cos(i*Math.PI/12),300+100*Math.sin(i*Math.PI/12)]);
+ const arc=[[600,600],[620,600],[620,620],[640,620],[640,600],[660,600]];
+ const other=[[800,600],[810,600],[810,610],[820,610],[820,640],[800,640]];
+ api.openTab(api.deserialize({format:'knot-lab',version:1,comps:[circle,other],crossings:[],open:[arc]}),'Cleanup scope');
+ api.view.s=1;api.view.ox=api.view.oy=0;api.opts.cornerFix=cornerFix;api.opts.separate=false;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='move').click();
+ const snapshot=()=>JSON.stringify({open:api.serialize().open,other:api.serialize().comps[1]});
+ const before=snapshot(),original=JSON.stringify(api.serialize().comps);
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:1,clientX:x,clientY:y,button:0,type,preventDefault(){}});
+ p.fire(p.ids.get('cv'),'pointerdown',ev(400,300,'pointerdown'));
+ p.fire(p.ids.get('cv'),'pointermove',ev(410,305,'pointermove'));for(let i=0;i<6;i++)p.step();
+ assert.equal(snapshot(),before);
+ p.fire(p.ids.get('cv'),'pointerup',ev(410,305,'pointerup'));p.flush();
+ assert.equal(snapshot(),before,'Releasing one strand must not smooth unrelated geometry');
+ const settled=JSON.stringify(api.serialize().comps);assert.notEqual(settled,original);
+ p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),original);
+ p.ids.get('redo').click();assert.equal(JSON.stringify(api.serialize().comps),settled);assert.equal(snapshot(),before);
+ p.ids.get('cornerBtn').click();assert.notEqual(snapshot(),before,'Explicit whole-diagram smoothing still handles open arcs');
+}
+console.log('Drag release preserves unrelated arcs and closed components; undo/redo and explicit smoothing work: PASS');
 
 // Working an already-stretched strand takes up its slack: the smoothing pass
 // that runs around the grip while dragging draws the strand back in instead

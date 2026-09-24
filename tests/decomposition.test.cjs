@@ -213,15 +213,19 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  S.crossings.forEach((x,i)=>{x.over=(i%3===0)?1:0;});
  const d=KC.decompose(S.comps,S.crossings,KC.analyze(S.comps,S.crossings));
  assert(d&&!d.alternating,'the fixture has a nonalternating decomposition to draw');
- const run=opt=>{let n=0,r;const it=KC.decompositionSteps(S.comps,d,opt);
+ const run=opt=>{let n=0,r;const work={};const it=KC.decompositionSteps(S.comps,d,{...opt,work});
   for(r=it.next();!r.done;r=it.next()){n++;assert(n<1e4,'the stepper does not end');}
   const len=r.value.curves.reduce((t,p)=>{let u=0;for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];u+=Math.hypot(a.x-b.x,a.y-b.y);}return t+u;},0);
-  return {n,len};};
+  return {n,len,work};};
  const ladder=run(undefined),flat=run({coarse:1});
- assert(ladder.n*2<flat.n,`the ladder took ${ladder.n} rounds against ${flat.n} at the drawn spacing throughout`);
+ // A yield can represent a round, one curve, or one pull. Counting yields
+ // measures scheduling, not work. Compare the actual geometric operations;
+ // do not require an arbitrary 2x speedup that varies with convergence.
+ assert(ladder.work.pointUpdates<flat.work.pointUpdates,`coarse-first did not reduce point updates: ${JSON.stringify({ladder:ladder.work,flat:flat.work})}`);
+ assert(ladder.work.distanceChecks<flat.work.distanceChecks,`coarse-first did not reduce distance checks: ${JSON.stringify({ladder:ladder.work,flat:flat.work})}`);
  assert(Math.abs(ladder.len-flat.len)<0.03*flat.len,
   `the ladder settled on a different curve: ${Math.round(ladder.len)} against ${Math.round(flat.len)}`);
- console.log(`Pulling the curves taut coarse-first reaches the same length in ${ladder.n} rounds rather than ${flat.n}: PASS`);
+ console.log(`Coarse-first reaches the same length: ${ladder.work.pointUpdates}/${flat.work.pointUpdates} point updates, ${ladder.work.distanceChecks}/${flat.work.distanceChecks} distance checks (${ladder.n}/${flat.n} slices): PASS`);
 }
 
 // ---- The drawn curves are the decomposition curves ----
@@ -371,7 +375,14 @@ assert.equal(KC.decompositionGenusRecursive(3,[[0,1],[1,2],[2,0]]),null,'a trian
 {
  const S=KC.fromCurves3D([KC.circleCurve()],360),a=KC.analyze(S.comps,S.crossings);
  const d=KC.decompose(S.comps,S.crossings,a);
- assert(d&&d.alternating&&d.graph.n===0&&d.nArc===0,'a crossingless circle has nothing to decompose');
+ assert(d&&d.alternating&&d.graph.n===1&&d.graph.solo===1&&d.nArc===0,'a crossingless circle contributes one isolated graph vertex');
  assert.equal(KC.decompositionGenus(d).genus,0);
+ const other=KC.cloneComps(S.comps);other[0].pts.forEach(p=>p.x+=1000);KC.updateGeom(other[0]);
+ const comps=S.comps.concat(other),split=KC.decompose(comps,[]);
+ assert.equal(split.graph.n,2);assert.equal(split.graph.solo,2);
+ assert.equal(KC.decompositionGenus(split).components,2);
+ assert.equal(KC.decompositionGenusRecursive(split.graph.n,split.graph.edges),0);
+ const paths=KC.decompositionPaths(comps,split);
+ assert(paths.regions.every(r=>!r.outer&&!r.curves.length),'free components do not shade the whole plane');
 }
 console.log('Graphs that are not alternating decomposition graphs, and crossingless diagrams: PASS');
