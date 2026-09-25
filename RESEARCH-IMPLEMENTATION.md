@@ -47,6 +47,14 @@ The optional browser test passed in installed Chrome at desktop and 390 × 844 p
 
 To reproduce the optional browser check, make `playwright` and Google Chrome available and run `node tests/research.browser.cjs`. `PLAYWRIGHT_MODULE` may point to an existing Playwright installation. Screenshots default to the system temporary directory; set `RESEARCH_SCREENSHOTS` to choose another directory. The seven dependency-free suite commands are listed in [README.md](README.md#tests).
 
+## Pre-merge audit
+
+The audit reproduced and fixed two display defects: panning incorrectly suspended research data/colours, and large parallel-edge fans could be clipped vertically. Panning now retains the finalized analysis; the SVG viewport includes the quadratic curves' actual extrema and their labels. A 24-crossing braid regression checks every path, circle and label against the viewport bounds.
+
+Rendering now caches circle colours, crossing-free circle IDs and block selections per finalized analysis, replacing repeated linear searches with map/set lookups. Invariant-only refreshes retain the existing graph DOM. Browser checks cover cache invalidation through edits and tab switches, preserved DOM identity, and 1,000 repeated colour/highlight lookups without scanning circle IDs. Pasted dataset limits now count UTF-8 bytes, matching file uploads.
+
+The mathematical audit additionally compares complete circle partitions with the existing half-edge smoothing on 80 deterministic signed braids, then checks their alternating assignments for homogeneity. These augment the independent multigraph oracle tests; geometry and exact invariant algorithms remain unchanged.
+
 ## Sources and current limits
 
 The signed graph/block definitions and minimal-surface statement were checked in [Manchón's journal paper](https://msp.org/pjm/2012/255-2/pjm-v255-n2-p06-p.pdf), also available on [arXiv](https://arxiv.org/abs/1102.0890), which cites [Cromwell's original theorem](https://doi.org/10.1112/jlms/s2-39.3.535). The Cromwell publisher text was inaccessible during this session; it was not independently read in full. The [NetworkX block documentation](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.components.biconnected_components.html) supports the DFS and dyad convention.

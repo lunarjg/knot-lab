@@ -14,7 +14,7 @@ function delimited(text,delimiter) {
  if(quoted)throw Error('Unclosed quote in dataset.');row.push(field);if(row.some(x=>x.trim()))rows.push(row);return rows;
 }
 function parse(text) {
- if(typeof text!=='string'||text.length>MAX_BYTES)throw Error('Use a local dataset no larger than 5 MB.');
+ if(typeof text!=='string'||text.length>MAX_BYTES||new TextEncoder().encode(text).length>MAX_BYTES)throw Error('Use a local dataset no larger than 5 MB.');
  const source=text.replace(/^\uFEFF/,'').trim();if(!source)throw Error('Paste PD codes or choose a local dataset.');
  let parsed;try{parsed=JSON.parse(source);}catch{}
  let rows;

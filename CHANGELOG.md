@@ -12,6 +12,8 @@ not been assigned new version tags.
 - Reuse the exact Jones engine for occupied extreme coefficients, span and the exact `V(t) = 1` test. Add deterministic JSON/CSV research exports.
 - Analyze local PD, JSON, CSV and TSV datasets in a cancellable worker using the same geometric reconstruction as the editor. Add sorting, combined filters, per-row errors and a homogeneous genus-3 knot filter.
 - Link circle, edge, crossing and block selection to the existing smoothing renderer. Include an offline research guide and mathematical, browser and editor regression coverage.
+- Preserve research data and circle colours while panning. Fit parallel-edge curves and labels inside the graph viewport, cache circle/block lookups, and avoid rebuilding an unchanged graph when invariant results arrive.
+- Validate pasted dataset size in UTF-8 bytes, matching uploaded files. Extend regression coverage to crowded graph bounds, panning, cache reuse and 80 signed-braid smoothing partitions.
 - Extract the existing knot core unchanged so the editor and batch worker share it. See [the implementation report](RESEARCH-IMPLEMENTATION.md) for validation, screenshots and limits.
 
 ## Preserve nested tangles while closing boundary folds (unreleased)

@@ -8,6 +8,8 @@ const display=v=>v===null||v===undefined?'—':typeof v==='boolean'?v?'Yes':'No'
 function mount(host) {
  const $=id=>document.getElementById(id),R=root.KnotResearch;
  let result=null,sourceRef=null,sourceTab=null,openCount=-1,selected=null,batchWorker=null,batchID=0,rows=[],total=0,filters=[],sortKey='name',sortDir=1,page=0,queued=false;
+ let renderResult=null,renderMaps=null,selectionResult=null,selectionRef=null,selectionCache=null,graphResult=null,graphSelection=null;
+ const emptySelection={circles:new Set(),crossings:new Set()};
  const visible=()=>$('pageResearch').hidden===false&&!$('inspector').inert;
  const current=()=>{const s=host.source();return !s.busy&&s.analysis===sourceRef&&s.tabId===sourceTab&&!s.state.open.length?result:null;};
  function download(text,type,name){const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
@@ -49,30 +51,45 @@ function mount(host) {
   selected={kind,id};if(kind==='circle')host.view('S');else if(host.source().viewMode==='AD')host.view('diagram');
   drawGraph();host.render();return true;
  }
- function selectionSets(){
-  const r=current();const circles=new Set(),crossings=new Set();if(r?.status!=='ready'||!selected)return {circles,crossings};
+ // Build lookup tables once per finalized analysis, not once per rendered arc.
+ function maps(r){
+  if(renderResult!==r){renderResult=r;renderMaps={colors:new Map(),free:new Map(),blocks:new Map(r.record.blocks.map(b=>[b.id,b]))};r.seifert.circles.forEach((c,i)=>{renderMaps.colors.set(c.id,COLORS[i%COLORS.length]);if(c.freeComponent!==null)renderMaps.free.set(c.freeComponent,c.id);});}
+  return renderMaps;
+ }
+ function selectionSets(r=current()){
+  if(r?.status!=='ready'||!selected)return emptySelection;
+  if(selectionResult===r&&selectionRef===selected)return selectionCache;
+  const circles=new Set(),crossings=new Set();
   if(selected.kind==='circle')circles.add(selected.id);
   if(selected.kind==='edge')crossings.add(Number(selected.id));
-  if(selected.kind==='block'){const b=r.record.blocks.find(b=>b.id===selected.id);if(b){b.vertexIDs.forEach(i=>circles.add(i));b.edgeIDs.forEach(i=>crossings.add(i));}}
-  return {circles,crossings};
+  if(selected.kind==='block'){const b=maps(r).blocks.get(selected.id);if(b){b.vertexIDs.forEach(i=>circles.add(i));b.edgeIDs.forEach(i=>crossings.add(i));}}
+  selectionResult=r;selectionRef=selected;return selectionCache={circles,crossings};
  }
  function drawGraph(){
-  const r=current();if(r?.status!=='ready')return;
+  const r=current();if(r?.status!=='ready'||(graphResult===r&&graphSelection===selected))return;
+  graphResult=r;graphSelection=selected;
   const {vertices,edges}=r.record.signedSeifertGraph,n=vertices.length;
   const parallel=new Map();edges.forEach(e=>{const key=[e.u,e.v].sort().join('/');if(!parallel.has(key))parallel.set(key,[]);parallel.get(key).push(e);});
   const widest=Math.max(1,...[...parallel.values()].map(es=>es.length)),w=Math.max(300,Math.min(850,n*42),widest*42+90),h=Math.max(235,Math.min(850,n*42));
   const pos=new Map(vertices.map((v,i)=>[v.id,{x:n===1?w/2:w/2+(w/2-60)*Math.cos(-Math.PI/2+2*Math.PI*i/n),y:n===1?h/2:h/2+(h/2-50)*Math.sin(-Math.PI/2+2*Math.PI*i/n)}]));
   const blocks=new Map();r.record.blocks.forEach((b,i)=>b.edgeIDs.forEach(e=>blocks.set(e,i)));
-  const sets=selectionSets(),activeEdges=sets.crossings,cut=new Set(r.record.articulationVertices);let svg='';
+  const sets=selectionSets(r),activeEdges=sets.crossings,cut=new Set(r.record.articulationVertices);let svg='';
+  // Parallel fans can bend beyond the initial layout, especially vertically.
+  // Bound their actual quadratic extrema and labels rather than clipping them.
+  const bounds={x0:0,y0:0,x1:w,y1:h},include=(x,y,px=8,py=px)=>{bounds.x0=Math.min(bounds.x0,x-px);bounds.y0=Math.min(bounds.y0,y-py);bounds.x1=Math.max(bounds.x1,x+px);bounds.y1=Math.max(bounds.y1,y+py);};
+
   for(const group of parallel.values())group.forEach((e,i)=>{
    const [u,v]=[e.u,e.v].sort(),a=pos.get(u),b=pos.get(v),dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1,offset=(i-(group.length-1)/2)*76;
    const cx=(a.x+b.x)/2-dy/L*offset,cy=(a.y+b.y)/2+dx/L*offset,mx=(a.x+2*cx+b.x)/4,my=(a.y+2*cy+b.y)/4;
    const d=`M${a.x},${a.y} Q${cx},${cy} ${b.x},${b.y}`,chosen=activeEdges.has(e.id),color=COLORS[(blocks.get(e.id)||0)%COLORS.length],label='X'+e.id+' '+(e.sign>0?'+':'−');
+   include(a.x,a.y);include(b.x,b.y);include(mx,my-8,Math.max(22,label.length*3.5),12);
+   for(const [p,q,c] of [[a.x,b.x,cx],[a.y,b.y,cy]]){const t=(p-c)/(p-2*c+q);if(t>0&&t<1){const u=1-t;include(u*u*a.x+2*u*t*cx+t*t*b.x,u*u*a.y+2*u*t*cy+t*t*b.y);}}
    svg+='<g role="button" tabindex="0" data-kind="edge" data-id="'+esc(e.id)+'" aria-label="'+esc(label+', '+r.record.blocks[blocks.get(e.id)]?.id)+'" aria-pressed="'+chosen+'"><path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="'+(chosen?5:2)+'"/><path d="'+d+'" fill="none" stroke="transparent" stroke-width="14"/><text x="'+mx+'" y="'+(my-5)+'" class="research-edge-label">'+label+'</text></g>';
   });
-  vertices.forEach((v,i)=>{const p=pos.get(v.id),chosen=sets.circles.has(v.id);svg+='<g role="button" tabindex="0" data-kind="circle" data-id="'+esc(v.id)+'" aria-label="Seifert circle '+esc(v.id)+(cut.has(v.id)?', articulation':'')+'" aria-pressed="'+chosen+'">'+(cut.has(v.id)?'<circle cx="'+p.x+'" cy="'+p.y+'" r="22" class="research-articulation"/>':'')+'<circle cx="'+p.x+'" cy="'+p.y+'" r="17" fill="'+COLORS[i%COLORS.length]+'" stroke="'+(chosen?'var(--ink)':'var(--paper)')+'" stroke-width="'+(chosen?5:2)+'"/><text x="'+p.x+'" y="'+(p.y+4)+'" class="research-vertex-label">'+esc(v.id)+'</text></g>';});
+  vertices.forEach((v,i)=>{const p=pos.get(v.id),chosen=sets.circles.has(v.id);include(p.x,p.y,Math.max(25,v.id.length*3),25);svg+='<g role="button" tabindex="0" data-kind="circle" data-id="'+esc(v.id)+'" aria-label="Seifert circle '+esc(v.id)+(cut.has(v.id)?', articulation':'')+'" aria-pressed="'+chosen+'">'+(cut.has(v.id)?'<circle cx="'+p.x+'" cy="'+p.y+'" r="22" class="research-articulation"/>':'')+'<circle cx="'+p.x+'" cy="'+p.y+'" r="17" fill="'+COLORS[i%COLORS.length]+'" stroke="'+(chosen?'var(--ink)':'var(--paper)')+'" stroke-width="'+(chosen?5:2)+'"/><text x="'+p.x+'" y="'+(p.y+4)+'" class="research-vertex-label">'+esc(v.id)+'</text></g>';});
   const focus=document.activeElement?.closest?.('[data-kind]'),focusKind=focus?.dataset.kind,focusID=focus?.dataset.id;
-  $('researchGraph').innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+w+' '+h+'" style="min-width:'+w+'px" aria-label="Signed Seifert multigraph">'+svg+'</svg>';
+  const x0=Math.floor(bounds.x0),y0=Math.floor(bounds.y0),width=Math.ceil(bounds.x1)-x0,height=Math.ceil(bounds.y1)-y0;
+  $('researchGraph').innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+x0+' '+y0+' '+width+' '+height+'" style="min-width:'+width+'px" aria-label="Signed Seifert multigraph">'+svg+'</svg>';
   $('researchCircles').innerHTML=vertices.map((v,i)=>'<button data-kind="circle" data-id="'+esc(v.id)+'" style="border-color:'+COLORS[i%COLORS.length]+'">'+esc(v.id)+'</button>').join('');
   $('researchEdges').innerHTML=edges.map(e=>'<button data-kind="edge" data-id="'+esc(e.id)+'">X'+esc(e.id)+' '+(e.sign>0?'+':'−')+'</button>').join('');
   $('researchBlocks').innerHTML=r.record.blocks.length?r.record.blocks.map((b,i)=>'<button data-kind="block" data-id="'+b.id+'" aria-pressed="'+(selected?.kind==='block'&&selected.id===b.id)+'" style="border-left-color:'+COLORS[i%COLORS.length]+'"><strong>'+b.id+' · '+b.sign+'</strong><span>'+b.vertexCount+' vertices · '+b.edgeCount+' edges · rank '+b.rank+'</span><small>'+b.vertexIDs.map(esc).join(', ')+' · '+b.edgeIDs.map((e,j)=>'X'+esc(e)+(b.edgeSigns[j]>0?'+':'−')).join(', ')+'</small></button>').join(''):'<p class="small">No edge blocks. Isolated Seifert circles are retained.</p>';
@@ -87,24 +104,24 @@ function mount(host) {
  }
  function paint(ctx,view,KC,tracePiece){
   const r=current();if(r?.status!=='ready'||!visible())return;
-  const s=host.source().state,sets=selectionSets();ctx.save();
-  for(const circle of r.seifert.circles){
+  const s=host.source().state,sets=selectionSets(r);ctx.save();
+  for(const [i,circle] of r.seifert.circles.entries()){
    if(sets.circles.has(circle.id)&&host.source().viewMode!=='S'){
-    ctx.strokeStyle=COLORS[r.seifert.circles.indexOf(circle)%COLORS.length];ctx.lineWidth=9/view.s;ctx.globalAlpha=.4;ctx.beginPath();
+    ctx.strokeStyle=COLORS[i%COLORS.length];ctx.lineWidth=9/view.s;ctx.globalAlpha=.4;ctx.beginPath();
     if(circle.freeComponent!==null){const cm=s.comps[circle.freeComponent];tracePiece(cm,0,cm.len);}
     for(const ai of circle.arcs){const a=r.seifert.arcs[ai];tracePiece(s.comps[a.component],a.s0,a.s1);}ctx.stroke();
    }
    if(host.source().viewMode==='S'){
     const a=circle.arcs.length?r.seifert.arcs[circle.arcs[0]]:null,cm=s.comps[a?a.component:circle.freeComponent],p=KC.pointAtS(cm,a?(a.s0+a.s1)/2:cm.len/2);
-    ctx.globalAlpha=1;ctx.font='600 '+(12/view.s)+'px sans-serif';ctx.fillStyle=COLORS[r.seifert.circles.indexOf(circle)%COLORS.length];ctx.fillText(circle.id,p.x+9/view.s,p.y-9/view.s);
+    ctx.globalAlpha=1;ctx.font='600 '+(12/view.s)+'px sans-serif';ctx.fillStyle=COLORS[i%COLORS.length];ctx.fillText(circle.id,p.x+9/view.s,p.y-9/view.s);
    }
   }
   ctx.globalAlpha=1;ctx.strokeStyle='#bd3c35';ctx.lineWidth=3/view.s;
   for(const x of s.crossings)if(sets.crossings.has(x.id)){ctx.beginPath();ctx.arc(x.x,x.y,15/view.s,0,2*Math.PI);ctx.stroke();}
   ctx.restore();
  }
- function circleColor(arc,freeComponent){const r=current();if(r?.status!=='ready'||!visible())return null;const id=freeComponent===undefined?r.seifert.circleOfArc[arc]:r.seifert.circles.find(c=>c.freeComponent===freeComponent)?.id;const i=r.seifert.circles.findIndex(c=>c.id===id);return i<0?null:COLORS[i%COLORS.length];}
- function circleHighlighted(arc,freeComponent){const r=current();if(r?.status!=='ready'||!visible()||!selected)return false;const id=freeComponent===undefined?r.seifert.circleOfArc[arc]:r.seifert.circles.find(c=>c.freeComponent===freeComponent)?.id;return selected.kind==='circle'?selected.id===id:selected.kind==='block'&&!!r.record.blocks.find(b=>b.id===selected.id)?.vertexIDs.includes(id);}
+ function circleColor(arc,freeComponent){if(!visible())return null;const r=current();if(r?.status!=='ready')return null;const m=maps(r),id=freeComponent===undefined?r.seifert.circleOfArc[arc]:m.free.get(freeComponent);return m.colors.get(id)||null;}
+ function circleHighlighted(arc,freeComponent){if(!visible()||!selected)return false;const r=current();if(r?.status!=='ready')return false;const id=freeComponent===undefined?r.seifert.circleOfArc[arc]:maps(r).free.get(freeComponent);return selectionSets(r).circles.has(id);}
  const choose=e=>{const el=e.target.closest('[data-kind]');if(el)select(el.dataset.kind,el.dataset.id);};
  for(const id of ['researchGraph','researchCircles','researchEdges','researchBlocks']){$(id).onclick=choose;$(id).onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target.closest('[data-kind]')){e.preventDefault();choose(e);}};}
  $('researchPreview').onchange=()=>{host.view($('researchPreview').checked?'S':'diagram');refresh();};

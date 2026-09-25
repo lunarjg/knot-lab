@@ -2900,8 +2900,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     ctx.restore();
   }
 
+  // Suspend research only for unfinished geometry, not pan/selection gestures.
   research=KnotResearchUI.mount({
-    source:()=>({state:S,analysis,tabId:activeTabId,name:currentTab()?.title||'',busy:!!active||!!drag||relaxing>0||!!stroke,invariants:invariantResult,calculating:!!invariantWorker,invariantStatus:$('invariantStatus').textContent,viewMode}),
+    source:()=>({state:S,analysis,tabId:activeTabId,name:currentTab()?.title||'',busy:!!drag||relaxing>0||!!stroke||!!erasing||!!active?.lifted,invariants:invariantResult,calculating:!!invariantWorker,invariantStatus:$('invariantStatus').textContent,viewMode}),
     view:setView,render,calculate:()=>$('calculateInvariants').click(),cancel:()=>$('cancelInvariants').click()
   });
   window.knotLab = { state: S, view, opts, research, importPD, serialize, deserialize, openFile, openTab, activateTab, closeTab, get tabs(){return tabs.map(t=>({id:t.id,title:t.title,dirty:t.dirty}));}, get activeTabId(){return activeTabId;}, get analysis() { return analysis; }, get __decompRuns(){return decompRuns;}, get __decompPaths(){return decompCache && decompCache.paths;}, __h: () => rotateHandlePos(), __sh: () => (sel ? scaleHandlePos() : null) };

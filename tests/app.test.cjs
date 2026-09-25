@@ -1218,6 +1218,10 @@ console.log('Strand erase/rejoin preserves surviving crossing heights; isolated 
  assert.equal(p.ids.get('researchStatus').textContent,'This diagram is homogeneous.');
  assert.equal((p.ids.get('researchGraph').innerHTML.match(/data-kind="edge"/g)||[]).length,3);
  api.research.select('circle',api.research.record.seifertCircles[0].id);assert.equal(p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='S').getAttribute('aria-pressed'),'true');
+ const colorBeforePan=api.research.circleColor(0);p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='move').click();
+ const panEvent={pointerType:'mouse',pointerId:90,button:0,clientX:5,clientY:50,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',panEvent);assert.equal(api.research.record.status,'ready');assert.equal(api.research.circleColor(0),colorBeforePan);
+ p.fire(p.ids.get('cv'),'pointermove',{...panEvent,clientX:9});p.fire(p.ids.get('cv'),'pointerup',{...panEvent,clientX:9});assert.equal(state(),before);
  api.research.select('block','B1');assert.equal(state(),before);
  p.ids.get('researchCalculate').click();assert.equal(workers.at(-1).url,'./invariants-worker.js');assert(p.ids.get('researchCalculate').disabled);workers.at(-1).complete();
  assert.equal(api.research.record.jonesSpan,3);assert.equal(api.research.record.determinant,'3');assert.equal(api.research.record.isTrivialJones,false);

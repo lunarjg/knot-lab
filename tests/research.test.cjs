@@ -51,7 +51,16 @@ assert.equal(l.componentCount,2);assert.equal(l.surfaceComponentCount,2);assert.
 const hopf=analyze(braid([1,1])).record;assert.equal(hopf.surfaceComponentCount,1);assert.equal(hopf.canonicalSeifertGenus,0);assert.equal(hopf.certifiedKnotGenus,null);
 assert.equal(R.analyze({...unknot,open:[{pts:[{x:0,y:0},{x:1,y:1}]}]},KC.analyze(unknot.comps,unknot.crossings)).status,'open');
 assert.equal(R.analyze({comps:[],crossings:[]},KC.analyze([],[])).status,'empty');
-console.log('Finalized diagrams: unknot, positive trefoil, figure-eight, 5_1, genus-3 T(2,7), alternating diagrams, mirrors, PD, Hopf, split unlink and open-arc exclusion: PASS');
+// Compare the complete circle partition with the established half-edge state,
+// not only the circle count, across deterministic signed braid fixtures.
+for(let trial=0;trial<80;trial++){
+ const word=Array.from({length:2+rand(11)},()=>((rand(3)+1)*(rand(2)?1:-1))),S=braid(word),a=KC.analyze(S.comps,S.crossings),r=R.analyze(S,a);
+ assert.equal(r.status,'ready');const roots=new Map();
+ for(const circle of r.seifert.circles)for(const arc of circle.arcs){const root=a.sS.uf.find(2*arc);assert.equal(a.sS.uf.find(2*arc+1),root);if(roots.has(root))assert.equal(roots.get(root),circle.id);else roots.set(root,circle.id);}
+ assert.equal(new Set(roots.values()).size,roots.size);assert.equal(roots.size,r.record.seifertCircleCount-a.free);
+ const plan=KC.alternatingAssignment(S.comps,S.crossings);assert(plan.ok);S.crossings.forEach((x,i)=>x.over=plan.over[i]);assert(R.analyze(S,KC.analyze(S.comps,S.crossings)).record.isHomogeneousDiagram);
+}
+console.log('Finalized diagrams: unknot, positive trefoil, figure-eight, 5_1, genus-3 T(2,7), alternating diagrams, mirrors, PD, Hopf, split unlink, 80 signed-braid partitions/alternating certificates and open-arc exclusion: PASS');
 const data=R.jonesData({status:'ready',terms:[{power2:8,coefficient:'9007199254740993123'},{power2:-4,coefficient:'-2'},{power2:0,coefficient:'3'}]});
 assert.equal(data.jonesMinExponent,-2);assert.equal(data.jonesMaxExponent,4);assert.equal(data.jonesSpan,6);assert.equal(data.jonesMaxCoefficient,'9007199254740993123');assert.equal(data.jonesSecondLowCoefficient,'3');assert.equal(data.jonesSecondHighCoefficient,'3');assert.equal(data.isTrivialJones,false);
 assert.equal(R.jonesData({status:'limited'}).isTrivialJones,null);assert.equal(R.jonesData(null).jonesSpan,null);
@@ -72,7 +81,8 @@ assert.equal(Dataset.parse('{"diagrams":[{"name":"unknot","unknot":true}]}')[0].
 assert.throws(()=>Dataset.parse('[1,2'),/brackets/);assert.throws(()=>Dataset.parse('4 6 2'),/PD/);assert.throws(()=>Dataset.parse('x'.repeat(Dataset.MAX_BYTES+1)),/5 MB/);
 assert.throws(()=>Dataset.parse(JSON.stringify(Array(10001).fill(code))),/10,000/);
 assert.equal(Dataset.parse(JSON.stringify([{name:'missing PD'}]))[0].pd,'','individual malformed records are retained for error reporting');
-const messages=[],ctx={postMessage:m=>messages.push(m)};ctx.self=ctx;ctx.globalThis=ctx;ctx.importScripts=(...names)=>names.forEach(n=>vm.runInContext(fs.readFileSync('dist/'+n.replace('./',''),'utf8'),ctx));vm.createContext(ctx);vm.runInContext(fs.readFileSync('dist/research-worker.js','utf8'),ctx);
+assert.throws(()=>Dataset.parse(JSON.stringify([{name:'한'.repeat(Math.floor(Dataset.MAX_BYTES/3)+1),unknot:true}])),/5 MB/,'pasted input uses the same UTF-8 byte limit as file uploads');
+const messages=[],ctx={TextEncoder,postMessage:m=>messages.push(m)};ctx.self=ctx;ctx.globalThis=ctx;ctx.importScripts=(...names)=>names.forEach(n=>vm.runInContext(fs.readFileSync('dist/'+n.replace('./',''),'utf8'),ctx));vm.createContext(ctx);vm.runInContext(fs.readFileSync('dist/research-worker.js','utf8'),ctx);
 const dataset=JSON.stringify([{name:'trefoil',pd:code},{name:'bad',pd:'[[1,2,1,2]]'},{name:'unknot',unknot:true}]);
 ctx.self.onmessage({data:{id:12,text:dataset,jones:true}});
 assert.equal(messages[0].type,'start');assert.equal(messages.at(-1).type,'done');assert(messages.every(m=>m.id===12));
