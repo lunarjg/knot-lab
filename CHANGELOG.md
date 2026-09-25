@@ -5,6 +5,17 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Seifert / Homogeneous research mode (unreleased)
+
+- Add a read-only Research inspector with oriented Seifert circles, a signed multigraph, articulation vertices and block-by-block homogeneity. Preserve parallel crossing edges and the existing crossing-sign convention.
+- Distinguish diagram homogeneity from knot/link homogeneity, and canonical surface genus from certified knot genus. Diagnose inconsistent smoothing or graph data instead of issuing a certificate.
+- Reuse the exact Jones engine for occupied extreme coefficients, span and the exact `V(t) = 1` test. Add deterministic JSON/CSV research exports.
+- Analyze local PD, JSON, CSV and TSV datasets in a cancellable worker using the same geometric reconstruction as the editor. Add sorting, combined filters, per-row errors and a homogeneous genus-3 knot filter.
+- Link circle, edge, crossing and block selection to the existing smoothing renderer. Include an offline research guide and mathematical, browser and editor regression coverage.
+- Preserve research data and circle colours while panning. Fit parallel-edge curves and labels inside the graph viewport, cache circle/block lookups, and avoid rebuilding an unchanged graph when invariant results arrive.
+- Validate pasted dataset size in UTF-8 bytes, matching uploaded files. Extend regression coverage to crowded graph bounds, panning, cache reuse and 80 signed-braid smoothing partitions.
+- Extract the existing knot core unchanged so the editor and batch worker share it. See [the implementation report](RESEARCH-IMPLEMENTATION.md) for validation, screenshots and limits.
+
 ## Preserve nested tangles while closing boundary folds (unreleased)
 
 - Close deep, narrow folds in the outer boundary of regions with holes. Preserve broad bends and the existing envelope instead of replacing the region with a large circle.

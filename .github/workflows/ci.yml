@@ -43,3 +43,5 @@ jobs:
         run: node tests/offline.test.cjs
       - name: Alternating decomposition
         run: node tests/decomposition.test.cjs
+      - name: Seifert graph and homogeneous research
+        run: node tests/research.test.cjs

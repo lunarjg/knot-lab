@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
-const core=html.match(/<script>\s*(\/\/ ===== Knot core[\s\S]*?)<\/script>/)[1];
+const core=fs.readFileSync('dist/knot-core.js','utf8');
 vm.runInThisContext(core+'\nglobalThis.KC=KC;');
 require('../dist/pd-import.js');
 const cases=[
