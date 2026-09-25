@@ -15,7 +15,7 @@ function boot(saved,narrow=true,Worker){
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
  const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
- for(const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g))vm.runInContext(match[1],context);
+ for(const match of html.matchAll(/<script(?: src="([^"]+)")?>([\s\S]*?)<\/script>/g)){if(match[1]==='./pd-import.js')continue;vm.runInContext(match[1]?fs.readFileSync('dist/'+match[1].replace('./',''),'utf8'):match[2],context);}
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
  flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,paints,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
   key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
@@ -1203,3 +1203,45 @@ console.log('Strand eraser: mouse/pen/touch, cyclic arcs, stable gesture boundar
  p.ids.get('undo').click();assert.equal(api.state.comps.length,2);
 }
 console.log('Strand erase/rejoin preserves surviving crossing heights; isolated loops and other components: PASS');
+
+// Research analysis/selection is read-only, shares exact invariant results and
+// invalidates certificates when the finalized diagram or active tab changes.
+{
+ const workers=[];class ResearchWorker{
+  constructor(url){this.url=url;workers.push(this);}postMessage(data){this.data=data;}terminate(){this.terminated=true;}
+  complete(){this.onmessage({data:{id:this.data.id,result:require('../dist/invariants.js').calculate(this.data.analysis)}});}
+  row(record){this.onmessage({data:{id:this.data.id,type:'row',record,completed:1,total:2}});}
+ }
+ const p=boot(undefined,false,ResearchWorker),api=p.ctx.knotLab;api.importPD(pd);p.ids.get('navResearch').click();
+ const state=()=>JSON.stringify([api.state.comps,api.state.crossings,api.state.open]),before=state();
+ assert.equal(api.research.record.isHomogeneousDiagram,true);assert.equal(api.research.record.certifiedKnotGenus,1);
+ assert.equal(p.ids.get('researchStatus').textContent,'This diagram is homogeneous.');
+ assert.equal((p.ids.get('researchGraph').innerHTML.match(/data-kind="edge"/g)||[]).length,3);
+ api.research.select('circle',api.research.record.seifertCircles[0].id);assert.equal(p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='S').getAttribute('aria-pressed'),'true');
+ api.research.select('block','B1');assert.equal(state(),before);
+ p.ids.get('researchCalculate').click();assert.equal(workers.at(-1).url,'./invariants-worker.js');assert(p.ids.get('researchCalculate').disabled);workers.at(-1).complete();
+ assert.equal(api.research.record.jonesSpan,3);assert.equal(api.research.record.determinant,'3');assert.equal(api.research.record.isTrivialJones,false);
+ p.ids.get('researchPick').checked=true;
+ for(const pointerType of ['mouse','touch','pen']){
+  p.ids.get('palm').onchange({target:{checked:false}});const x=api.state.crossings[0],e={pointerType,pointerId:32,button:0,clientX:x.x*api.view.s+api.view.ox,clientY:x.y*api.view.s+api.view.oy,preventDefault(){}};
+  p.fire(p.ids.get('cv'),'pointerdown',e);p.fire(p.ids.get('cv'),'pointerup',e);assert.equal(api.research.selection.kind,'edge');assert.equal(state(),before);
+ }
+ p.ids.get('researchPick').checked=false;
+ const flip=p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='flip');flip.click();const x=api.state.crossings[0],e={pointerType:'mouse',pointerId:1,button:0,clientX:x.x*api.view.s+api.view.ox,clientY:x.y*api.view.s+api.view.oy,preventDefault(){}};
+ p.fire(p.ids.get('cv'),'pointerdown',e);p.fire(p.ids.get('cv'),'pointerup',e);
+ assert.equal(api.research.record.isHomogeneousDiagram,false);assert.equal(api.research.record.certifiedKnotGenus,null);assert.equal(api.research.record.isTrivialJones,null);assert(p.ids.get('researchMeaning').textContent.includes('does NOT prove'));
+ p.ids.get('undo').click();assert.deepEqual(JSON.parse(state()),JSON.parse(before));assert.equal(api.research.record.isHomogeneousDiagram,true);
+ p.ids.get('researchCalculate').click();const stale=workers.at(-1);api.openTab();stale.complete();assert.equal(api.research.record,null);assert(p.ids.get('researchJSON').disabled);
+ api.activateTab(api.tabs[0].id);p.ids.get('researchCalculate').click();const canceled=workers.at(-1);p.ids.get('researchCancelJones').click();canceled.complete();assert.equal(api.research.record.isTrivialJones,null);
+ // A hidden Research page must never keep intercepting editing gestures.
+ p.ids.get('researchPick').checked=true;p.ids.get('panelClose').click();const xx=api.state.crossings[0],old=xx.over;
+ const ev={...e,clientX:xx.x*api.view.s+api.view.ox,clientY:xx.y*api.view.s+api.view.oy};p.fire(p.ids.get('cv'),'pointerdown',ev);p.fire(p.ids.get('cv'),'pointerup',ev);assert.equal(xx.over,1-old);
+ p.ids.get('panelToggle').click();assert.equal(p.ids.get('researchStatus').textContent,'This diagram is not homogeneous.');p.ids.get('undo').click();
+ p.ids.get('researchPick').checked=false;
+ const stateBeforeBatch=state();p.ids.get('researchBatchInput').value=pd;p.ids.get('researchBatchRun').click();const batch=workers.at(-1);assert.equal(batch.url,'./research-worker.js');
+ batch.row({name:'one',status:'ready',canonicalSeifertGenus:3,isHomogeneousDiagram:true,componentCount:1});p.flush();assert.equal(api.research.batchRows.length,1);
+ p.ids.get('researchGenus3').click();assert.equal(api.research.filteredRows.length,1);
+ p.ids.get('researchBatchCancel').click();assert(batch.terminated);batch.row({name:'stale'});assert.equal(api.research.batchRows.length,1);assert.equal(state(),stateBeforeBatch);
+ assert(p.ids.get('researchBatchStatus').textContent.startsWith('Canceled'));
+ console.log('Research UI: certificates, read-only graph and mouse/pen/touch picks, editing/undo, exact Jones reuse, stale/canceled work, tab isolation, hidden-panel editing and isolated batch cancellation: PASS');
+}

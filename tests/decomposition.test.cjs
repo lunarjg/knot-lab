@@ -1,7 +1,7 @@
 // Alternating decomposition, after Armond and Lowrance, "Turaev genus and
 // alternating decompositions", Algebr. Geom. Topol. 17 (2017) 793-830.
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-const src=fs.readFileSync('dist/index.html','utf8').match(/<script>\s*(\/\/ ===== Knot core[\s\S]*?)<\/script>/)[1];
+const src=fs.readFileSync('dist/knot-core.js','utf8');
 vm.runInThisContext(src+'\nglobalThis.KC=KC;');
 require('../dist/pd-import.js');
 

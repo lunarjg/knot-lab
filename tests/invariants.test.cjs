@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
-vm.runInThisContext(fs.readFileSync('dist/index.html','utf8').match(/<script>\s*(\/\/ ===== Knot core[\s\S]*?)<\/script>/)[1]+'\nglobalThis.K=KC;');
+vm.runInThisContext(fs.readFileSync('dist/knot-core.js','utf8')+'\nglobalThis.K=KC;');
 require('../dist/pd-import.js');const Inv=require('../dist/invariants.js');
 const analyze=s=>K.analyze(s.comps,s.crossings),calc=s=>Inv.calculate(analyze(s));
 const pd=p=>PDImport.fromPD(JSON.stringify(p),K),curves=c=>K.fromCurves3D(c,440),braid=w=>curves(K.braidCurves(w));

@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seifert / Homogeneous research — Knot Diagram Lab</title>
+<style>body{font:16px/1.65 system-ui,sans-serif;max-width:780px;padding:28px;margin:auto;color:#203345;background:#f6f8f9}h1,h2{line-height:1.25}a{color:#176c82}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#e7edef;padding:18px;border-radius:10px}code{font-size:.9em}li{margin:8px 0}</style>
+<a href="./">← Knot Diagram Lab</a><h1>Seifert / Homogeneous research</h1>
+<p>Open Inspector → Research. Use a closed oriented diagram. Open arcs suspend certification. Graph selections, smoothing previews, calculations and exports leave the diagram and undo history unchanged.</p>
+<h2>What is computed</h2>
+<p>Orientation-preserving smoothing connects incoming to outgoing half-edges and gives Seifert circles. The signed Seifert graph has one vertex per circle and one edge per crossing, with its existing crossing ID and sign. Parallel edges remain separate. Blocks are maximal biconnected edge subgraphs; a bridge is a dyad block, and isolated circles have no edge block.</p>
+<p>A diagram is homogeneous when every block has only positive or only negative edges. Different blocks may have opposite signs. Success certifies the represented knot/link homogeneous. Failure concerns this diagram and does not rule out another homogeneous diagram of the same knot/link. Self-loops and non-bipartite graphs are reported as diagnostics.</p>
+<p>For c crossings, s circles, μ link components and k canonical-surface components, χ = s − c and the sum of the surface genera is (2k − μ − s + c)/2. For a knot this is (c − s + 1)/2. This is the canonical genus of the current diagram, not a minimum over diagrams. A homogeneous knot diagram additionally certifies the knot genus by Cromwell's minimal-surface theorem.</p>
+<h2>Graph and smoothing controls</h2>
+<p>X labels identify crossings, S labels identify circles, colours identify blocks, and double rings identify articulations. Select graph edges, circles or blocks to highlight their diagram counterparts. Enable “Select crossings in the diagram” for read-only canvas selection; disable it to edit. Circle selection uses the existing Seifert smoothing view. Graph layout coordinates are illustrative, not mathematical data.</p>
+<h2>Jones data</h2>
+<p>The existing exact engine is reused: V(unknot) = 1, V(t) = (−A³)<sup>−w</sup>⟨D⟩, A = t<sup>−1/4</sup>. Structured terms store twice the exponent and integer coefficients as strings. Research shows the exponent range, span, extreme and next occupied coefficients, and nonzero term count. “V = 1” means exactly the single constant coefficient 1. It is not an unknot certificate.</p>
+<p>The exact Jones limit remains 18 crossings. Unknown or limited values export as null, never as false or zero. For a single-term polynomial there is no second occupied coefficient.</p>
+<h2>Local batch input</h2>
+<p>Paste PD expressions, upload JSON, or use CSV/TSV with name and pd/pd_notation columns. PDs go through the same geometry reconstruction as the editor before analysis. Workers keep the editor responsive; cancellation retains completed rows. Invalid rows report errors while later rows continue.</p>
+<pre>Trefoil: PD[X[1,4,2,5], X[3,6,4,1], X[5,2,6,3]]
+Curl: [[1,2,2,1]]</pre>
+<pre>[
+  {"name":"Trefoil","pd":[[1,4,2,5],[3,6,4,1],[5,2,6,3]]},
+  {"name":"Unknot","unknot":true}
+]</pre>
+<p>Limits: 10,000 rows, 5 MB, 80 crossings per imported PD. Native DT/KnotScape generator files need conversion to PD. No dataset website is required at runtime. Stoimenow's 4,017 genus-3 generators describe families under additional diagram operations; they are not all genus-3 knots.</p>
+<h2>Export and exploration</h2>
+<p>JSON includes the signed graph, circles, blocks, ranks, signs, articulations, diagram statistics, finalized PD and structured exact Jones data. CSV gives a fixed set of scalar statistics and block lists. Exports are deterministic and contain no timestamps. Unknown CSV cells are empty. Use JSON or import coefficient columns as text to prevent spreadsheet rounding.</p>
+<p>Sort and combine filters by crossing count, genus, homogeneity, blocks, Jones span, extreme coefficients and exact V = 1. The genus-3 shortcut also restricts to knots. Export filtered results for studying extreme coefficients, cancellation, block structure and small Jones spans. Sampling does not prove a conjecture.</p>
+<h2>References</h2><ul>
+<li><a href="https://doi.org/10.1112/jlms/s2-39.3.535">Cromwell — Homogeneous Links</a></li>
+<li><a href="https://arxiv.org/abs/1102.0890">Manchón — Homogeneous links and the Seifert matrix</a> · <a href="https://msp.org/pjm/2012/255-2/pjm-v255-n2-p06-p.pdf">journal PDF</a></li>
+<li><a href="https://stoimenov.net/stoimeno/homepage/papers/gen2.pdf">Stoimenow — Knots of (canonical) genus two</a> · <a href="https://stoimenov.net/stoimeno/homepage/ptab/">generator tables</a></li>
+<li><a href="https://www.maths.ed.ac.uk/~v1ranick/papers/kauffmanjones.pdf">Kauffman — State Models and the Jones Polynomial</a> · <a href="https://arxiv.org/html/2204.12104v2">Combinatorial Knot Theory and the Jones Polynomial</a></li>
+<li><a href="https://knotinfo.org/">KnotInfo</a> · <a href="https://linkinfo.knotinfo.org/homelinks/database_download.php">downloads</a></li>
+<li><a href="https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.components.biconnected_components.html">Biconnected components / DFS reference</a></li>
+</ul></html>

@@ -8,10 +8,14 @@ A static web app for drawing and analyzing knot diagrams with pen, touch, and mo
 
 ## Project files
 
-- `dist/index.html`: interface, knot geometry engine, Reidemeister move validation, calculations, document tabs, and file saving/restoration.
+- `dist/index.html`: interface, rendering/input, document tabs, and file saving/restoration.
+- `dist/knot-core.js`: shared geometry, crossing reconstruction, Reidemeister validation and state analysis; used unchanged by the editor and batch worker.
 - `dist/pd-import.js`: PD input validation and planar diagram construction.
 - `dist/manifest.webmanifest`, `dist/sw.js`, `dist/icon-*.png`: home-screen installation and offline support.
 - `dist/invariants.js`, `dist/invariants-worker.js`: exact invariant calculations and a cancellable Web Worker.
+- `dist/seifert.js`, `dist/graph-blocks.js`, `dist/research-analysis.js`: pure oriented-circle, signed-multigraph, block and research/export analysis.
+- `dist/research-ui.js`, `dist/research.css`: the Research inspector, selections and batch table.
+- `dist/research-dataset.js`, `dist/research-worker.js`: local dataset adapters and cancellable batch reconstruction/analysis.
 - `tests/*.test.cjs`: geometry, PD import, application state, invariant, and offline regression tests.
 - `.github/workflows/ci.yml`: automated tests on Node.js 22 and 24 for pushes and pull requests.
 - `.openai/hosting.json`: deployment configuration for the existing Sites project. Preserve its `project_id` and the `dist` static directory.
@@ -63,6 +67,14 @@ Selections made with the lasso can be moved (drag inside the box), rotated (the 
 PD input accepts `[[a,b,c,d], ...]` or `PD[X[a,b,c,d], ...]`. The first label is the incoming understrand; the remaining labels proceed counterclockwise. Each arc label must appear twice. Import supports up to 80 crossings. If a layout is too crowded to construct reliably, an error is shown and the existing diagram is preserved. Crossing-free components cannot be represented by PD code alone.
 
 The displayed Turaev genus is the value for the current diagram, not the minimum over all diagrams of the knot.
+
+## Seifert / Homogeneous research
+
+**Inspector → Research** analyzes the finalized oriented diagram, displays an interactive signed Seifert multigraph, checks each block for homogeneity and reports canonical Seifert genus. It reuses the existing smoothing, signs and exact Jones engine. A homogeneous knot diagram can certify knot genus; a failed diagram test never labels the knot non-homogeneous.
+
+JSON/CSV export contains diagram, block and exact Jones coefficient data. Local batch PD/JSON/CSV/TSV analysis runs in a separate cancellable worker, with sortable/filterable results and a homogeneous genus-3 knot filter. Existing Jones (18 crossings) and PD import (80 crossings) limits remain. No external dataset is fetched automatically.
+
+See [research definitions, dataset formats and export fields](RESEARCH.md), the [offline research guide](dist/research.html), or the [implementation report and screenshots](RESEARCH-IMPLEMENTATION.md).
 
 ## Alternating decomposition
 
@@ -132,11 +144,15 @@ node tests/pd.test.cjs
 node tests/app.test.cjs
 node tests/invariants.test.cjs
 node tests/offline.test.cjs
+node tests/decomposition.test.cjs
+node tests/research.test.cjs
 ```
 
 Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-point intermediate frames, invalid height orders, PD calculations, independent document tabs, saving/restoration, and service-worker offline paths.
 
 Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
+
+An optional real-browser research smoke test is available as `node tests/research.browser.cjs` with Playwright and Google Chrome installed. Set `PLAYWRIGHT_MODULE` to use an existing Playwright installation, and `RESEARCH_SCREENSHOTS` to choose where screenshots are saved. It tests actual worker calculations, downloads, SVG selection, synthetic mouse/pen/touch gestures, undo and responsive layout; it does not replace physical device testing.
 
 ## Site ownership and data
 

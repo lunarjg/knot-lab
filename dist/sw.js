@@ -1,6 +1,6 @@
 'use strict';
-const CACHE='knot-lab-v47-local-decomposition-repair';
-const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE='knot-lab-v48-seifert-research';
+const FILES=['./','./index.html','./pd-import.js','./knot-core.js','./seifert.js','./graph-blocks.js','./research-analysis.js','./research-dataset.js','./research-ui.js','./research-worker.js','./research.css','./research.html','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
     const cache=await caches.open(CACHE);
@@ -30,7 +30,7 @@ self.addEventListener('fetch',event=>{
           const cache=await caches.open(CACHE);await cache.put(new URL('./',self.registration.scope).href,response.clone());
         }
         return response;
-      }catch(error){const cached=await caches.match(new URL('./',self.registration.scope).href);if(cached)return cached;throw error;}
+      }catch(error){const target=url.pathname===new URL('./research.html',self.registration.scope).pathname?request:new URL('./',self.registration.scope).href;const cached=await caches.match(target,{ignoreSearch:true});if(cached)return cached;throw error;}
     })());
   } else if(assets.has(url.pathname)){
     event.respondWith(fetch(request).catch(async error=>{const cached=await caches.match(request,{ignoreSearch:true});if(cached)return cached;throw error;}));
