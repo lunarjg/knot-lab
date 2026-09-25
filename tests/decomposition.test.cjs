@@ -223,6 +223,24 @@ console.log('Overlay geometry: closed curves crossing at the marked points, and 
  console.log('Round fitting deforms around a crossing-free neighbour and retains the fallback when blocked: PASS');
 }
 
+// Close a deep fold without changing a broad bend or inflating the envelope.
+{
+ const input=[[0,0],[80,0],[80,90],[90,90],[90,0],[200,0],[200,20],[180,60],[200,100],[200,120],[0,120]].map(([x,y])=>({x,y}));
+ const before=JSON.stringify(input),p=KC.repairDecompositionDents(input);
+ assert(p&&p.length>3,'a deep narrow fold has a repair');
+ assert.equal(JSON.stringify(input),before,'the proposal must not edit the source boundary');
+ assert(p.some(q=>q.x===180&&q.y===60),'retain the broad concave bend');
+ assert(!p.some(q=>q.x===80&&q.y===90),'remove the bottom of the deep slit');
+ assert(p.every(q=>q.x>=0&&q.x<=200&&q.y>=0&&q.y<=120),'do not enlarge the bounding box');
+ const area=ps=>Math.abs(ps.reduce((s,a,i)=>{const b=ps[(i+1)%ps.length];return s+a.x*b.y-a.y*b.x;},0))/2;
+ assert(area(p)>area(input),'fill the fold instead of shrinking the surrounding shape');
+ const broad=[[0,0],[200,0],[200,20],[180,60],[200,100],[200,120],[0,120]].map(([x,y])=>({x,y}));
+ assert.equal(KC.repairDecompositionDents(broad),null,'a broad bend alone must stay unchanged');
+ const reverse=KC.repairDecompositionDents(input.slice().reverse());
+ assert(reverse&&Math.abs(area(reverse)-area(p))<1e-7,'repair must not depend on boundary orientation');
+ console.log('Local fold repair fills deep slits while preserving broad bends, size, orientation and source geometry: PASS');
+}
+
 // ---- The relaxation gives the thread back ----
 // Relaxing the curves takes a few hundred milliseconds, which is long enough to
 // be felt at the end of a gesture, so it is written to be run in slices: the app

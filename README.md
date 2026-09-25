@@ -76,7 +76,9 @@ The view first tries a **circle around each alternating tangle**, using its cros
 
 The two marked points may move along their original nonalternating edge. A candidate must cut exactly the assigned edges, in the original cyclic order, enclose its own alternating core, and leave other components outside. The checks use the diagram's actual polyline vertices. Neighbouring boundaries must remain disjoint with a gap, their nesting must stay the same, and the two marks on a connector must remain distinct and ordered. Only the overlay changes; the knot's strands and over/under assignments stay untouched.
 
-Some tangles cannot fit in a circle or ellipse in the current drawing, especially regions with holes or containing infinity. Those keep the existing boundary, obtained by following the diagram's faces and shortening and smoothing the curve with strand and boundary clearance checks. Round fitting is a bounded search, not a guarantee that every possible round placement will be found.
+For regions with holes, the outer boundary keeps its existing shape. A separate repair closes deep, narrow folds and rounds their joins, leaving broad bends and the rest of the silhouette unchanged. It runs against the completed inner layout, so enclosed tangles are not resized or displaced to accommodate the outer boundary. The repair must preserve the crossing partition, marked-edge order, nesting and clearances, and must not introduce a self-intersection.
+
+Some tangles cannot fit in a circle or ellipse in the current drawing. Those keep the existing boundary, obtained by following the diagram's faces and shortening and smoothing the curve with strand and boundary clearance checks. Fitting and fold repair use bounded searches, not a guarantee that every possible improvement will be found.
 
 The overlay geometry is computed only when that view asks for it, and only once per edit. Anything that is still moving strands about — a gesture, or auto-relax stepping the whole diagram — shows the plain diagram until it stops, and the decomposition comes back then. Rebuilding it on every frame of an auto-relax run made that button look as though it had hung.
 

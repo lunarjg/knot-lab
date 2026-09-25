@@ -1494,6 +1494,49 @@ const KC = (function () {
     let step; while (!(step = steps.next()).done);
     return step.value;
   }
+  // Propose local fold closures; the caller checks diagram intersections and
+  // neighbouring boundaries before accepting this geometry.
+  function repairDecompositionDents(pts, clear = 7) {
+    if (pts.length < 4) return null;
+    const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const sorted = pts.map((p, i) => ({ ...p, i })).sort((a, b) => a.x - b.x || a.y - b.y), lo = [], hi = [];
+    for (const p of sorted) { while (lo.length > 1 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+    for (const p of sorted.slice().reverse()) { while (hi.length > 1 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+    const hull = lo.slice(0, -1).concat(hi.slice(0, -1)).map(p => p.i).sort((a, b) => a - b);
+    const removed = new Set();
+    for (let k = 0; k < hull.length; k++) {
+      const a = hull[k], b = hull[(k + 1) % hull.length], chord = Math.hypot(pts[a].x - pts[b].x, pts[a].y - pts[b].y);
+      if (chord < 1e-8) continue;
+      let length = 0, depth = 0;
+      const pocket = [];
+      for (let j = a; j !== b; j = (j + 1) % pts.length) {
+        const next = pts[(j + 1) % pts.length];
+        length += Math.hypot(next.x - pts[j].x, next.y - pts[j].y);
+        depth = Math.max(depth, Math.abs(cross(pts[a], pts[b], pts[j])) / chord);
+        if (j !== a) pocket.push(j);
+      }
+      // Deep folds take a long detour around a narrow opening. Leave broad
+      // bends and the rest of the existing silhouette exactly as they are.
+      if (length > 1.6 * chord && depth > 3 * clear) pocket.forEach(j => removed.add(j));
+    }
+    if (!removed.size) return null;
+    const kept = pts.map((p, i) => ({ ...p, i })).filter(p => !removed.has(p.i)), out = [];
+    kept.forEach((p, i) => {
+      const a = kept[mod(i - 1, kept.length)], b = kept[(i + 1) % kept.length];
+      if (mod(p.i - a.i, pts.length) === 1 && mod(b.i - p.i, pts.length) === 1) { out.push({ x: p.x, y: p.y }); return; }
+      const da = Math.hypot(a.x - p.x, a.y - p.y), db = Math.hypot(b.x - p.x, b.y - p.y);
+      const trim = Math.min(clear, da / 3, db / 3);
+      if (trim < 1e-9) { out.push({ x: p.x, y: p.y }); return; }
+      const u = { x: p.x + (a.x - p.x) * trim / da, y: p.y + (a.y - p.y) * trim / da };
+      const v = { x: p.x + (b.x - p.x) * trim / db, y: p.y + (b.y - p.y) * trim / db };
+      for (let k = 0; k <= 4; k++) {
+        const t = k / 4, s = 1 - t;
+        out.push({ x: s * s * u.x + 2 * s * t * p.x + t * t * v.x, y: s * s * u.y + 2 * s * t * p.y + t * t * v.y });
+      }
+    });
+    return out;
+  }
+
   function* decompositionSteps(comps, dec, opt) {
     if (!dec) return null;
     opt = opt || {};
@@ -2273,7 +2316,7 @@ const KC = (function () {
       }
     });
 
-    const rounded = [];
+    const rounded = [], repaired = [];
     if (opt.round !== false) {
       // Use the actual vertices of every diagram edge, including the wrap at
       // the component seam. Sampling can miss a small excursion across a disk.
@@ -2309,12 +2352,12 @@ const KC = (function () {
         return true;
       };
       const freeComponents = comps.filter((_, c) => !dart.some(d => d.c === c));
-      const proposal = curvePts.map(() => null);
+      const proposal = curvePts.map(() => null), pendingRepairs = curvePts.map(() => null);
       for (let c = 0; c < curves.length; c++) {
         yield 'round';
         const region = dec.curveRegion[c];
-        // A disk cannot describe a region with holes or one containing infinity.
-        if (dec.curveRegion.filter(r => r === region).length !== 1) continue;
+        const repair = dec.curveRegion.filter(r => r === region).length !== 1;
+        if (repair && opt.repair === false) continue;
         const core = [];
         edgePoints.forEach((pts, g) => {
           if (dec.regionOfX[dart[2 * g].xi] === region) {
@@ -2324,35 +2367,45 @@ const KC = (function () {
           if (dec.regionOfX[dart[2 * g + 1].xi] === region) core.push(pts[pts.length - 1]);
         });
         if (!core.length || !inPoly(curvePts[c], core[0])) continue;
+        const inside = repair ? dart.map(d => inPoly(curvePts[c], pointAtS(comps[d.c], d.s0))) : null;
         const box = boundsOf(core), cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
         let xx = 0, xy = 0, yy = 0;
         for (const p of core) { const x = p.x - cx, y = p.y - cy; xx += x * x; xy += x * y; yy += y * y; }
         const angle = Math.atan2(2 * xy, xx - yy) / 2;
         // Prefer an actual circle. Only try modest elongation if the circle
         // would include a foreign strand or cut a connector more than once.
-        for (const ratio of [1, 1.25, 1.6, 2, 3]) {
+        for (const ratio of (repair ? [1] : [1, 1.25, 1.6, 2, 3])) {
           yield 'round-fit';
           const co = Math.cos(angle), si = Math.sin(angle);
           const local = core.map(p => ({ x: (p.x - cx) * co + (p.y - cy) * si, y: -(p.x - cx) * si + (p.y - cy) * co }));
           const b = boundsOf(local), ox = (b.x0 + b.x1) / 2, oy = (b.y0 + b.y1) / 2;
           const radius = local.reduce((r, p) => Math.max(r, Math.hypot((p.x - ox) / ratio, p.y - oy)), 0) + Math.max(pad, clear);
           const x = cx + ox * co - oy * si, y = cy + ox * si + oy * co;
-          const n = Math.max(96, Math.ceil(2 * Math.PI * radius * ratio / fine));
-          const pts = Array.from({ length: n }, (_, i) => {
-            const t = 2 * Math.PI * (i + 0.371) / n, u = radius * ratio * Math.cos(t), v = radius * Math.sin(t);
+          const count = Math.max(96, Math.ceil(2 * Math.PI * radius * ratio / fine));
+          const pts = repair ? repairDecompositionDents(curvePts[c], clear) : Array.from({ length: count }, (_, i) => {
+            const t = 2 * Math.PI * (i + 0.371) / count, u = radius * ratio * Math.cos(t), v = radius * Math.sin(t);
             return { x: x + co * u - si * v, y: y + si * u + co * v };
           });
+          if (!pts || pts.length < 3) continue;
+          const n = pts.length;
           const B = boundsOf(pts), segmentBounds = pts.map((p, i) => boundsOf([p, pts[(i + 1) % n]]));
           const hits = [], positions = new Map();
           let valid = !freeComponents.some(cm => inPoly(pts, cm.pts[0]));
+          if (repair) for (let i = 0; i < n && valid; i++) {
+            if (i && i % 64 === 0) yield 'repair-check';
+            for (let j = i + 2; j < n; j++) {
+              if (i === 0 && j === n - 1 || !overlaps(segmentBounds[i], segmentBounds[j])) continue;
+              if (meet(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])) { valid = false; break; }
+            }
+          }
           // Check which *edge* is cut, its arclength, and its order around the
           // disk, not just the total number of intersections with the diagram.
           for (let g = 0; g < edgePoints.length && valid; g++) {
             if (g && g % 16 === 0) yield 'round-edge';
             const edge = edgePoints[g], expected = [2 * g, 2 * g + 1].filter(d => dec.curveOf[d] === c);
             if (expected.length > 1) { valid = false; break; }
-            if (inPoly(pts, edge[0]) !== (dec.regionOfX[dart[2 * g].xi] === region)
-              || inPoly(pts, edge[edge.length - 1]) !== (dec.regionOfX[dart[2 * g + 1].xi] === region)) { valid = false; break; }
+            if (inPoly(pts, edge[0]) !== (inside ? inside[2 * g] : dec.regionOfX[dart[2 * g].xi] === region)
+              || inPoly(pts, edge[edge.length - 1]) !== (inside ? inside[2 * g + 1] : dec.regionOfX[dart[2 * g + 1].xi] === region)) { valid = false; break; }
             const cut = [];
             for (let j = 1; j < edge.length && valid; j++) {
               const a = edge[j - 1], b = edge[j], segmentBox = boundsOf([a, b]);
@@ -2384,7 +2437,7 @@ const KC = (function () {
           const start = order.indexOf(cyc[0]);
           const same = sign => cyc.every((d, i) => order[mod(start + sign * i, order.length)] === d);
           if (!same(1) && !same(-1)) continue;
-          proposal[c] = { pts, positions };
+          (repair ? pendingRepairs : proposal)[c] = { pts, positions };
           break;
         }
       }
@@ -2422,6 +2475,27 @@ const KC = (function () {
         curvePts[c] = p.pts; rounded.push(c);
         for (const [d, s] of p.positions) frac[d] = Math.abs(s - dart[d].s0) / span(d);
       });
+      // Repairs see the completed layout and may only change their own outer
+      // boundary. They must never resize or displace an enclosed tangle to fit.
+      for (let c = 0; c < pendingRepairs.length; c++) {
+        const p = pendingRepairs[c];
+        if (!p) continue;
+        yield 'repair-layout';
+        let valid = true;
+        for (let j = 0; j < curvePts.length && valid; j++) if (j !== c) {
+          const other = curvePts[j];
+          valid = separated(p.pts, other)
+            && inPoly(p.pts, other[0]) === inPoly(curvePts[c], other[0])
+            && inPoly(other, p.pts[0]) === inPoly(other, curvePts[c][0]);
+        }
+        for (const [d, s] of p.positions) {
+          const gap = d & 1 ? s - markAt(d ^ 1) : markAt(d ^ 1) - s;
+          if (gap < Math.min(2 * clear, span(d) * .1)) valid = false;
+        }
+        if (!valid) continue;
+        curvePts[c] = p.pts; repaired.push(c);
+        for (const [d, s] of p.positions) frac[d] = Math.abs(s - dart[d].s0) / span(d);
+      }
     }
 
     // For drawing, drop the points that sit on a straight run. What is left is
@@ -2514,7 +2588,7 @@ const KC = (function () {
       const parity = own.reduce((t, ci) => t + Math.abs(turns(curvePts[ci], here)), 0) % 2;
       return { region: r, curves: own, outer: parity === 0 };
     });
-    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side, rounded };
+    return { curves: curvePts, outline, marks, gEdges, regions, outermost, side, rounded, repaired };
   }
 
   // Adjacent occurrences on every closed component must have opposite heights.
@@ -2548,7 +2622,7 @@ const KC = (function () {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
     attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod,
-    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths, decompositionSteps
+    decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths, decompositionSteps, repairDecompositionDents
   };
 })();
 
