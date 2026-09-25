@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v46-round-decomposition';
+const CACHE='knot-lab-v47-local-decomposition-repair';
 const FILES=['./','./index.html','./pd-import.js','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{

@@ -5,6 +5,13 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Preserve nested tangles while closing boundary folds (unreleased)
+
+- Close deep, narrow folds in the outer boundary of regions with holes. Preserve broad bends and the existing envelope instead of replacing the region with a large circle.
+- Keep the completed inner layout fixed while checking the repair. Enclosed tangles retain their sizes and positions; a repair is rejected if it changes crossing partitions, boundary nesting, edge intersection order, or connector mark order.
+- Check repaired boundaries for self-intersections and retain strand and neighbouring boundary checks. Add regression coverage for deep folds, broad bends, size preservation, and orientation independence.
+- Verify the reported 38-crossing diagram changes only its outer boundary, with all nine other boundaries and the view scale unchanged. Refresh the offline cache.
+
 ## Round alternating regions (unreleased)
 
 - Fit circles around the crossings and alternating edges of each bounded tangle, trying ellipses where a circle cannot fit. Long nonalternating connectors no longer pin the boundary into deep grooves.
