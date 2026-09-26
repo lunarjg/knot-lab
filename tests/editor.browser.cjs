@@ -42,6 +42,8 @@ const server=http.createServer((req,res)=>{const url=new URL(req.url,'http://loc
  await page.evaluate(()=>{knotLab.openTab(knotLab.deserialize({format:'knot-lab',version:1,comps:[],crossings:[],open:[[[80,240],[240,240]],[[160,160],[160,320]]],crossingMemory:[[160,240,1,0]]}));knotLab.view.s=1;knotLab.view.ox=knotLab.view.oy=0;});
  await page.locator('[data-tool=lasso]').click();
  const touch=async points=>page.locator('#cv').evaluate((cv,points)=>{const r=cv.getBoundingClientRect();points.forEach((q,i)=>{const type=i===0?'pointerdown':i===points.length-1?'pointerup':'pointermove';cv.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerType:'touch',pointerId:31,button:0,buttons:type==='pointerup'?0:1,clientX:r.left+q[0],clientY:r.top+q[1]}));});},points);
+ // Let the existing palm-rejection grace period expire before synthetic touch.
+ await page.waitForFunction(()=>performance.now()>350);
  await touch([[50,130],[270,350],[270,350]]);assert(!await page.locator('#selmenu').isVisible());
  await touch([[160,240],[160,240]]);assert(await page.locator('#selmenu').isVisible());
  const menu=await page.locator('#selmenu').boundingBox();assert(menu.x>=0&&menu.x+menu.width<=390,'Selection menu fits on a phone');
