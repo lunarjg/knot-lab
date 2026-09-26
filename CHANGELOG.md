@@ -5,6 +5,12 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Preserve unfinished-diagram crossings in the clipboard (unreleased)
+
+- Copy the displayed crossing heights of selected open arcs, including self crossings and crossings with selected closed components. Keep crossings with unselected strands out of the clipboard.
+- Carry these heights when moving, rotating or resizing a selection. Replace the original memory at lifted crossings so rotation about a crossing cannot reuse its previous direction; normalize transformed directions for the angle matcher.
+- Cover copy/cut/paste across tabs, visible undercrossing gaps, later arc closure, JSON persistence and undo/redo with mouse, pen and touch input. Refresh the offline cache.
+
 ## Seifert / Homogeneous research mode (unreleased)
 
 - Add a read-only Research inspector with oriented Seifert circles, a signed multigraph, articulation vertices and block-by-block homogeneity. Preserve parallel crossing edges and the existing crossing-sign convention.

@@ -1249,3 +1249,77 @@ console.log('Strand erase/rejoin preserves surviving crossing heights; isolated 
  assert(p.ids.get('researchBatchStatus').textContent.startsWith('Canceled'));
  console.log('Research UI: certificates, read-only graph and mouse/pen/touch picks, editing/undo, exact Jones reuse, stale/canceled work, tab isolation, hidden-panel editing and isolated batch cancellation: PASS');
 }
+
+// Open-arc crossings are visual draft crossings, not S.crossings. Clipboard
+// operations must preserve them too, without adding them to knot invariants.
+for(const pointerType of ['mouse','pen','touch']) {
+ const p=arcSession(pointerType,false),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const record=()=>{const {savedAt,...data}=api.serialize();return JSON.stringify(data);};
+ const source={format:'knot-lab',version:1,comps:[],crossings:[],open:[[[100,200],[300,200]],[[200,100],[200,300]]],crossingMemory:[[200,200,1,0]]};
+ api.openTab(api.deserialize(source),'Unfinished crossing');api.view.s=1;api.view.ox=api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+ const ev=(x,y,type)=>({pointerType,pointerId:94,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ const gesture=points=>{p.fire(canvas,'pointerdown',ev(...points[0],'pointerdown'));for(const q of points.slice(1))p.fire(canvas,'pointermove',ev(...q,'pointermove'));p.fire(canvas,'pointerup',ev(...points.at(-1),'pointerup'));p.flush();};
+ gesture([[50,50],[350,50],[350,350],[50,350],[50,50]]);
+ const original=record();p.ids.get('mCopy').click();assert.equal(record(),original,'Copy must be read-only');
+ api.openTab();api.view.s=1;api.view.ox=api.view.oy=0;p.paths.length=0;p.ids.get('mPaste').click();p.flush();
+ const dx=api.state.open[0].pts[0].x-100,dy=api.state.open[0].pts[0].y-200;
+ const remembered=(x,y)=>api.state.memory.find(m=>Math.hypot(m.x-x,m.y-y)<1e-6&&Math.abs(m.ox)>.99&&Math.abs(m.oy)<.01);
+ const visibleGap=(x,y)=>p.paths.some(path=>path.some(q=>q.move&&Math.abs(q.x-x)<.01&&Math.abs(q.y-y-8)<.1));
+ assert(remembered(200+dx,200+dy),'Paste must retain the horizontal overstrand of the unfinished crossing');
+ assert(visibleGap(200+dx,200+dy),'The pasted vertical understrand must still have a visible crossing gap');
+ assert.equal(api.analysis.c,0);assert.equal(api.state.open.length,2);
+ const pasted=record();p.ids.get('undo').click();assert.equal(api.state.open.length,0);p.ids.get('redo').click();assert.equal(record(),pasted);
+ // Re-select after undo/redo, then move the pasted arcs away from their memory.
+ gesture([[50+dx,50+dy],[350+dx,50+dy],[350+dx,350+dy],[50+dx,350+dy],[50+dx,50+dy]]);
+ p.paths.length=0;gesture([[200+dx,200+dy],[260+dx,240+dy]]);
+ assert(remembered(260+dx,240+dy),'Moving a pasted open selection must carry its crossing heights');assert(visibleGap(260+dx,240+dy));
+ const moved=record();p.ids.get('undo').click();p.ids.get('redo').click();assert.equal(record(),moved);
+ assert.deepEqual(JSON.parse(JSON.stringify(api.deserialize(JSON.parse(moved)).memory)),JSON.parse(JSON.stringify(api.state.memory)),'Saved open crossings must survive reloading');
+ // Rotating about the crossing must replace its old direction at that point,
+ // rather than letting the old memory win a nearest-position tie.
+ const cx=260+dx,cy=240+dy;
+ gesture([[cx-150,cy-150],[cx+150,cy-150],[cx+150,cy+150],[cx-150,cy+150],[cx-150,cy-150]]);
+ const handle=api.__h();p.paths.length=0;gesture([[handle.x,handle.y],[cx-(handle.y-cy),cy+(handle.x-cx)]]);
+ const rotatedGap=()=>p.paths.some(path=>path.some(pt=>pt.move&&Math.hypot(pt.x-cx+8,pt.y-cy)<.1));
+ assert(rotatedGap(),'Rotation must preserve the overstrand at the unchanged crossing centre');
+ const scale=api.__sh();p.paths.length=0;gesture([[scale.x,scale.y],[cx+(scale.x-cx)*1.5,cy+(scale.y-cy)*1.5]]);
+ assert(rotatedGap(),'Resizing must preserve the crossing after rotation');assert(Math.abs(Math.hypot(api.state.memory.at(-1).ox,api.state.memory.at(-1).oy)-1)<1e-6,'Transformed crossing directions remain normalized');
+
+}
+console.log('Unfinished crossing copy/paste and selection movement preserve heights, visual gaps, JSON and undo/redo with mouse/pen/touch: PASS');
+// Include self crossings, mixed closed/open selections, cut/paste, and defaults
+// not yet materialized in crossing memory; exclude unselected crossing partners.
+{
+ const q=Math.SQRT1_2;
+ const fixtures=[
+  {name:'self',comps:[],open:[[[100,100],[300,300],[100,300],[300,100]]],memory:[[200,200,q,q]],expected:[[200,200,q,q]],gaps:[[200+8*q,200-8*q]]},
+  {name:'default self',comps:[],open:[[[100,100],[300,300],[100,300],[300,100]]],memory:[],expected:[[200,200,q,-q]],gaps:[[200+8*q,200+8*q]]},
+  {name:'mixed',comps:[[[100,100],[300,100],[300,300],[100,300]]],open:[[[50,200],[350,200]]],memory:[[100,200,0,1],[300,200,0,1]],expected:[[100,200,0,1],[300,200,0,1]],gaps:[[108,200],[308,200]]}
+ ];
+ for(const fixture of fixtures)for(const cut of [false,true]) {
+  const p=arcSession('mouse',false),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+  api.openTab(api.deserialize({format:'knot-lab',version:1,comps:fixture.comps,crossings:[],open:fixture.open,crossingMemory:fixture.memory}),fixture.name);api.view.s=1;api.view.ox=api.view.oy=0;
+  p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+  const ev=(x,y,type)=>({pointerType:'mouse',pointerId:95,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+  const ring=[[20,50],[380,50],[380,350],[20,350],[20,50]];
+  p.fire(canvas,'pointerdown',ev(...ring[0],'pointerdown'));for(const point of ring.slice(1))p.fire(canvas,'pointermove',ev(...point,'pointermove'));p.fire(canvas,'pointerup',ev(...ring.at(-1),'pointerup'));p.flush();
+  p.key('keydown',{key:cut?'x':'c',metaKey:true});if(cut){assert.equal(api.state.comps.length,0);assert.equal(api.state.open.length,0);p.ids.get('undo').click();assert.equal(api.state.open.length,fixture.open.length);}
+  api.openTab();api.view.s=1;api.view.ox=api.view.oy=0;p.paths.length=0;p.key('keydown',{key:'v',metaKey:true});p.flush();
+  const dx=api.state.open[0].pts[0].x-fixture.open[0][0][0],dy=api.state.open[0].pts[0].y-fixture.open[0][0][1];
+  for(const [x,y,ox,oy] of fixture.expected)assert(api.state.memory.some(m=>Math.hypot(m.x-x-dx,m.y-y-dy)<1e-6&&Math.abs(m.ox*oy-m.oy*ox)<1e-6),fixture.name+' crossing height');
+  for(const [x,y] of fixture.gaps)assert(p.paths.some(path=>path.some(pt=>pt.move&&Math.hypot(pt.x-x-dx,pt.y-y-dy)<.1)),fixture.name+' rendered crossing gap');
+  assert.equal(api.state.comps.length,fixture.comps.length);assert.equal(api.state.open.length,fixture.open.length);assert.equal(api.analysis.c,0);
+  if(fixture.name==='mixed') {
+   p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='draw').click();p.draw([[350,200],[400,200],[400,450],[0,450],[0,200],[50,200]].map(([x,y])=>[x+dx,y+dy]));
+   assert.equal(api.state.open.length,0);assert.equal(api.analysis.c,2);for(const X of api.state.crossings)assert(Math.abs(X.occ[X.over].dy)>.99,'Pasted closed strand stays over after closing the copied open arc');
+  }
+ }
+ const p=arcSession('mouse',false),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ api.openTab(api.deserialize({format:'knot-lab',version:1,comps:fixtures[2].comps,crossings:[],open:fixtures[2].open,crossingMemory:fixtures[2].memory}));api.view.s=1;api.view.ox=api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();p.doc.querySelectorAll('#lassoModes button').find(e=>e.dataset.lasso==='curve').click();
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:96,clientX:x,clientY:y,button:0,type,preventDefault(){}});
+ const ring=[[20,180],[380,180],[380,220],[20,220],[20,180]];p.fire(canvas,'pointerdown',ev(...ring[0],'pointerdown'));for(const point of ring.slice(1))p.fire(canvas,'pointermove',ev(...point,'pointermove'));p.fire(canvas,'pointerup',ev(...ring.at(-1),'pointerup'));
+ p.ids.get('mCopy').click();api.openTab();p.ids.get('mPaste').click();assert.equal(api.state.comps.length,0);assert.equal(api.state.open.length,1);assert.equal(api.state.memory.length,0,'Crossings with unselected curves must not enter the clipboard');
+}
+console.log('Clipboard preserves explicit/default self crossings and mixed closed/open heights, cut/keyboard paste and later closure; unselected partners stay excluded: PASS');
