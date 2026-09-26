@@ -1,7 +1,8 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
-function boot(saved,narrow=true,Worker){
+function boot(saved,narrow=true,Worker,preferences,storage){
  const arcs=[],paths=[],texts=[],fills=[],strokes=[],paints=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+ if(preferences !== undefined)store.set('knot-lab:preferences',preferences);
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
   addEventListener(k,f){(this.events[k]??=[]).push(f)}
@@ -13,7 +14,7 @@ function boot(saved,narrow=true,Worker){
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
- const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
+ const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:storage||{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script(?: src="([^"]+)")?>([\s\S]*?)<\/script>/g)){if(match[1]==='./pd-import.js')continue;vm.runInContext(match[1]?fs.readFileSync('dist/'+match[1].replace('./',''),'utf8'):match[2],context);}
  function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
@@ -782,7 +783,9 @@ console.log('Separation distance is adjustable, and separated crossings keep a r
  lassoAll();
  const handle=api.__sh();
  assert(handle,'The lasso must have a selection with a resize handle');
- assert(!p.ids.get('selmenu').hidden,'The selection menu should be showing');
+ assert(p.ids.get('selmenu').hidden,'Selection alone must not open the menu');
+ p.fire(canvas,'pointerdown',ev(220,220,'pointerdown'));p.fire(canvas,'pointerup',ev(220,220,'pointerup'));
+ assert(!p.ids.get('selmenu').hidden,'A tap inside the selection opens the menu');
  // drag the handle away from the selection centre to roughly double the size
  const c={x:(start.x0+start.x1)/2,y:(start.y0+start.y1)/2};
  const d0=Math.hypot(handle.x-c.x,handle.y-c.y);
@@ -790,6 +793,7 @@ console.log('Separation distance is adjustable, and separated crossings keep a r
  const tx=c.x+(handle.x-c.x)*2, ty=c.y+(handle.y-c.y)*2;
  p.fire(canvas,'pointermove',ev(tx,ty,'pointermove'));
  p.fire(canvas,'pointerup',ev(tx,ty,'pointerup'));p.flush();
+ assert(p.ids.get('selmenu').hidden,'Resizing must hide the menu');
  const big=span();
  const k=big.w/start.w;
  assert(k>1.6&&k<2.4,`The selection should have roughly doubled (got ${k.toFixed(2)}x)`);
@@ -1261,8 +1265,10 @@ for(const pointerType of ['mouse','pen','touch']) {
  const ev=(x,y,type)=>({pointerType,pointerId:94,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
  const gesture=points=>{p.fire(canvas,'pointerdown',ev(...points[0],'pointerdown'));for(const q of points.slice(1))p.fire(canvas,'pointermove',ev(...q,'pointermove'));p.fire(canvas,'pointerup',ev(...points.at(-1),'pointerup'));p.flush();};
  gesture([[50,50],[350,50],[350,350],[50,350],[50,50]]);
- const original=record();p.ids.get('mCopy').click();assert.equal(record(),original,'Copy must be read-only');
- api.openTab();api.view.s=1;api.view.ox=api.view.oy=0;p.paths.length=0;p.ids.get('mPaste').click();p.flush();
+ assert(p.ids.get('selmenu').hidden,'Lasso release must leave the menu hidden');
+ const original=record();p.key('keydown',{key:'c',metaKey:true});assert(p.ids.get('selmenu').hidden,'Keyboard copy must not open the menu');
+ gesture([[200,200]]);assert(!p.ids.get('selmenu').hidden,'Click/tap opens the selection menu');p.ids.get('mCopy').click();assert.equal(record(),original,'Copy must be read-only');
+ api.openTab();api.view.s=1;api.view.ox=api.view.oy=0;p.paths.length=0;p.key('keydown',{key:'v',metaKey:true});p.flush();assert(p.ids.get('selmenu').hidden,'Pasting must leave the new selection menu hidden');
  const dx=api.state.open[0].pts[0].x-100,dy=api.state.open[0].pts[0].y-200;
  const remembered=(x,y)=>api.state.memory.find(m=>Math.hypot(m.x-x,m.y-y)<1e-6&&Math.abs(m.ox)>.99&&Math.abs(m.oy)<.01);
  const visibleGap=(x,y)=>p.paths.some(path=>path.some(q=>q.move&&Math.abs(q.x-x)<.01&&Math.abs(q.y-y-8)<.1));
@@ -1273,6 +1279,7 @@ for(const pointerType of ['mouse','pen','touch']) {
  // Re-select after undo/redo, then move the pasted arcs away from their memory.
  gesture([[50+dx,50+dy],[350+dx,50+dy],[350+dx,350+dy],[50+dx,350+dy],[50+dx,50+dy]]);
  p.paths.length=0;gesture([[200+dx,200+dy],[260+dx,240+dy]]);
+ assert(p.ids.get('selmenu').hidden,'Moving must not reopen the menu');
  assert(remembered(260+dx,240+dy),'Moving a pasted open selection must carry its crossing heights');assert(visibleGap(260+dx,240+dy));
  const moved=record();p.ids.get('undo').click();p.ids.get('redo').click();assert.equal(record(),moved);
  assert.deepEqual(JSON.parse(JSON.stringify(api.deserialize(JSON.parse(moved)).memory)),JSON.parse(JSON.stringify(api.state.memory)),'Saved open crossings must survive reloading');
@@ -1282,6 +1289,7 @@ for(const pointerType of ['mouse','pen','touch']) {
  gesture([[cx-150,cy-150],[cx+150,cy-150],[cx+150,cy+150],[cx-150,cy+150],[cx-150,cy-150]]);
  const handle=api.__h();p.paths.length=0;gesture([[handle.x,handle.y],[cx-(handle.y-cy),cy+(handle.x-cx)]]);
  const rotatedGap=()=>p.paths.some(path=>path.some(pt=>pt.move&&Math.hypot(pt.x-cx+8,pt.y-cy)<.1));
+ assert(p.ids.get('selmenu').hidden,'Rotating must not reopen the menu');
  assert(rotatedGap(),'Rotation must preserve the overstrand at the unchanged crossing centre');
  const scale=api.__sh();p.paths.length=0;gesture([[scale.x,scale.y],[cx+(scale.x-cx)*1.5,cy+(scale.y-cy)*1.5]]);
  assert(rotatedGap(),'Resizing must preserve the crossing after rotation');assert(Math.abs(Math.hypot(api.state.memory.at(-1).ox,api.state.memory.at(-1).oy)-1)<1e-6,'Transformed crossing directions remain normalized');
@@ -1323,3 +1331,64 @@ console.log('Unfinished crossing copy/paste and selection movement preserve heig
  p.ids.get('mCopy').click();api.openTab();p.ids.get('mPaste').click();assert.equal(api.state.comps.length,0);assert.equal(api.state.open.length,1);assert.equal(api.state.memory.length,0,'Crossings with unselected curves must not enter the clipboard');
 }
 console.log('Clipboard preserves explicit/default self crossings and mixed closed/open heights, cut/keyboard paste and later closure; unselected partners stay excluded: PASS');
+
+// Personal controls survive reopening independently of saved diagrams.
+{
+ const key='knot-lab:preferences',p=boot(),api=p.ctx.knotLab;
+ const check=(p,id,value)=>{const el=p.ids.get(id);el.checked=value;el.onchange({target:el});};
+ const slide=(id,value)=>{const el=p.ids.get(id);el.value=String(value);el.oninput({target:el});};
+ const flags={under:true,arrows:true,signs:true,adSigns:false,adFill:false,grid:false,autoClose:true,cornerFix:false,separate:false,penOnly:true,palm:false,autoPen:false,fingerDrag:false};
+ for(const [id,value]of Object.entries(flags))check(p,id,value);
+ slide('sigma',95);p.key('keydown',{key:'+'});const radius=api.opts.sigma;assert(radius>95,'Keyboard changes persist too');
+ slide('sepGap',48);slide('eraseSize',56);slide('adSolid',37);
+ p.doc.querySelectorAll('#lassoModes button').find(b=>b.dataset.lasso==='region').click();
+ p.doc.querySelectorAll('#lassoShapes button').find(b=>b.dataset.shape==='rect').click();
+ p.doc.querySelectorAll('#eraseModes button').find(b=>b.dataset.erase==='precise').click();
+ api.importPD(pd);const geometry=JSON.stringify(api.serialize().comps);
+ for(const {f,ms}of p.timers.values())if(ms===700)f();const workspace=p.store.get('knot-lab:workspace');
+ const saved=p.store.get(key),r=boot(workspace,false,undefined,saved),opts=r.ctx.knotLab.opts;
+ assert.equal(r.ctx.knotLab.analysis.c,3);assert.equal(JSON.stringify(r.ctx.knotLab.serialize().comps),geometry);
+ assert.equal(opts.sigma,radius);assert.equal(r.ids.get('sigma').value,String(radius));assert.equal(r.ids.get('sigmaV').textContent,radius);
+ for(const [id,value]of Object.entries(flags))assert.equal(r.ids.get(id).checked,value,id+' restored');
+ for(const [id,value]of Object.entries({sepGap:48,eraseSize:56,adSolid:.37}))assert.equal(opts[id],value);
+ assert.equal(r.ids.get('adSolid').value,'37');assert.equal(r.ids.get('adSolidV').textContent,'37%');assert.equal(r.ids.get('sepGapV').textContent,48);
+ assert(!r.ids.get('eraseSizeWrap').hidden);
+ for(const [group,data,value]of [['lassoModes','lasso','region'],['lassoShapes','shape','rect'],['eraseModes','erase','precise']]){
+  const active=r.doc.querySelectorAll('#'+group+' button').filter(b=>b.getAttribute('aria-pressed')==='true');assert.equal(active.length,1);assert.equal(active[0].dataset[data],value);
+ }
+ r.ctx.knotLab.openTab();r.ids.get('undo').click();assert.equal(opts.sigma,radius);assert.equal(opts.lassoShape,'rect');
+ assert(!('preferences' in r.ctx.knotLab.serialize()),'Personal settings must not enter shared diagram files');
+ assert.deepEqual(Object.keys(JSON.parse(saved).input).sort(),['autoPen','fingerDrag','palm','penOnly'],'Never store pointer IDs or pen detection state');
+ check(p,'autosave',false);assert(!p.store.has('knot-lab:workspace'));assert(p.store.has(key),'Disabling diagram autosave keeps preferences');
+ const off=boot(undefined,true,undefined,p.store.get(key));assert(!off.ids.get('autosave').checked);assert.equal(off.ids.get('saveStatus').textContent,'Autosave off');assert.equal(off.ctx.knotLab.opts.sigma,radius);
+ off.ctx.knotLab.importPD(pd);for(const {f,ms}of off.timers.values())if(ms===700)f();assert(!off.store.has('knot-lab:workspace'),'Autosave remains disabled after reload');
+ check(off,'autosave',true);for(const {f,ms}of off.timers.values())if(ms===700)f();assert(off.store.has('knot-lab:workspace'));
+ assert.equal(JSON.parse(off.store.get(key)).autosave,true);
+ // Partial old records, corrupt JSON, unsupported versions and wrong values
+ // must not prevent startup or replace unrelated settings with unsafe values.
+ for(const bad of ['{','null','[]',JSON.stringify({version:99,options:{sigma:150}})]){
+  const b=boot(undefined,true,undefined,bad);assert.equal(b.ctx.knotLab.opts.sigma,60);assert.equal(b.ctx.knotLab.opts.autoClose,false);assert.equal(b.ctx.knotLab.opts.lassoShape,'free');
+ }
+ const invalid=boot(undefined,true,undefined,JSON.stringify({version:1,options:{sigma:'110',sepGap:999,eraseSize:-10,adSolid:0,adFill:'false',grid:false,lassoShape:'ellipse',lassoMode:'all',eraseMode:'everything'},input:{penOnly:'true',palm:0},autosave:'false'}));
+ assert.equal(invalid.ctx.knotLab.opts.grid,false,'Valid settings survive beside invalid ones');
+ for(const [id,value]of Object.entries({sigma:60,sepGap:30,eraseSize:24,adSolid:1,adFill:true,lassoShape:'free',lassoMode:'curve',eraseMode:'strand'}))assert.equal(invalid.ctx.knotLab.opts[id],value);
+ assert.equal(invalid.ids.get('penOnly').checked,false);assert.equal(invalid.ids.get('palm').checked,true);assert.equal(invalid.ids.get('autosave').checked,true);
+ const blocked=boot(undefined,true,undefined,undefined,{getItem(){throw Error('Blocked')},setItem(){throw Error('Quota')},removeItem(){throw Error('Blocked')}});
+ assert.equal(blocked.ctx.knotLab.opts.sigma,60);check(blocked,'adFill',false);blocked.key('keydown',{key:'+'});assert.equal(blocked.ctx.knotLab.opts.adFill,false);assert(blocked.ctx.knotLab.opts.sigma>60);blocked.ctx.knotLab.importPD(pd);assert.equal(blocked.ctx.knotLab.analysis.c,3);
+}
+console.log('Device preferences restore controls and values, survive disabled autosave, stay outside documents, validate saved data and tolerate unavailable storage: PASS');
+
+// A menu-only click must neither consume an undo step nor destroy redo.
+{
+ const p=arcSession('mouse',false),api=p.ctx.knotLab,cv=p.ids.get('cv');api.importPD(pd);api.view.s=1;api.view.ox=api.view.oy=0;
+ const initial=api.analysis.writhe;p.ids.get('mirrorBtn').click();const mirrored=api.analysis.writhe;p.ids.get('undo').click();assert.equal(api.analysis.writhe,initial);
+ p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='lasso').click();
+ p.doc.querySelectorAll('#lassoShapes button').find(b=>b.dataset.shape==='rect').click();
+ const pts=api.state.comps.flatMap(c=>c.pts),xs=pts.map(q=>q.x),ys=pts.map(q=>q.y),lo=[Math.min(...xs)-30,Math.min(...ys)-30],hi=[Math.max(...xs)+30,Math.max(...ys)+30],center=[(lo[0]+hi[0])/2,(lo[1]+hi[1])/2];
+ const ev=([x,y])=>({pointerType:'mouse',pointerId:101,clientX:x,clientY:y,button:0,preventDefault(){}});
+ p.fire(cv,'pointerdown',ev(lo));p.fire(cv,'pointermove',ev(hi));p.fire(cv,'pointerup',ev(hi));assert(p.ids.get('selmenu').hidden);
+ p.fire(cv,'pointerdown',ev(center));p.fire(cv,'pointerup',ev(center));assert(!p.ids.get('selmenu').hidden);
+ p.ids.get('redo').click();assert.equal(api.analysis.writhe,mirrored,'Opening the menu preserves redo');
+ p.ids.get('undo').click();assert.equal(api.analysis.writhe,initial,'Menu tap adds no undo step');
+}
+console.log('Click-to-open lasso menu leaves undo and redo history intact: PASS');

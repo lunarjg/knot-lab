@@ -152,6 +152,8 @@ Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-poin
 
 Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
 
+An optional editor browser regression is available as `node tests/editor.browser.cjs` with Playwright and Google Chrome installed (or set `PLAYWRIGHT_MODULE`). It checks click-to-open selection menus, unfinished crossing copy/paste, preferences after reload, autosave independence and a phone-sized touch menu.
+
 An optional real-browser research smoke test is available as `node tests/research.browser.cjs` with Playwright and Google Chrome installed. Set `PLAYWRIGHT_MODULE` to use an existing Playwright installation, and `RESEARCH_SCREENSHOTS` to choose where screenshots are saved. It tests actual worker calculations, downloads, SVG selection, synthetic mouse/pen/touch gestures, undo and responsive layout; it does not replace physical device testing.
 
 ## Site ownership and data

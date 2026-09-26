@@ -543,7 +543,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <p><b>Erase</b> “Erase strand” removes one strand between crossings or endpoints; “Erase segment” rubs out just what the cursor covers; “Erase curve” takes the whole curve you tap, which is how you remove one component of a link. <kbd>E</kbd> cycles the three. “Clear all” empties the diagram in one undo step.</p>
       <p><b>Lasso</b> Select whole curves or a region. Drag to move; use the round handle to rotate.</p>
       <p><b>Smoothing</b> “Smooth corners” applies to new pen strokes, and takes up the slack around the grip while dragging, so pulling on an already-stretched strand draws it back in. “Smooth sharp corners” edits existing curves, and also runs automatically when a drag ends; Auto-relax spreads the diagram.</p>
-      <p><b>Lasso</b> Enclose curves to select them, or switch the shape to Rectangle and just drag a box. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
+      <p><b>Lasso</b> Enclose curves to select them, or switch the shape to Rectangle and just drag a box. Tap the selection for Copy, Cut and Paste. Drag inside the box to move it, the corner grip to resize, and the handle above it to rotate. Auto-relax slowly shrinks a diagram, so the grip is how you bring it back up to a comfortable working size.</p>
       <p><b>Crossing overlap</b> “Separate overlapping crossings” (Settings) eases apart any crossings a drag pushed into each other, once the drag ends, and turns them back open so the strands meet at a readable angle. “Separation distance” sets how far. Crossings that were already close stay put.</p>
       <p><kbd>D</kbd> Draw · <kbd>E</kbd> Erase · <kbd>L</kbd> Lasso · <kbd>V</kbd> Drag · <kbd>X</kbd> Switch crossing · <kbd>A</kbd> Auto-relax · <kbd>F</kbd> Full screen · <kbd>+</kbd> / <kbd>−</kbd> Drag radius · <kbd>1</kbd>–<kbd>4</kbd> Views</p>
       <p>Ctrl / ⌘ + <kbd>Z</kbd> Undo, <kbd>Shift</kbd>+<kbd>Z</kbd> Redo, <kbd>S</kbd> Save, <kbd>O</kbd> Open, <kbd>C</kbd>/<kbd>X</kbd>/<kbd>V</kbd> Copy/Cut/Paste. <kbd>Delete</kbd> deletes a selection.</p>
@@ -618,6 +618,45 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   const $ = id => document.getElementById(id);
   const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  // Device preferences are independent of diagram autosave and undo history.
+  const PREFERENCES_KEY = 'knot-lab:preferences';
+  const preferenceFlags = ['under','arrows','signs','adSigns','adFill','grid','autoClose','cornerFix','separate'];
+  const inputFlags = ['penOnly','palm','autoPen','fingerDrag'];
+  const preferenceRanges = {sigma:[10,160],sepGap:[10,60],eraseSize:[6,80],adSolid:[0.1,1]};
+  const preferenceChoices = {eraseMode:['strand','precise','component'],lassoMode:['curve','region'],lassoShape:['free','rect']};
+  function savePreferences() {
+    const options = Object.fromEntries([...preferenceFlags,...Object.keys(preferenceRanges),...Object.keys(preferenceChoices)].map(k=>[k,opts[k]]));
+    try { localStorage.setItem(PREFERENCES_KEY,JSON.stringify({version:1,options,input:Object.fromEntries(inputFlags.map(k=>[k,input[k]])),autosave:$('autosave').checked})); } catch {}
+  }
+  function restorePreferences() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY));
+      if (saved?.version === 1) {
+        const options = saved.options || {};
+        for (const k of preferenceFlags) if (typeof options[k] === 'boolean') opts[k] = options[k];
+        for (const [k,[lo,hi]] of Object.entries(preferenceRanges)) {
+          const v = options[k];
+          if (typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi) opts[k] = k === 'adSolid' ? Math.round(v*100)/100 : Math.round(v);
+        }
+        for (const [k,values] of Object.entries(preferenceChoices)) if (values.includes(options[k])) opts[k] = options[k];
+        for (const k of inputFlags) if (typeof saved.input?.[k] === 'boolean') input[k] = saved.input[k];
+        if (typeof saved.autosave === 'boolean') $('autosave').checked = saved.autosave;
+      }
+    } catch {} // Invalid or unavailable storage leaves the normal defaults usable.
+    for (const k of preferenceFlags) $(k).checked = opts[k];
+    for (const k of inputFlags) $(k).checked = input[k];
+    for (const k of Object.keys(preferenceRanges)) $(k).value = String(k === 'adSolid' ? Math.round(opts[k]*100) : opts[k]);
+    $('sigmaV').textContent = opts.sigma; $('sepGapV').textContent = opts.sepGap;
+    $('adSolidV').textContent = `${Math.round(opts.adSolid*100)}%`;
+    for (const [group,key,data] of [['eraseModes','eraseMode','erase'],['lassoModes','lassoMode','lasso'],['lassoShapes','lassoShape','shape']]) {
+      document.querySelectorAll(`#${group} button`).forEach(b=>b.setAttribute('aria-pressed',b.dataset[data] === opts[key]));
+    }
+    $('eraseSizeWrap').hidden = opts.eraseMode !== 'precise';
+    if (!$('autosave').checked) $('saveStatus').textContent = 'Autosave off';
+  }
+  function preferenceControl(id,event,update) {
+    $(id)[event] = e => { update(e); savePreferences(); };
+  }
   // Captured once: renderTabs() re-parents this into the tab strip on every
   // render, and a detached element can no longer be found by getElementById.
   const newTabBtn = $('newTab');
@@ -783,7 +822,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   const pick = () => { $('fileInput').value = ''; $('fileInput').click(); };
   $('openBtn').onclick = pick;
   $('fileInput').onchange = e => openFiles(e.target.files);
-  $('autosave').onchange = e => { $('saveStatus').textContent = e.target.checked ? 'Autosave on' : 'Autosave off'; try { if (!e.target.checked) { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(WORKSPACE_KEY); } else scheduleAutosave(); } catch (err) { } };
+  preferenceControl('autosave','onchange', e => { $('saveStatus').textContent = e.target.checked ? 'Autosave on' : 'Autosave off'; try { if (!e.target.checked) { localStorage.removeItem(AUTOSAVE_KEY); localStorage.removeItem(WORKSPACE_KEY); } else scheduleAutosave(); } catch (err) { } });
   wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('dropping'); });
   wrap.addEventListener('dragleave', () => wrap.classList.remove('dropping'));
   wrap.addEventListener('drop', e => { e.preventDefault(); wrap.classList.remove('dropping'); openFiles(e.dataTransfer.files); });
@@ -1170,9 +1209,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     changed();
     toast(blocked ? 'Some corners were smoothed; further smoothing would require a blocked move' : moved ? 'Sharp corners smoothed' : 'No sharp corners to smooth', blocked);
   };
-  $('cornerFix').onchange = e => { opts.cornerFix = e.target.checked; };
-  $('separate').onchange = e => { opts.separate = e.target.checked; };
-  $('sepGap').oninput = e => { opts.sepGap = +e.target.value; setText('sepGapV', opts.sepGap); };
+  preferenceControl('cornerFix','onchange', e => { opts.cornerFix = e.target.checked; });
+  preferenceControl('separate','onchange', e => { opts.separate = e.target.checked; });
+  preferenceControl('sepGap','oninput', e => { opts.sepGap = +e.target.value; setText('sepGapV', opts.sepGap); });
   function toggleRelax() { if(relaxing){stopRelax();return;} if (!S.comps.length) return; pushUndo(); relaxFrames(150); }
   $('smoothBtn').onclick = toggleRelax;
   $('relaxMove').onclick = toggleRelax;
@@ -1202,22 +1241,22 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   }
   function setLassoMode(m) {
     opts.lassoMode = m; document.querySelectorAll('#lassoModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.lasso === m));
-    clearSel(); render();
+    clearSel(); render(); savePreferences();
   }
   document.querySelectorAll('#lassoModes button').forEach(b => b.onclick = () => setLassoMode(b.dataset.lasso));
   function setEraseMode(m) {
     opts.eraseMode = m; document.querySelectorAll('#eraseModes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.erase === m));
-    $('eraseSizeWrap').hidden = m !== 'precise'; hoverErase = null; render();
+    $('eraseSizeWrap').hidden = m !== 'precise'; hoverErase = null; render(); savePreferences();
   }
   document.querySelectorAll('#eraseModes button').forEach(b => b.onclick = () => setEraseMode(b.dataset.erase));
   function setLassoShape(sh) {
     opts.lassoShape = sh; document.querySelectorAll('#lassoShapes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.shape === sh));
-    render();
+    render(); savePreferences();
   }
   document.querySelectorAll('#lassoShapes button').forEach(b => b.onclick = () => setLassoShape(b.dataset.shape));
-  $('eraseSize').oninput = e => { opts.eraseSize = +e.target.value; render(); };
-  $('autoClose').onchange = e => { opts.autoClose = e.target.checked; };
-  $('grid').onchange = e => { opts.grid = e.target.checked; render(); };
+  preferenceControl('eraseSize','oninput', e => { opts.eraseSize = +e.target.value; render(); });
+  preferenceControl('autoClose','onchange', e => { opts.autoClose = e.target.checked; });
+  preferenceControl('grid','onchange', e => { opts.grid = e.target.checked; render(); });
   function setView(v) {
     viewMode = v;
     document.querySelectorAll('.views button').forEach(b => {
@@ -1250,18 +1289,18 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     const el = $('sigma'), lo = +el.min || 10, hi = +el.max || 160;
     const n = Math.max(lo, Math.min(hi, Math.round(v) || lo));
     if (n === opts.sigma) { if (announce) toast(`Drag radius ${n}` + (n === lo ? ' (minimum)' : n === hi ? ' (maximum)' : '')); return; }
-    opts.sigma = n; el.value = String(n); $('sigmaV').textContent = n;
+    opts.sigma = n; el.value = String(n); $('sigmaV').textContent = n; savePreferences();
     // The options bar is only on screen for the Drag strand tool, so the keys
     // say what they did rather than changing a number nobody can see.
     if (announce) toast(`Drag radius ${n}`);
   }
   $('sigma').oninput = e => setSigma(+e.target.value);
-  $('under').onchange = e => { opts.under = e.target.checked; };
-  $('arrows').onchange = e => { opts.arrows = e.target.checked; render(); };
-  $('signs').onchange = e => { opts.signs = e.target.checked; render(); };
-  $('adSigns').onchange = e => { opts.adSigns = e.target.checked; render(); };
-  $('adFill').onchange = e => { opts.adFill = e.target.checked; render(); };
-  $('adSolid').oninput = e => { opts.adSolid = +e.target.value / 100; setText('adSolidV', `${e.target.value}%`); render(); };
+  preferenceControl('under','onchange', e => { opts.under = e.target.checked; });
+  preferenceControl('arrows','onchange', e => { opts.arrows = e.target.checked; render(); });
+  preferenceControl('signs','onchange', e => { opts.signs = e.target.checked; render(); });
+  preferenceControl('adSigns','onchange', e => { opts.adSigns = e.target.checked; render(); });
+  preferenceControl('adFill','onchange', e => { opts.adFill = e.target.checked; render(); });
+  preferenceControl('adSolid','oninput', e => { opts.adSolid = +e.target.value / 100; setText('adSolidV', `${e.target.value}%`); render(); });
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
@@ -1338,12 +1377,12 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   const PALM_AFTER_PEN = 300, BIG_CONTACT = 90;
 
   function setPenOnly(v, announce) {
-    input.penOnly = v; $('penOnly').checked = v;
+    input.penOnly = v; $('penOnly').checked = v; savePreferences();
     if (announce) toast(v ? 'Pen-only mode: use fingers to pan and zoom' : 'Pen-only mode off');
   }
   $('penOnly').onchange = e => setPenOnly(e.target.checked, true);
-  $('palm').onchange = e => { input.palm = e.target.checked; };
-  $('autoPen').onchange = e => { input.autoPen = e.target.checked; };
+  preferenceControl('palm','onchange', e => { input.palm = e.target.checked; });
+  preferenceControl('autoPen','onchange', e => { input.autoPen = e.target.checked; });
 
   const capture = e => { try { cv.setPointerCapture(e.pointerId); } catch (err) { /* synthetic or already released */ } };
   const tolFor = e => (e.pointerType === 'touch' ? 24 : 13) / view.s;
@@ -1359,13 +1398,13 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       if (sel && onScaleHandle(e)) {
         const b = selBox(), c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
         const d0 = Math.max(1e-6, Math.hypot(w.x - c.x, w.y - c.y));
-        pushUndo(); active = { ...base, kind: 'selscale', c, d0, applied: 1, lifted: false }; return;
+        active = { ...base, kind: 'selscale', c, d0, applied: 1, lifted: false }; return;
       }
       if (sel && onRotateHandle(e)) {
         const b = selBox(), c = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
-        pushUndo(); active = { ...base, kind: 'selrotate', c, last: Math.atan2(w.y - c.y, w.x - c.x), total: 0, applied: 0, lifted: false, w }; return;
+        active = { ...base, kind: 'selrotate', c, last: Math.atan2(w.y - c.y, w.x - c.x), total: 0, applied: 0, lifted: false, w }; return;
       }
-      if (sel && inBox(w, selBox(), 14 / view.s)) { pushUndo(); active = { ...base, kind: 'selmove', last: w, lifted: false, sx: e.clientX, sy: e.clientY }; return; }
+      if (sel && inBox(w, selBox(), 14 / view.s)) { active = { ...base, kind: 'selmove', last: w, lifted: false, sx: e.clientX, sy: e.clientY }; return; }
       clearSel(); lasso = { pts: [w], origin: w, shape: opts.lassoShape }; active = { ...base, kind: 'lasso' }; render(); return;
     }
     if (t === 'draw') {
@@ -1473,7 +1512,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     else if (a.kind === 'draw') { const st = stroke; stroke = null; hoverSnap = null; finishStroke(st); }
     else if (a.kind === 'erase') { if (!erasing.changed) undoStack.pop(); erasing = null; changed(); }
     else if (a.kind === 'lasso') { const pts = lasso.pts; lasso = null; finishLasso(pts); }
-    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') { if (a.lifted) dropSelection(); else undoStack.pop(); showMenu(); render(); }
+    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') {
+      if (a.lifted) dropSelection();
+      else if (a.kind === 'selmove') showMenu();
+      render();
+    }
   }
   // Undo whatever a (touch) action did — used when a palm started it
   function cancelAction() {
@@ -1485,7 +1528,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     else if (a.kind === 'erase') { erasing = null; const s = undoStack.pop(); if (s) restore(s); changed(); }
     else if (a.kind === 'flip') { const s = undoStack.pop(); if (s) { restore(s); } changed(); }
     else if (a.kind === 'lasso') { lasso = null; render(); }
-    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') { const s = undoStack.pop(); if (a.lifted && s) { restore(s); clearSel(); changed(); } }
+    else if (a.kind === 'selmove' || a.kind === 'selrotate' || a.kind === 'selscale') { if (a.lifted) { const s = undoStack.pop(); if (s) { restore(s); clearSel(); changed(); } } }
   }
   function pinchState() {
     const [p, q] = [...touches.values()];
@@ -1590,7 +1633,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   cv.addEventListener('pointerleave', e => { if (!active && e.pointerType !== 'touch') { cursor = null; hoverErase = null; render(); } });
   ['touchstart', 'touchmove', 'gesturestart', 'gesturechange', 'gestureend', 'contextmenu'].forEach(t => cv.addEventListener(t, ev => ev.preventDefault(), { passive: false }));
   ['gesturestart', 'gesturechange'].forEach(t => document.addEventListener(t, ev => { if (wrap.contains(ev.target)) ev.preventDefault(); }, { passive: false }));
-  $('fingerDrag').onchange = e => { input.fingerDrag = e.target.checked; };
+  preferenceControl('fingerDrag','onchange', e => { input.fingerDrag = e.target.checked; });
 
   cv.addEventListener('wheel', e => {
     e.preventDefault();
@@ -1941,7 +1984,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     }
     if (!items.length) { render(); toast('No curves selected', true); return; }
     sel = { items };
-    changed(); showMenu();
+    changed(); hideMenu();
   }
 
   function closedIndexSet(items) { return new Set(items.filter(i => i.kind === 'closed').map(i => S.comps.indexOf(i.ref)).filter(i => i >= 0)); }
@@ -1963,7 +2006,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       mem, cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2
     };
     if (!quiet) toast('Copied');
-    showMenu();
+    if (!$('selmenu').hidden) showMenu();
   }
   function deleteSel(quiet) {
     if (!sel) return;
@@ -1988,10 +2031,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     clip.closed.forEach(p => items.push({ kind: 'closed', ref: integrateClosed(tr(p)) }));
     clip.open.forEach(p => { const o = { pts: tr(p) }; S.open.push(o); items.push({ kind: 'open', ref: o }); });
     sel = { items }; pasteAt = null;
-    changed(); showMenu(); toast('Pasted');
+    changed(); hideMenu(); toast('Pasted');
   }
   // Moving a selection: take closed parts out of the diagram, carry them, then put them back
   function liftSelection() {
+    pushUndo();
     const idx = closedIndexSet(sel.items), { selected, crossings } = selectionCrossingData(sel.items), intra = [];
     crossings.forEach(X => {
       const a = selected.has(X.occ[0].c), b = selected.has(X.occ[1].c); if (!a && !b) return;
@@ -2931,6 +2975,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     }).catch(() => { $('offlineStatus').textContent = 'Please stay connected to the internet for now.'; });
   } else { $('offlineStatus').textContent = 'Open the site via a web address to enable offline access.'; }
   // ---------- boot ----------
+  restorePreferences();
   resize();
   let restored=false, recoveryFailed=false;
   try {
@@ -2948,7 +2993,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     }
   } catch { recoveryFailed=true;$('autosave').checked=false; }
   if(!tabs.length){tabs.push({id:'1',title:'New diagram 1',fileName:'',pdInput:'',dirty:false,state:blankState(),undo:[],redo:[],view:null,viewMode:'diagram'});nextTabId=2;activeTabId='1';}
-  analysis=KC.analyze(S.comps,S.crossings);setTool('draw');setEraseMode('strand');
+  analysis=KC.analyze(S.comps,S.crossings);setTool('draw');
   activateTab(activeTabId,false,false);
   if(recoveryFailed)$('saveStatus').textContent='Could not restore previous tabs · Autosave paused';
   requestAnimationFrame(()=>{resize();if(restored)toast('Open tabs and work restored');});
