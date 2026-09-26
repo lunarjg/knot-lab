@@ -5,6 +5,12 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## Selection menu and device preferences (unreleased)
+
+- Keep the selection menu hidden after lasso selection, paste and transforms. Click or tap inside the selection to open it; keyboard clipboard shortcuts remain available. Menu taps leave undo and redo history intact.
+- Remember drag radius, decomposition shading, lasso shape/mode, eraser options, drawing/display controls, pen/touch options and the autosave preference on this browser. Validate stored values and keep preferences separate from diagram autosave.
+- Add reload, storage-failure and mouse/pen/touch regression coverage. Refresh the offline cache.
+
 ## Preserve unfinished-diagram crossings in the clipboard (unreleased)
 
 - Copy the displayed crossing heights of selected open arcs, including self crossings and crossings with selected closed components. Keep crossings with unselected strands out of the clipboard.
