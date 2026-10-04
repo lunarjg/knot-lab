@@ -1010,23 +1010,23 @@ const KC = (function () {
     const work = opt.work;
     if (work) { work.rounds = 0; work.pointUpdates = 0; work.distanceChecks = 0; }
     const clear = opt.clearance == null ? 7 : opt.clearance;   // never closer to a strand than this
-    const pad = opt.pad == null ? 20 : opt.pad;               // and as far off as this, where there is room
-    const apart = opt.apart == null ? 10 : opt.apart;          // off the other curves
-    const fine = opt.spacing || 9;                             // point spacing, as drawn
+    const pad = 20;                                            // and as far off as this, where there is room
+    const apart = 10;                                          // off the other curves
+    const fine = 9;                                            // point spacing, as drawn
     const coarse = opt.coarse == null ? 4 : opt.coarse;        // and how far above it the first rounds run
-    const rounds = opt.rounds == null ? 150 : opt.rounds;
-    const stride = opt.stride == null ? 5 : opt.stride;      // no point is pulled further in a round
-    const gain = opt.gain == null ? 2 : opt.gain;             // how hard a dip is pushed out once taut
-    const creep = opt.creep == null ? 2 : opt.creep;          // how far a marked point may slide in a round
-    const band = opt.band == null ? 0.09 : opt.band;          // and how far in all, as a fraction of its edge
-    const tidy = opt.tidy == null ? 0.8 : opt.tidy;           // how far the drawn line may cut a corner
-    const shape = opt.shape == null ? 25 : opt.shape;         // rounds spent convexifying once it is taut
-    const tail = opt.tail == null ? 12 : opt.tail;            // and settling the corners the last pull leaves
-    const stretch = opt.stretch == null ? 120 : opt.stretch;   // how many points ahead a chord may reach when pulling taut
-    const blunt = opt.blunt == null ? 5 : opt.blunt;          // over how many points either side a dent is filled
-    const passes = opt.smooth == null ? 12 : opt.smooth;      // passes of plain smoothing once the shape is settled
-    const stray = opt.stray == null ? clear : opt.stray;      // and how far that may take a point off what it settled on
-    const reach = opt.reach == null ? 7 : opt.reach;          // nor moved further, once every rule has spoken
+    const rounds = 150;
+    const stride = 5;                                          // no point is pulled further in a round
+    const gain = 2;                                            // how hard a dip is pushed out once taut
+    const creep = 2;                                           // how far a marked point may slide in a round
+    const band = 0.09;                                         // and how far in all, as a fraction of its edge
+    const tidy = 0.8;                                          // how far the drawn line may cut a corner
+    const shape = 25;                                          // rounds spent convexifying once it is taut
+    const tail = 12;                                           // and settling the corners the last pull leaves
+    const stretch = 120;                                       // how many points ahead a chord may reach when pulling taut
+    const blunt = 5;                                           // over how many points either side a dent is filled
+    const passes = 12;                                         // passes of plain smoothing once the shape is settled
+    const stray = clear;                                       // and how far that may take a point off what it settled on
+    const reach = 7;                                           // nor moved further, once every rule has spoken
     const { dart, sigma, nonAlt, curves, nextInFace, faces } = dec;
 
     let h = fine, gait = 1;                                    // the spacing in force, and the step it allows
@@ -1140,9 +1140,6 @@ const KC = (function () {
     }
     const side = turn >= 0 ? 1 : -1;
 
-    // The two marked points may sit anywhere on their edge, so they are placed
-    // symmetrically about its middle: the piece between them is the edge of G,
-    // and the rest of the edge belongs to the alternating region at either end.
     // The two marked points may sit anywhere on their edge, so where they sit is
     // not fixed: each is held as a fraction of the way along from its own end and
     // is free to slide, subject to keeping clear of the crossings and leaving a
@@ -1150,7 +1147,7 @@ const KC = (function () {
     // nonalternating edge, whatever the rest of the relaxation did.
     const span = d => Math.abs(dart[d].s1 - dart[d].s0);
     const frac = new Float64Array(dart.length);
-    const barOf = L => opt.bar != null ? Math.min(opt.bar, L) : Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
+    const barOf = L => Math.min(0.72 * L, Math.max(26, Math.min(120, 0.45 * L)));
     const home = new Float64Array(dart.length);
     for (const g of nonAlt) { const L = span(2 * g); home[2 * g] = home[2 * g + 1] = frac[2 * g] = frac[2 * g + 1] = (1 - barOf(L) / L) / 2; }
     const markAt = d => { const D = dart[d]; return D.s0 + (D.s1 > D.s0 ? 1 : -1) * frac[d] * span(d); };
@@ -1823,7 +1820,6 @@ const KC = (function () {
         yield 'round';
         const region = dec.curveRegion[c];
         const repair = dec.curveRegion.filter(r => r === region).length !== 1;
-        if (repair && opt.repair === false) continue;
         const core = [];
         edgePoints.forEach((pts, g) => {
           if (dec.regionOfX[dart[2 * g].xi] === region) {

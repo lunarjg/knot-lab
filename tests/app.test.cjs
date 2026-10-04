@@ -259,6 +259,28 @@ console.log('Import PD, Save and Fit share the row with Open files, and the view
 }
 console.log('Full screen hides the header, the tabs, the view bar and the inspector, and the toolbar keeps the way out: PASS');
 
+// With a selection on the canvas and the inspector docked open, one Escape
+// clears the selection and leaves the inspector alone; the next closes it.
+{
+ const p=boot(undefined,false),api=p.ctx.knotLab,canvas=p.ids.get('cv');
+ const d=api.serialize();d.comps=[[[120,120],[320,120],[320,320],[120,320]]];
+ api.openTab(api.deserialize(d),'escape');api.view.s=1;api.view.ox=0;api.view.oy=0;
+ const panel=()=>p.doc.body.classList.contains('panel-open');
+ p.doc.querySelectorAll('[data-tool]').find(e=>e.dataset.tool==='lasso').click();
+ const ev=(x,y,type)=>({pointerType:'mouse',pointerId:78,clientX:x,clientY:y,button:0,buttons:type==='pointerup'?0:1,type,preventDefault(){}});
+ const ring=[[80,80],[360,80],[360,360],[80,360],[80,80]];
+ p.fire(canvas,'pointerdown',ev(...ring[0],'pointerdown'));
+ for(const [x,y] of ring.slice(1))p.fire(canvas,'pointermove',ev(x,y,'pointermove'));
+ p.fire(canvas,'pointerup',ev(...ring[4],'pointerup'));p.flush();
+ assert(api.__sh(),'the lasso made a selection');assert(panel(),'with the inspector open');
+ p.key('keydown',{key:'Escape'});
+ assert(!api.__sh(),'Escape clears the selection');
+ assert(panel(),'and does not close the inspector on the same press');
+ p.key('keydown',{key:'Escape'});
+ assert(!panel(),'the next Escape closes the inspector');
+}
+console.log('One Escape clears a selection without also closing the inspector: PASS');
+
 // The "+" tab lives inside the scrollable tab strip itself, immediately
 // after the last tab, not as a fixed button outside it — so it always
 // stays right after the last tab and scrolls together with them.

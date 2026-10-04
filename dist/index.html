@@ -1074,11 +1074,14 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   window.addEventListener('resize', () => { stopPanelDrag(true); drawPanelWidth(panelWidth); });
   document.addEventListener('keydown', e => {
     // One press does one thing: close the inspector if it is open, and leave
-    // full screen otherwise. Two handlers acting on the same press did both.
+    // full screen otherwise. A selection on the canvas comes before both, and
+    // is cleared by the canvas handler, which ignores presses in a text field;
+    // acting here as well closed the inspector on the same press.
     if(e.key !== 'Escape') return;
     if(viewMenuOpen) { e.preventDefault(); e.stopPropagation(); setViewMenuOpen(false, true); return; }
+    if(sel && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') return;
     if(panelOpen) { if(panelDrag) stopPanelDrag(true); else setPanel(false, true); return; }
-    if(fullOpen && !sel) setFull(false, true);
+    if(fullOpen) setFull(false, true);
   });
   setPanel(panelOpen);
   function importPD(code) {

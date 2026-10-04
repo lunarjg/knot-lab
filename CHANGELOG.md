@@ -5,6 +5,11 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. They have
 not been assigned new version tags.
 
+## One Escape, one action; decomposition options trimmed (Claude Code, unreleased)
+
+- **Escape no longer closes the inspector and clears a selection on the same press.** With the inspector docked open, as it is on a wide window, Escape meant to drop a lasso selection also closed the inspector. Now the selection goes first and the next press closes the inspector, the same order full screen already used. In a text field Escape still closes the inspector. A regression test fails on the old code.
+- The decomposition drawing took 18 tuning options nobody passed, from `stretch` to `repair`. They are plain constants now with the same values, and the drawn curves are byte-identical on every fixture checked. `clearance`, `coarse`, `round` and `work` remain, since the tests use them. Refresh the offline cache.
+
 ## Selection menu and device preferences (unreleased)
 
 - Keep the selection menu hidden after lasso selection, paste and transforms. Click or tap inside the selection to open it; keyboard clipboard shortcuts remain available. Menu taps leave undo and redo history intact.
