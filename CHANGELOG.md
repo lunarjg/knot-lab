@@ -5,6 +5,12 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. Entries without
 version tags remain development notes.
 
+## v20 — Restore the original drag feel (2026-10-27)
+
+- Restore the original 2.5-unit deformation, smoothing and resampling sequence. Remove adaptive large drag steps and their lingering size limits, while keeping the optimized core, cached rendering and deferred decomposition.
+- Process the latest target before a display-frame paint. Give foreground catch-up a 40 ms guard, retain short 6 ms background slices, and invalidate queued work preempted by a frame or release.
+- Verify exact original geometry, crossing identities and heights through default-smoothed direction/reversal traces. Cover input-before-paint ordering, stale messages, mouse/pen/touch and undo; refresh the offline cache.
+
 ## v19 — Pointer-speed strand dragging (2026-10-27)
 
 - Follow fast input with adaptive drag distances. Certify the entire swept path, track crossings through sampling vertices, and subdivide near tangencies or possible triple points before using the existing Reidemeister checks.
