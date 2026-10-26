@@ -1,4 +1,7 @@
-# Drag performance verification
+# v18 drag performance verification
+
+This records the v18 scheduler/core optimization. The subsequent adaptive
+movement change is documented in [pointer-tracking.md](pointer-tracking.md).
 
 The editor keeps each validated drag substep at most 2.5 world units. A task
 attempts at most 18 substeps and yields after approximately 6 ms of geometry

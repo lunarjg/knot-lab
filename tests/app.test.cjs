@@ -1395,11 +1395,11 @@ console.log('Device preferences restore controls and values, survive disabled au
 }
 console.log('Click-to-open lasso menu leaves undo and redo history intact: PASS');
 
-// A slow machine must yield between the same legal substeps, not increase the
-// displacement or defer analysis. Use a fake clock rather than timing CI CPUs.
+// When a sweep cannot be certified, a slow machine still yields between the
+// original legal substeps. Use a fake clock rather than timing CI CPUs.
 for(const useTasks of [false,true]){
  const pending=[];
- class Channel { constructor(){this.port1={onmessage:null};this.port2={postMessage:()=>pending.push(()=>this.port1.onmessage({data:0}))};} }
+ class Channel { constructor(){this.port1={onmessage:null};this.port2={postMessage:data=>pending.push(()=>this.port1.onmessage({data}))};} }
  const p=boot(undefined,true,undefined,undefined,undefined,useTasks?Channel:undefined),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx),cv=p.ids.get('cv');
  const next=()=>useTasks?pending.shift()?.():p.step();
  const circle=Array.from({length:96},(_,i)=>[250+150*Math.cos(i*2*Math.PI/96),250+150*Math.sin(i*2*Math.PI/96)]);
@@ -1410,7 +1410,7 @@ for(const useTasks of [false,true]){
  let clock=1000,attempts=0,decompositions=0,styles=0;
  p.ctx.performance={now:()=>clock};
  const attempt=K.attemptStep,decompose=K.decompose,style=p.ctx.getComputedStyle;
- K.attemptStep=(...args)=>{attempts++;const r=attempt(...args);clock+=4;return r;};
+ K.attemptStep=(...args)=>{if(args[2]?.continuous)return {ok:false,reason:'subdivide'};attempts++;const r=attempt(...args);clock+=4;return r;};
  K.decompose=(...args)=>{decompositions++;return decompose(...args);};
  p.ctx.getComputedStyle=(...args)=>{styles++;return style(...args);};
  const ev=(x,y,type='pointermove')=>({pointerType:'mouse',pointerId:101,clientX:x,clientY:y,button:0,type,preventDefault(){}});
@@ -1450,6 +1450,40 @@ for(const useTasks of [false,true]){
  p.ids.get('redo').click();const released=JSON.stringify(api.serialize().comps);p.flush();assert.equal(JSON.stringify(api.serialize().comps),released,'Queued frames cannot edit a released drag');
 }
 console.log('Drag budget, small validated steps, live analysis, deferred decomposition, frame styles, idle/blocked sleep, Shift/radius wakeup and undo: PASS');
+
+// A fast pointer can cover hundreds of units in one frame. Large certified
+// movement and the final release sample must not acquire a fixed speed cap.
+for(const pointerType of ['mouse','pen','touch']){
+ const pending=[];
+ class Channel {constructor(){this.port1={};this.port2={postMessage:data=>pending.push(()=>this.port1.onmessage({data}))};}}
+ const p=boot(undefined,true,undefined,undefined,undefined,Channel),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx),cv=p.ids.get('cv');
+ const circle=Array.from({length:96},(_,i)=>[250+150*Math.cos(i*2*Math.PI/96),250+150*Math.sin(i*2*Math.PI/96)]);
+ api.openTab(api.deserialize({format:'knot-lab',version:1,comps:[circle],crossings:[],open:[]}));
+ api.opts.cornerFix=false;api.opts.separate=false;api.view.s=1;api.view.ox=api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='move').click();p.flush();
+ const ev=(x,type)=>({pointerType,pointerId:81,clientX:x,clientY:250,button:0,type,preventDefault(){}}),grip=()=>api.state.comps[0].pts[K.indexOfU(api.state.comps[0],0)].x;
+ const start=JSON.stringify(api.serialize().comps);
+ let clock=1000;const attempt=K.attemptStep;p.ctx.performance={now:()=>clock};
+ K.attemptStep=(...args)=>{const r=attempt(...args);clock+=4;return r;};
+ p.fire(cv,'pointerdown',ev(400,'pointerdown'));
+ // Slow input must not install a cap that throttles a later fast sweep.
+ for(let x=401;x<=404;x++){
+  p.fire(cv,'pointermove',ev(x,'pointermove'));p.step();
+  assert(Math.abs(grip()-x)<1e-7);while(pending.length)pending.shift()();p.flush();
+ }
+ p.fire(cv,'pointermove',ev(700,'pointermove'));p.step();
+ assert(Math.abs(grip()-700)<1e-7,'A clear fast sweep reaches the pointer in one frame: '+pointerType);
+ assert.equal(pending.length,1);
+ p.fire(cv,'pointerup',ev(730,'pointerup'));assert(Math.abs(grip()-730)<1e-7,'Release uses its own final coordinates: '+pointerType+' '+grip());
+ p.fire(cv,'pointerdown',ev(730,'pointerdown'));p.fire(cv,'pointermove',ev(780,'pointermove'));
+ const beforeOld=JSON.stringify(api.serialize().comps);pending.shift()();
+ assert.equal(JSON.stringify(api.serialize().comps),beforeOld,'A stale continuation cannot advance the next gesture');
+ p.step();assert(Math.abs(grip()-780)<1e-7,'The new gesture retains its scheduled frame');
+ p.fire(cv,'pointerup',ev(790,'pointerup'));assert(Math.abs(grip()-790)<1e-7);
+ while(pending.length)pending.shift()();p.flush();
+ p.ids.get('undo').click();assert(Math.abs(grip()-730)<1e-7);p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),start);
+}
+console.log('Fast mouse/pen/touch drags track the target, use release coordinates and isolate queued work between gestures: PASS');
 
 // Deferred decomposition must refresh even when relaxing stops without a
 // geometry edit: the stop button and an empty-canvas pan both take this path.
