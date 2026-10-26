@@ -617,7 +617,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   const blankState = () => ({comps:[],crossings:[],nextId:1,open:[],memory:[],moveCheckpoint:null});
 
   const $ = id => document.getElementById(id);
-  const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let paintStyle = null;
+  const cssv = n => (paintStyle || getComputedStyle(document.documentElement)).getPropertyValue(n).trim();
   // Device preferences are independent of diagram autosave and undo history.
   const PREFERENCES_KEY = 'knot-lab:preferences';
   const preferenceFlags = ['under','arrows','signs','adSigns','adFill','grid','autoClose','cornerFix','separate'];
@@ -655,7 +656,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     if (!$('autosave').checked) $('saveStatus').textContent = 'Autosave off';
   }
   function preferenceControl(id,event,update) {
-    $(id)[event] = e => { update(e); savePreferences(); };
+    $(id)[event] = e => { update(e); savePreferences(); scheduleDrag(); };
   }
   // Captured once: renderTabs() re-parents this into the tab strip on every
   // render, and a detached element can no longer be found by getElementById.
@@ -709,10 +710,28 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     changed(); if (!keepView) fitView();
     clearSel(); if (tool === 'draw' || tool === 'erase' || tool === 'lasso') setTool('move');
   }
-  function changed() {
-    const tab=tabs.find(t=>t.id===activeTabId); if(tab){tab.dirty=true;tab.revision=(tab.revision||0)+1;updateTabLabel(tab);}
-    analysis = KC.analyze(S.comps, S.crossings);
+  let dragPaintQueued = false, dragPaintDirty = false;
+  function paintChanged() {
+    dragPaintDirty = false;
+    const tab = currentTab(); if (tab) updateTabLabel(tab);
     updatePanel(); render(); scheduleAutosave();
+  }
+  function changed(deferPaint = false) {
+    const tab=tabs.find(t=>t.id===activeTabId); if(tab){tab.dirty=true;tab.revision=(tab.revision||0)+1;}
+    analysis = KC.analyze(S.comps, S.crossings);
+    if (!deferPaint) { paintChanged(); return; }
+    // Analysis and worker invalidation stay current even between paints (view
+    // controls, signs and research can read them at any time). Coalesce the
+    // DOM/canvas/autosave work from continuation tasks into one display frame.
+    refreshInvariantState();
+    dragPaintDirty = true;
+    if (!dragPaintQueued) {
+      dragPaintQueued = true;
+      requestAnimationFrame(() => {
+        dragPaintQueued = false;
+        if (dragPaintDirty) paintChanged();
+      });
+    }
   }
 
   // ---------- save / open ----------
@@ -1119,8 +1138,10 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   let relaxing = 0, relaxEpoch = 0;
   const relaxLabel = text => { $('smoothBtn').textContent = text; $('relaxMove').textContent = text; };
   function stopRelax() {
+    const wasRelaxing = relaxing > 0;
     relaxing=0;relaxEpoch++;
     relaxLabel('Auto-relax');
+    if (wasRelaxing && analysis) { updatePanel(); render(); }
     research?.refresh();
   }
   function relaxFrames(total) {
@@ -1289,7 +1310,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     const el = $('sigma'), lo = +el.min || 10, hi = +el.max || 160;
     const n = Math.max(lo, Math.min(hi, Math.round(v) || lo));
     if (n === opts.sigma) { if (announce) toast(`Drag radius ${n}` + (n === lo ? ' (minimum)' : n === hi ? ' (maximum)' : '')); return; }
-    opts.sigma = n; el.value = String(n); $('sigmaV').textContent = n; savePreferences();
+    opts.sigma = n; el.value = String(n); $('sigmaV').textContent = n; savePreferences(); scheduleDrag();
     // The options bar is only on screen for the Drag strand tool, so the keys
     // say what they did rather than changing a number nobody can see.
     if (announce) toast(`Drag radius ${n}`);
@@ -1304,7 +1325,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   let momentaryFlipTool = null;
   window.addEventListener('keydown', e => {
-    if (e.key === 'Shift') { shiftDown = true; if (drag) drag.under = !opts.under; }
+    if (e.key === 'Shift') { shiftDown = true; if (drag) { drag.under = !opts.under; scheduleDrag(); } }
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     const mod = e.ctrlKey || e.metaKey, kk = e.key.toLowerCase();
     if (mod && kk === 's') { e.preventDefault(); saveFile(); return; }
@@ -1332,7 +1353,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     else if (k === '-' || k === '_') { e.preventDefault(); setSigma(opts.sigma - 10, true); }
   });
   window.addEventListener('keyup', e => {
-    if (e.key === 'Shift') { shiftDown = false; if (drag) drag.under = opts.under; }
+    if (e.key === 'Shift') { shiftDown = false; if (drag) { drag.under = opts.under; scheduleDrag(); } }
     if (e.key.toLowerCase() === 'c' && momentaryFlipTool !== null) { setTool(momentaryFlipTool); momentaryFlipTool = null; }
   });
 
@@ -1437,7 +1458,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
         before: KC.crossingDistances(S.crossings), beforeAngles: KC.crossingAngles(S.crossings) };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
-      if (!looping) { looping = true; requestAnimationFrame(tick); }
+      scheduleDrag();
     } else startPan(e, base);
   }
   function startPan(e, base) {
@@ -1446,7 +1467,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   }
   function moveAction(e) {
     const w = toWorld(e);
-    if (active.kind === 'drag') { drag.mx = w.x; drag.my = w.y; return; }
+    if (active.kind === 'drag') { drag.mx = w.x; drag.my = w.y; scheduleDrag(); return; }
     if (active.kind === 'pan') { view.ox = pan.ox + e.clientX - pan.x; view.oy = pan.oy + e.clientY - pan.y; render(); return; }
     if (active.kind === 'draw') {
       const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
@@ -1642,11 +1663,21 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     view.ox = mx - (mx - view.ox) * k; view.oy = my - (my - view.oy) * k; view.s = ns; render();
   }, { passive: false });
 
-  function tick() {
-    if (!drag) { looping = false; return; }
+  function scheduleDrag(continuing = false) {
+    if (drag && !looping) {
+      looping = true;
+      if (continuing) queueDragContinuation(); else requestAnimationFrame(() => tick(false));
+    }
+  }
+  function tick(continuing = false) {
+    looping = false;
+    if (!drag) return;
     let steps = 0, blocked = null;
-    const sig = opts.sigma;
-    while (steps < 18) {
+    // Keep every 2.5-unit step and its topology checks. On complex diagrams,
+    // yield between steps so queued pointer events can update the target.
+    // A single step is indivisible; reserve the rest of a frame for painting.
+    const sig = opts.sigma, deadline = now() + 6;
+    while (steps < 18 && (steps === 0 || now() < deadline)) {
       // Measure the distance left to travel on the very vertex the mutator is
       // about to move. Measuring the interpolated position at drag.u instead
       // left the two up to half a segment apart, so the strand was pulled from
@@ -1679,11 +1710,22 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       drag.u = held.pts[KC.indexOfU(held, drag.u)].u;
       drag.changed = true; steps++;
     }
-    if (steps) changed();
+    if (steps) changed(continuing);
     if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand cannot pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
-    requestAnimationFrame(tick);
+    // A settled/blocked grip needs no more work until the pointer or a drag
+    // option changes. In particular, don't re-test a forbidden R move at 60Hz.
+    if (steps && !blocked) scheduleDrag(true);
   }
+  // Yield to input and paint between short tasks without losing an entire
+  // refresh interval of useful work. Waiting for rAF after every small slice
+  // makes the grip lag behind quick gestures, especially on 30Hz displays.
+  const queueDragContinuation = (() => {
+    if (typeof MessageChannel !== 'function') return () => requestAnimationFrame(() => tick(false));
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => tick(true);
+    return () => channel.port2.postMessage(0);
+  })();
 
   // ---------- drawing: open strands, joining, closing ----------
   const SEG = KC.SEG;
@@ -2401,7 +2443,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     let pdText = '';
     if (a.c) { pdText = '[' + a.pd.map(x => '[' + x.join(',') + ']').join(',') + ']'; if (a.free) pdText += `\n# Components without crossings omitted from PD code: ${a.free}`; }
     $('pd').value = S.comps.length ? (pdText || 'No crossings') : '';
-    updateDecompositionPanel();
+    if (drag || erasing || relaxing) $('adNote').textContent = 'Editing… Decomposition updates when the gesture finishes.';
+    else updateDecompositionPanel();
     research?.refresh();
   }
   const fmt = x => Number.isInteger(x) ? String(x) : x.toFixed(1);
@@ -2620,6 +2663,11 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   function render() {
     if (!W) return;
+    // One style lookup per paint, refreshed on every render (including theme
+    // changes). Do not retain computed colours across frames.
+    const previousStyle = paintStyle;
+    paintStyle = getComputedStyle(document.documentElement);
+    try {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = cssv('--paper'); ctx.fillRect(0, 0, W, H);
     if (opts.grid) drawGrid();
@@ -2727,6 +2775,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     }
     ctx.restore();
     positionMenu();
+    } finally { paintStyle = previousStyle; }
   }
 
   function drawOpen(draft) {
@@ -2797,13 +2846,14 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   // them, and the middle piece of each nonalternating edge -- the part that is an
   // edge of G -- a heavy bar running from one shaded region to the next.
   function drawDecomposition() {
-    const dec = decomposition();
     // The curves are relaxed against the whole diagram, which is worth a moment
     // once but not once a frame. Anything that is still moving strands about --
     // a gesture, or auto-relax stepping the whole diagram -- shows the plain
     // diagram, and the decomposition comes back when it stops. Recomputing it
     // per frame made auto-relax look as though it had hung.
-    if (!dec || drag || erasing || relaxing) { drawDiagram(); return; }
+    if (drag || erasing || relaxing) { drawDiagram(); return; }
+    const dec = decomposition();
+    if (!dec) { drawDiagram(); return; }
     const paths = decompositionPaths();
     if (!paths) { drawDiagram(); return; }
     const gap = Math.min(12, 8 / view.s);

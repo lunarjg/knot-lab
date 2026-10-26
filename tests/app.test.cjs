@@ -1,7 +1,7 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync('dist/index.html','utf8');
-function boot(saved,narrow=true,Worker,preferences,storage){
- const arcs=[],paths=[],texts=[],fills=[],strokes=[],paints=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0;
+function boot(saved,narrow=true,Worker,preferences,storage,MessageChannel){
+ const arcs=[],paths=[],texts=[],fills=[],strokes=[],paints=[],all=[],ids=new Map(),listeners={},rafs=[],timers=new Map(),store=new Map(saved?[[JSON.parse(saved).format==='knot-lab-workspace'?'knot-lab:workspace':'knot-lab:autosave',saved]]:[]);let tid=0,clock=1000;
  if(preferences !== undefined)store.set('knot-lab:preferences',preferences);
  class El{
   constructor(tag='div',attrs={}){this.tagName=tag.toUpperCase();this.attrs=attrs;this.id=attrs.id||'';this.dataset={};Object.entries(attrs).forEach(([k,v])=>{if(k.startsWith('data-'))this.dataset[k.slice(5)]=v;});this.checked='checked'in attrs;this.hidden='hidden'in attrs;this.value=attrs.value||'';this.style={setProperty(k,v){this[k]=v}};this.textContent='';this.children=[];this.events={};const classes=new Set((attrs.class||'').split(' '));this.classList={add:c=>classes.add(c),remove:c=>classes.delete(c),toggle:(c,v)=>v?classes.add(c):classes.delete(c),contains:c=>classes.has(c)};}
@@ -14,11 +14,13 @@ function boot(saved,narrow=true,Worker,preferences,storage){
  }
  for(const match of html.matchAll(/<([a-z]+)\b([^>]*)>/g)){const attrs={};for(const a of match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]||'';const el=new El(match[1],attrs);all.push(el);if(el.id)ids.set(el.id,el);}
  const doc={body:new El('body'),documentElement:new El('html'),activeElement:null,visibilityState:'visible',getElementById:id=>ids.get(id)||null,createElement:t=>new El(t),querySelectorAll:q=>all.filter(e=>q==='[data-tool]'?e.dataset.tool:q==='.views button'?e.dataset.view:q==='#lassoModes button'?e.dataset.lasso:q==='#lassoShapes button'?e.dataset.shape:q==='#eraseModes button'?e.dataset.erase:false),addEventListener:(k,f)=>(listeners[k]??=[]).push(f)};
- const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:storage||{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
+ const context={console,Worker,document:doc,navigator:{},location:{protocol:'https:'},performance:{now:()=>clock},MessageChannel,AbortController,File,Blob,URL,ResizeObserver:class{observe(){}},getComputedStyle:()=>({getPropertyValue:n=>n==='--sans'?'sans-serif':n}),localStorage:storage||{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)},requestAnimationFrame:f=>{rafs.push(f);return rafs.length},cancelAnimationFrame:()=>{},setTimeout:(f,ms)=>{timers.set(++tid,{f,ms});return tid},clearTimeout:id=>timers.delete(id),addEventListener:(k,f)=>(listeners[k]??=[]).push(f),matchMedia:q=>({matches:q.includes('max-width')&&narrow,addEventListener(){}}),confirm:()=>true,innerWidth:narrow?768:1400,devicePixelRatio:2};context.window=context;context.globalThis=context;
  vm.createContext(context);vm.runInContext(fs.readFileSync('dist/pd-import.js','utf8'),context);
  for(const match of html.matchAll(/<script(?: src="([^"]+)")?>([\s\S]*?)<\/script>/g)){if(match[1]==='./pd-import.js')continue;vm.runInContext(match[1]?fs.readFileSync('dist/'+match[1].replace('./',''),'utf8'):match[2],context);}
- function flush(){let n=0;while(rafs.length&&n++<200)rafs.shift()();assert(n<200,'Animation did not stop');}
- flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,paints,flush,step:()=>{const f=rafs.shift();if(f)f();},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
+ // Virtual display time advances between frames, not with CI CPU speed.
+ function step(){const f=rafs.shift();if(f){clock+=1000/60;f(clock);}}
+ function flush(){let n=0;while(rafs.length&&n++<200)step();assert(n<200,'Animation did not stop');}
+ flush();return {ctx:context,doc,ids,store,timers,arcs,paths,texts,fills,strokes,paints,flush,step,advance:ms=>{clock+=ms;},fire:(el,name,event)=>{for(const f of el.events[name]||[])f(event)},
   key:(type,props)=>{for(const f of listeners[type]||[])f({target:doc.body,preventDefault(){},stopPropagation(){},...props})}};
 }
 const t=boot(),lab=t.ctx.knotLab,pd='[[1,4,2,5],[3,6,4,1],[5,2,6,3]]';
@@ -1392,3 +1394,78 @@ console.log('Device preferences restore controls and values, survive disabled au
  p.ids.get('undo').click();assert.equal(api.analysis.writhe,initial,'Menu tap adds no undo step');
 }
 console.log('Click-to-open lasso menu leaves undo and redo history intact: PASS');
+
+// A slow machine must yield between the same legal substeps, not increase the
+// displacement or defer analysis. Use a fake clock rather than timing CI CPUs.
+for(const useTasks of [false,true]){
+ const pending=[];
+ class Channel { constructor(){this.port1={onmessage:null};this.port2={postMessage:()=>pending.push(()=>this.port1.onmessage({data:0}))};} }
+ const p=boot(undefined,true,undefined,undefined,undefined,useTasks?Channel:undefined),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx),cv=p.ids.get('cv');
+ const next=()=>useTasks?pending.shift()?.():p.step();
+ const circle=Array.from({length:96},(_,i)=>[250+150*Math.cos(i*2*Math.PI/96),250+150*Math.sin(i*2*Math.PI/96)]);
+ api.openTab(api.deserialize({format:'knot-lab',version:1,comps:[circle],crossings:[],open:[]}),'Drag budget');
+ api.opts.cornerFix=false;api.opts.separate=false;api.view.s=1;api.view.ox=api.view.oy=0;
+ p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='move').click();
+ p.doc.querySelectorAll('.views button').find(b=>b.dataset.view==='AD').click();p.flush();
+ let clock=1000,attempts=0,decompositions=0,styles=0;
+ p.ctx.performance={now:()=>clock};
+ const attempt=K.attemptStep,decompose=K.decompose,style=p.ctx.getComputedStyle;
+ K.attemptStep=(...args)=>{attempts++;const r=attempt(...args);clock+=4;return r;};
+ K.decompose=(...args)=>{decompositions++;return decompose(...args);};
+ p.ctx.getComputedStyle=(...args)=>{styles++;return style(...args);};
+ const ev=(x,y,type='pointermove')=>({pointerType:'mouse',pointerId:101,clientX:x,clientY:y,button:0,type,preventDefault(){}});
+ const start=JSON.stringify(api.serialize().comps),u=api.state.comps[0].pts[0].u;
+ p.fire(cv,'pointerdown',ev(400,250,'pointerdown'));p.flush();
+ assert.equal(attempts,0,'A settled grip must stop without testing no-op moves');
+ p.fire(cv,'pointermove',ev(600,250));p.step();
+ assert.equal(attempts,2,'Two 4ms substeps exhaust the 6ms budget');
+ if(useTasks)assert.equal(pending.length,1,'Unfinished work continues in one queued task');
+ const cm=api.state.comps[0],grip=cm.pts[K.indexOfU(cm,u)];
+ assert(Math.abs(grip.x-405)<1e-7,'Budgeting retains 2.5-unit validated increments');
+ assert.equal(decompositions,0,'Neither the panel nor AD paint computes decomposition during dragging');
+ assert.equal(styles,1,'A drag paint shares a single computed-style lookup');
+ if(useTasks){
+  next();assert.equal(attempts,4,'A continuation advances the same validated steps');
+  assert.equal(styles,1,'Continuation tasks defer painting to a display frame');
+  assert.equal(p.ctx.knotLab.analysis.c,K.analyze(api.state.comps,api.state.crossings).c,'Analysis stays current before the deferred paint');
+  p.step();assert.equal(styles,2,'The deferred paint actually runs on the next display frame');
+  const held=api.state.comps[0].pts[K.indexOfU(api.state.comps[0],u)];
+  assert.deepEqual(p.arcs.at(-1).slice(0,2),[held.x,held.y],'Deferred paint shows the current grip');
+ }
+ assert.equal(api.analysis.c,K.analyze(api.state.comps,api.state.crossings).c,'Analysis remains current on every painted frame');
+ // Stop at a topology barrier, then prove that a stationary pointer is idle.
+ const under=[];K.attemptStep=(s,mutator,opt)=>{attempts++;under.push(opt.under);clock+=4;return {ok:false,reason:'R3'};};
+ next();const stopped=attempts;p.flush();assert.equal(attempts,stopped,'A blocked target is not retried every animation frame');
+ p.key('keydown',{key:'Shift'});p.step();assert.equal(attempts,stopped+1);assert.equal(under.at(-1),true,'Shift wakes a blocked drag with the new height');p.flush();
+ p.key('keyup',{key:'Shift'});p.step();assert.equal(under.at(-1),false);
+ const n=attempts;p.key('keydown',{key:'+'});p.step();assert.equal(attempts,n+1,'Radius changes wake a blocked drag');
+ p.fire(cv,'pointermove',ev(590,255));p.step();assert.equal(attempts,n+2,'A new pointer target wakes a blocked drag');
+ K.attemptStep=attempt;
+ p.fire(cv,'pointermove',ev(610,250));p.step();
+ if(useTasks)assert.equal(pending.length,1);
+ p.fire(cv,'pointerup',ev(590,255,'pointerup'));const finished=JSON.stringify(api.serialize().comps);
+ if(useTasks)next();p.flush();assert.equal(JSON.stringify(api.serialize().comps),finished,'A queued continuation cannot move the strand after release');
+ assert(decompositions>0,'Release refreshes the decomposition panel');
+ p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),start,'Budgeted substeps and release cleanup remain one undo action');
+ p.ids.get('redo').click();const released=JSON.stringify(api.serialize().comps);p.flush();assert.equal(JSON.stringify(api.serialize().comps),released,'Queued frames cannot edit a released drag');
+}
+console.log('Drag budget, small validated steps, live analysis, deferred decomposition, frame styles, idle/blocked sleep, Shift/radius wakeup and undo: PASS');
+
+// Deferred decomposition must refresh even when relaxing stops without a
+// geometry edit: the stop button and an empty-canvas pan both take this path.
+for(const interrupt of ['button','pan']){
+ const p=boot(),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx);api.importPD(pd);p.flush();
+ let calls=0;const decompose=K.decompose;K.decompose=(...args)=>{calls++;return decompose(...args);};
+ p.ids.get('relaxMove').click();p.step();
+ assert(p.ids.get('adNote').textContent.startsWith('Editing'));
+ assert.equal(calls,0,'Relax frames defer decomposition');
+ if(interrupt==='button')p.ids.get('relaxMove').click();
+ else {
+  const cv=p.ids.get('cv'),ev={pointerType:'mouse',pointerId:66,button:0,clientX:-5000,clientY:-5000,preventDefault(){}};
+  p.fire(cv,'pointerdown',ev);p.step();p.fire(cv,'pointerup',ev);
+ }
+ p.flush();assert(calls>0,'Stopping relaxation must recompute the current decomposition');
+ assert(!p.ids.get('adNote').textContent.startsWith('Editing'),'The editing message must clear on '+interrupt);
+ assert.equal(p.ids.get('smoothBtn').textContent,'Auto-relax');
+}
+console.log('Stopping Auto-relax by button or pan refreshes deferred decomposition: PASS');
