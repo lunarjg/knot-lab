@@ -63,7 +63,22 @@ const digest=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('he
    return {distance,duration,elapsed,releaseGap:grip.distance,releaseInputGap:window.__releaseGrip?.distance,blocked:grip.blocked,stats,analysis:{c:knotLab.analysis.c,sA:knotLab.analysis.sA.count,sB:knotLab.analysis.sB.count,gT:knotLab.analysis.gT},geometry:knotLab.serialize().comps};
   },{distance,duration}));
   for(const p of paths){p.geometrySHA256=digest(p.geometry);delete p.geometry;}
-  assert.deepEqual(errors,[]);const result={metadata,fixed,paths};
+  // Separate held-pointer catch-up from synchronous release cleanup. Queued
+  // work must never keep deforming the diagram after pointerup has returned.
+  const hold=await page.evaluate(async()=>{
+   window.__reset();const start=performance.now(),distance=360,duration=240;
+   await new Promise(resolve=>{const frame=()=>{const t=Math.min(1,(performance.now()-start)/duration);window.__event('pointermove',distance*t,0);if(t===1)resolve();else requestAnimationFrame(frame);};requestAnimationFrame(frame);});
+   const inputEnd=performance.now(),gapAtStop=window.__readDrag().distance;
+   await new Promise((resolve,reject)=>{const poll=()=>{const d=window.__readDrag();if(d.distance<.8||d.blocked)return resolve();if(performance.now()-inputEnd>10000)return reject(Error('Stationary pointer did not settle'));requestAnimationFrame(poll);};requestAnimationFrame(poll);});
+   const settleMs=performance.now()-inputEnd,grip=window.__readDrag(),stats=window.__stats(),releaseStart=performance.now();
+   window.__event('pointerup',distance,0);
+   const releaseMs=performance.now()-releaseStart,after=knotLab.serialize().comps,steps=window.__steps.length;
+   await new Promise(resolve=>setTimeout(resolve,150));
+   return {gapAtStop,settleMs,settledGap:grip.distance,blocked:grip.blocked,releaseMs,stats,geometry:after,afterWait:knotLab.serialize().comps,postReleaseSteps:window.__steps.length-steps};
+  });
+  assert.deepEqual(hold.afterWait,hold.geometry,'Queued work must not move the released strand');
+  assert.equal(hold.postReleaseSteps,0);hold.geometrySHA256=digest(hold.geometry);delete hold.geometry;delete hold.afterWait;
+  assert.deepEqual(errors,[]);const result={metadata,fixed,paths,hold};
   if(process.env.PERF_OUTPUT)fs.writeFileSync(process.env.PERF_OUTPUT,JSON.stringify(result,null,2)+'\n');
   console.log(JSON.stringify(result,null,2));
  } finally {await browser.close();}

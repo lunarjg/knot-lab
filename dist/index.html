@@ -1709,6 +1709,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           KC.smoothCorners(cm.pts, true, { angle: 0.5, iters: 1, strength: 0.5, mask: i => KC.sDist(cm, cm.cum[i], gs) < lim ? 1 : 0 });
         }
       }, {
+        geometryCurrent: true,
         under: drag.under,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
@@ -1720,7 +1721,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       drag.u = held.pts[KC.indexOfU(held, drag.u)].u;
       drag.changed = true; steps++;
     }
-    if (steps) changed(continuing);
+    // Release finishes cleanup and paints once in endAction, in this same
+    // event handler. An intermediate analysis/paint cannot be presented.
+    if (steps && !finishing) changed(continuing);
     if (blocked && blocked !== drag.lastBlocked) toast({ R2: 'Blocked: different overstrands at the two crossings prevent R2 removal', R3: 'Blocked: cyclic over/under ordering prevents an R3 move', pass: 'Blocked: a strand cannot pass through another strand' }[blocked] || 'Blocked', true);
     drag.lastBlocked = blocked;
     // A settled/blocked grip needs no more work until the pointer or a drag

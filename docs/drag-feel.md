@@ -57,3 +57,49 @@ in [drag-performance.md](drag-performance.md) to repeat the measurements. They
 are diagnostics, not timing assertions. The private drawing is not committed.
 Physical iPad/Pencil and Safari latency have not been measured. Dense geometry
 can still require multiple slices; a topology barrier remains a real stop.
+
+## v21: reduce the work behind pointer catch-up
+
+The deformation recipe and scheduling budgets remain unchanged. Crossing
+matching now rejects pairs whose position or first arc distance already
+exceeds the matching threshold, preserving candidate order and costs for all
+remaining pairs. Validated drag state can copy current arc-length buffers for
+rollback; other callers still recompute them. Resampling skips a second
+geometry refresh only when the point list is unchanged and the caller has
+just refreshed it. Rollback buffers are independent of the live component.
+
+Release applies its final input and cleanup before one analysis and paint.
+The former intermediate paint happened inside the same event handler and
+could never be presented. Background callbacks already stop on release;
+the browser benchmark now verifies zero later steps and unchanged geometry.
+
+Paired local Chrome measurements on 2026-10-27 compare v20 (`eba3841`) with
+v21, using the synthetic 88-crossing, 3,178-point diagram. The fast path
+travels 360 world units over 240 ms; the stationary-pointer test then holds
+the pointer until the grip settles or reaches a topology barrier.
+
+| Measurement | v20 | v21 |
+| --- | ---: | ---: |
+| Catch-up after stopping the pointer | 53.9 ms | 18.3 ms |
+| Gap after final fast release input, before cleanup | 52.13 units | 0.10 units |
+| Longest task on the fast path | 41.3 ms | 24.9 ms |
+| Cleanup after a settled release | 18.2 ms | 14.0 ms |
+
+The fixed 180-unit target completes in 186.4 versus 132.7 ms with identical
+geometry hashes. On the private 32-crossing drawing, that fixed target is
+about 122 ms in both versions; the fast path reaches zero final-input gap in
+both, while its longest task falls from 30.2 to 23.7 ms. These are individual
+diagnostic runs, not guarantees or timing assertions. Intermediate gaps and
+event sampling depend on frame ordering; sufficiently large jumps or dense
+diagrams still take multiple slices. The settling tolerance remains 0.8
+world units. Release cleanup can slightly move the grip after it has settled.
+
+All seven Node suites and Chrome editor/research checks pass. The single-paint
+regression fails on v20 and passes on v21. Independent geometry review compared
+5,000 trials and 900 chained moves against v20, including accepted/rejected
+steps, crossing identities/heights, event classification and rollback.
+Independent runtime review checked release-only crossing creation, invariant
+worker invalidation, decomposition, mouse/pen/touch, both schedulers and undo.
+The 360-step core benchmark and default-smoothed direction/reversal traces
+also retain exact geometry. Private fixture coordinates remain outside the
+repository.

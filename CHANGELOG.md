@@ -5,6 +5,12 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. Entries without
 version tags remain development notes.
 
+## v21 — Reduce drag catch-up delay (2026-10-27)
+
+- Keep the original drag trajectory while skipping impossible crossing matches and redundant arc-length calculations. Copy trusted rollback buffers only for validated drag state; preserve standalone callers' geometry refresh behavior.
+- Paint once after release cleanup, avoiding the invisible intermediate analysis and canvas update. Retain topology checks, work budgets, cancellation and one-step undo.
+- Measure stationary-pointer catch-up and release cleanup separately, and verify that queued work cannot deform a released strand. Cover cache rollback isolation, stale external geometry and exact original-step equivalence; refresh the offline cache.
+
 ## v20 — Restore the original drag feel (2026-10-27)
 
 - Restore the original 2.5-unit deformation, smoothing and resampling sequence. Remove adaptive large drag steps and their lingering size limits, while keeping the optimized core, cached rendering and deferred decomposition.

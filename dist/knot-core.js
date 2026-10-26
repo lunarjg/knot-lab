@@ -45,14 +45,21 @@ const KC = (function () {
     return { x: a.x + f * (b.x - a.x), y: a.y + f * (b.y - a.y), dx: (b.x - a.x) / sl, dy: (b.y - a.y) / sl, seg: lo };
   }
 
-  function cloneComps(comps) {
-    return comps.map(c => { const k = { pts: c.pts.map(q => ({ x: q.x, y: q.y, u: q.u })) }; updateGeom(k); return k; });
+  function cloneComps(comps, geometryCurrent = false) {
+    return comps.map(c => {
+      const k = { pts: c.pts.map(q => ({ x: q.x, y: q.y, u: q.u })) };
+      // Validated steps already have current arc lengths. Copy their buffers
+      // for rollback instead of recomputing every edge of the diagram.
+      if (geometryCurrent && c.cum && c.uw) { k.cum = c.cum.slice(); k.uw = c.uw.slice(); k.len = c.len; }
+      else updateGeom(k);
+      return k;
+    });
   }
   function cloneCrossings(X) {
     return X.map(c => ({ id: c.id, over: c.over, x: c.x, y: c.y, occ: c.occ.map(o => ({ ...o })) }));
   }
 
-  function resampleComp(comp, simplify = false) {
+  function resampleComp(comp, simplify = false, geometryCurrent = false) {
     const p = comp.pts, n = p.length, out = [];
     for (let i = 0; i < n; i++) {
       const a = p[i], b = p[(i + 1) % n];
@@ -88,8 +95,9 @@ const KC = (function () {
       }
       comp.pts = kept;
     } else comp.pts = out;
-    updateGeom(comp);
-    return p.length !== comp.pts.length || p.some((q, i) => q !== comp.pts[i]);
+    const changed = p.length !== comp.pts.length || p.some((q, i) => q !== comp.pts[i]);
+    if (changed || !geometryCurrent) updateGeom(comp);
+    return changed;
   }
 
   function mkOcc(comps, c, i, t) {
@@ -188,10 +196,18 @@ const KC = (function () {
         if (mO.has(O)) continue;
         for (const N of raw) {
           if (mN.has(N)) continue;
+          // Position alone is a lower bound on the matching cost. Most pairs
+          // in a dense diagram are too far apart even before comparing their
+          // two material coordinates; keep the candidate order unchanged.
+          if (Math.abs(O.x - N.x) >= 2 * T || Math.abs(O.y - N.y) >= 2 * T) continue;
+          const position = 0.5 * Math.hypot(O.x - N.x, O.y - N.y);
+          if (position >= T) continue;
           for (let perm = 0; perm < 2; perm++) {
             const a = O.occ[0], b = O.occ[1], na = N.occ[perm], nb = N.occ[1 - perm];
             if (a.c !== na.c || b.c !== nb.c) continue;
-            const cost = sDist(comps[a.c], ns.get(a), na.s) + sDist(comps[b.c], ns.get(b), nb.s) + 0.5 * Math.hypot(O.x - N.x, O.y - N.y);
+            const first = sDist(comps[a.c], ns.get(a), na.s);
+            if (first >= T) continue;
+            const cost = first + sDist(comps[b.c], ns.get(b), nb.s) + position;
             if (cost < T) cand.push([cost, O, N, perm]);
           }
         }
@@ -517,7 +533,7 @@ const KC = (function () {
   }
 
   function attemptStep(S, mutator, opt) {
-    const backup = cloneComps(S.comps);
+    const backup = cloneComps(S.comps, opt?.geometryCurrent);
     mutator(S.comps);
     const continuous = opt?.continuous ? regularMotion(backup, S.comps, S.crossings) : null;
     if (opt?.continuous && !continuous) {
@@ -536,7 +552,7 @@ const KC = (function () {
     let resampled = false;
     S.comps.forEach((cm, c) => {
       const old = backup[c].pts;
-      if (cm.pts.length !== old.length || cm.pts.some((p, i) => p.x !== old[i].x || p.y !== old[i].y || p.u !== old[i].u)) resampled = resampleComp(cm, true) || resampled;
+      if (cm.pts.length !== old.length || cm.pts.some((p, i) => p.x !== old[i].x || p.y !== old[i].y || p.u !== old[i].u)) resampled = resampleComp(cm, true, true) || resampled;
     });
     let raw = resampled ? computeRaw(S.comps) : projected;
     const sameProjection = sampled => {
@@ -554,7 +570,7 @@ const KC = (function () {
     if (resampled && !sameProjection(raw)) {
       S.comps = moved.map(cm => ({ ...cm }));
       S.comps.forEach((cm, c) => {
-        if (cm.pts.length !== backup[c].pts.length || cm.pts.some((p, i) => p.x !== backup[c].pts[i].x || p.y !== backup[c].pts[i].y)) resampleComp(cm);
+        if (cm.pts.length !== backup[c].pts.length || cm.pts.some((p, i) => p.x !== backup[c].pts[i].x || p.y !== backup[c].pts[i].y)) resampleComp(cm, false, true);
       });
       raw = computeRaw(S.comps);
       // Even subdivision can expose floating-point endpoint degeneracies.

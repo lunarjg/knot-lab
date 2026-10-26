@@ -90,6 +90,25 @@ for(const t of [0,1]){const r=KC.attemptStep(S,cm=>cm[2].pts.forEach(p=>{if(p.y<
 assert.deepEqual(totals,{r1:0,r2:0,r3:2});
 const rback=KC.attemptStep(S,cm=>cm[2].pts.forEach(p=>{if(p.y<2)p.y=-1}),{});assert(rback.ok);assert.equal(rback.ev.r3,1);assert.equal(rback.ev.r2,0);
 const forbidden=state(fixture(-1),true),before=JSON.stringify(forbidden.comps);const bad=KC.attemptStep(forbidden,cm=>cm[2].pts.forEach(p=>{if(p.y<2)p.y=1}),{});assert(!bad.ok);assert.equal(bad.reason,'R3');assert.equal(JSON.stringify(forbidden.comps),before);
+// The drag's cached geometry must behave exactly like recomputing it, even
+// when a rejected mutator also writes into the arc-length buffers.
+for(const cyclic of [false,true]){
+ const ordinary=state(fixture(-1),cyclic),cached=state(fixture(-1),cyclic);
+ const mutate=comps=>{comps[2].pts.forEach(p=>{if(p.y<2)p.y=1;});comps[2].cum.fill(-1);comps[2].uw.fill(-1);};
+ const a=KC.attemptStep(ordinary,mutate,{}),b=KC.attemptStep(cached,mutate,{geometryCurrent:true});
+ assert.deepEqual(b,a);assert.deepEqual(cached,ordinary,'Cached rollback buffers must not alias the live component');
+ assert.deepEqual(cached.comps,KC.cloneComps(cached.comps),'Accepted and blocked steps leave current geometry');
+}
+// Standalone callers can edit points before cloning/resampling/attemptStep.
+// They have not opted into trusting the old geometry cache.
+{
+ const s=state(fixture(-1),true);s.comps[2].pts.forEach(p=>p.x+=.01);
+ const refreshed=KC.cloneComps(s.comps);
+ const r=KC.attemptStep(s,comps=>comps[2].pts.forEach(p=>{if(p.y<2)p.y=1;}),{});
+ assert.equal(r.reason,'R3');assert.deepEqual(s.comps,refreshed);
+ const cm=poly([[0,0],[2,0],[2,2],[0,2]]);cm.pts[0].x=-1;
+ const expected=KC.cloneComps([cm])[0];KC.resampleComp(cm);assert.deepEqual(cm,expected);
+}
 // Previously even a no-op deleted these two crossings and incremented R2.
 const kink=y=>poly([[-20,10],[-1,1],[0,y],[1,1],[20,10],[20,20],[-20,20]]);
 const bar=()=>poly([[-30,0],[30,0],[30,-20],[-30,-20]]);

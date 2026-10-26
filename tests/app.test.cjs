@@ -1448,7 +1448,9 @@ for(const useTasks of [false,true]){
  K.attemptStep=attempt;
  p.fire(cv,'pointermove',ev(610,250));p.step();
  if(useTasks)assert.equal(pending.length,1);
+ const paintsBeforeRelease=styles;
  p.fire(cv,'pointerup',ev(590,255,'pointerup'));const finished=JSON.stringify(api.serialize().comps);
+ assert.equal(styles-paintsBeforeRelease,1,'Release paints the final cleanup once, without an invisible intermediate paint');
  if(useTasks)next();p.flush();assert.equal(JSON.stringify(api.serialize().comps),finished,'A queued continuation cannot move the strand after release');
  assert(decompositions>0,'Release refreshes the decomposition panel');
  p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),start,'Budgeted substeps and release cleanup remain one undo action');

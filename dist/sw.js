@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='knot-lab-v54-original-drag-feel';
+const CACHE='knot-lab-v55-drag-throughput';
 const FILES=['./','./index.html','./pd-import.js','./knot-core.js','./seifert.js','./graph-blocks.js','./research-analysis.js','./research-dataset.js','./research-ui.js','./research-worker.js','./research.css','./research.html','./invariants.js','./invariants-worker.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
   event.waitUntil((async()=>{
