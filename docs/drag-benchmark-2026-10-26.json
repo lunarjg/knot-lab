@@ -1,0 +1,244 @@
+{
+  "date": "2026-10-26",
+  "baselineCommit": "5d16067ba26bcbcf5b4d1d8ae8b08e3a61874197",
+  "environment": "macOS, local headless Google Chrome, observed rAF interval ~33.3ms",
+  "browser": {
+    "baseline": {
+      "metadata": {
+        "crossings": 32,
+        "points": 4742,
+        "components": 1
+      },
+      "fixed": {
+        "elapsed": 192.20000004768372,
+        "stats": {
+          "tasks": {
+            "n": 4,
+            "median": 38.700000047683716,
+            "p95": 51.799999952316284,
+            "max": 51.799999952316284
+          },
+          "rafIntervals": {
+            "n": 3,
+            "median": 33.299999999999955,
+            "p95": 33.40000000000009,
+            "max": 33.40000000000009
+          },
+          "steps": {
+            "n": 72,
+            "median": 2,
+            "p95": 2.700000047683716,
+            "max": 11.5
+          },
+          "accepted": 72,
+          "rejected": 0
+        },
+        "geometrySHA256": "95741bbf02d14aec23eded95023bf4782f2ab32ca9a0d3ad17e8315327eceb15",
+        "remainingDistance": 3.802513859341161e-14,
+        "blocked": null
+      },
+      "paths": [
+        {
+          "distance": 180,
+          "duration": 600,
+          "elapsed": 602.4000000953674,
+          "releaseGap": 9.769999992847454,
+          "blocked": null,
+          "stats": {
+            "tasks": {
+              "n": 17,
+              "median": 10.700000047683716,
+              "p95": 19.799999952316284,
+              "max": 19.799999952316284
+            },
+            "rafIntervals": {
+              "n": 17,
+              "median": 33.299999999999955,
+              "p95": 33.40000000000009,
+              "max": 33.40000000000009
+            },
+            "steps": {
+              "n": 70,
+              "median": 2.200000047683716,
+              "p95": 3.100000023841858,
+              "max": 7.800000071525574
+            },
+            "accepted": 70,
+            "rejected": 0
+          },
+          "analysis": {
+            "c": 32,
+            "sA": 21,
+            "sB": 1,
+            "gT": 6
+          },
+          "geometrySHA256": "defa89800d82272c51b1380fc2f0d854ede4c5ab76d7a7dd84acd0f92471033b"
+        },
+        {
+          "distance": 360,
+          "duration": 240,
+          "elapsed": 269.89999997615814,
+          "releaseGap": 111.15000003576301,
+          "blocked": null,
+          "stats": {
+            "tasks": {
+              "n": 6,
+              "median": 35.5,
+              "p95": 41.5,
+              "max": 41.5
+            },
+            "rafIntervals": {
+              "n": 7,
+              "median": 33.299999999999955,
+              "p95": 33.40000000000009,
+              "max": 33.40000000000009
+            },
+            "steps": {
+              "n": 100,
+              "median": 1.8000000715255737,
+              "p95": 2.600000023841858,
+              "max": 4.299999952316284
+            },
+            "accepted": 100,
+            "rejected": 0
+          },
+          "analysis": {
+            "c": 32,
+            "sA": 21,
+            "sB": 1,
+            "gT": 6
+          },
+          "geometrySHA256": "552cd2ecab91e8887e6ea2f5b75c11da052d570c94f964b5662d0c4204e09a68"
+        }
+      ]
+    },
+    "optimized": {
+      "metadata": {
+        "crossings": 32,
+        "points": 4742,
+        "components": 1
+      },
+      "fixed": {
+        "elapsed": 185.10000002384186,
+        "stats": {
+          "tasks": {
+            "n": 20,
+            "median": 7.100000023841858,
+            "p95": 9.200000047683716,
+            "max": 9.200000047683716
+          },
+          "rafIntervals": {
+            "n": 5,
+            "median": 33.30000000000001,
+            "p95": 33.39999999999998,
+            "max": 33.39999999999998
+          },
+          "steps": {
+            "n": 72,
+            "median": 1.600000023841858,
+            "p95": 2.700000047683716,
+            "max": 5.200000047683716
+          },
+          "accepted": 72,
+          "rejected": 0
+        },
+        "geometrySHA256": "95741bbf02d14aec23eded95023bf4782f2ab32ca9a0d3ad17e8315327eceb15",
+        "remainingDistance": 3.802513859341161e-14,
+        "blocked": null
+      },
+      "paths": [
+        {
+          "distance": 180,
+          "duration": 600,
+          "elapsed": 622.9000000953674,
+          "releaseGap": 1.3699999928475346,
+          "blocked": null,
+          "stats": {
+            "tasks": {
+              "n": 27,
+              "median": 6.399999976158142,
+              "p95": 7.700000047683716,
+              "max": 7.700000047683716
+            },
+            "rafIntervals": {
+              "n": 19,
+              "median": 33.30000000000018,
+              "p95": 33.40000000000009,
+              "max": 33.40000000000009
+            },
+            "steps": {
+              "n": 72,
+              "median": 1.899999976158142,
+              "p95": 2.5,
+              "max": 3.4000000953674316
+            },
+            "accepted": 72,
+            "rejected": 0
+          },
+          "analysis": {
+            "c": 32,
+            "sA": 21,
+            "sB": 1,
+            "gT": 6
+          },
+          "geometrySHA256": "a37a7235958a625d557743f736cf3fa4b6304e4d78b164d219f5cb23605e5240"
+        },
+        {
+          "distance": 360,
+          "duration": 240,
+          "elapsed": 265.40000009536743,
+          "releaseGap": 62.500000000000114,
+          "blocked": null,
+          "stats": {
+            "tasks": {
+              "n": 29,
+              "median": 6.899999976158142,
+              "p95": 7.799999952316284,
+              "max": 8.600000023841858
+            },
+            "rafIntervals": {
+              "n": 8,
+              "median": 33.30000000000018,
+              "p95": 33.40000000000009,
+              "max": 33.40000000000009
+            },
+            "steps": {
+              "n": 119,
+              "median": 1.5,
+              "p95": 2.200000047683716,
+              "max": 3.6999999284744263
+            },
+            "accepted": 119,
+            "rejected": 0
+          },
+          "analysis": {
+            "c": 32,
+            "sA": 21,
+            "sB": 1,
+            "gT": 6
+          },
+          "geometrySHA256": "4e86ed3489935d33d3341d32b9676b21c6c1602c09b01e69bcc69586b338867d"
+        }
+      ]
+    }
+  },
+  "identicalCoreReplay": {
+    "initial": {
+      "c": 32,
+      "sA": 21,
+      "sB": 1,
+      "gT": 6
+    },
+    "baseline": {
+      "median": 1.9316670000000613,
+      "p95": 3.427166999999997,
+      "total": 799.8582570000007
+    },
+    "optimized": {
+      "median": 1.3428750000000491,
+      "p95": 2.577208000000155,
+      "total": 574.0622969999996
+    },
+    "identicalSteps": 360
+  }
+}

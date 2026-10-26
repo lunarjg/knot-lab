@@ -89,6 +89,7 @@ const KC = (function () {
       comp.pts = kept;
     } else comp.pts = out;
     updateGeom(comp);
+    return p.length !== comp.pts.length || p.some((q, i) => q !== comp.pts[i]);
   }
 
   function mkOcc(comps, c, i, t) {
@@ -100,41 +101,52 @@ const KC = (function () {
   // All transverse self/mutual intersections of the closed polylines
   function computeRaw(comps) {
     const CELL = 24, grid = new Map();
+    // c, segment index, point count, x, y, dx, dy, first cell x/y.
+    // One packed buffer avoids thousands of temporary segment objects.
+    const segments = new Float64Array(comps.reduce((n, cm) => n + cm.pts.length, 0) * 9);
+    let offset = 0;
     comps.forEach((cm, c) => {
       const p = cm.pts, n = p.length;
       for (let i = 0; i < n; i++) {
         const a = p[i], b = p[(i + 1) % n];
         const x0 = Math.floor(Math.min(a.x, b.x) / CELL), x1 = Math.floor(Math.max(a.x, b.x) / CELL);
         const y0 = Math.floor(Math.min(a.y, b.y) / CELL), y1 = Math.floor(Math.max(a.y, b.y) / CELL);
+        // These values belong to a segment, not to each candidate pair. Dense
+        // cells used to repeat the same bounds and vector calculations for
+        // every pair, on every validated substep of a drag.
+        const segment = offset; offset += 9;
+        segments[segment] = c; segments[segment + 1] = i; segments[segment + 2] = n;
+        segments[segment + 3] = a.x; segments[segment + 4] = a.y;
+        segments[segment + 5] = b.x - a.x; segments[segment + 6] = b.y - a.y;
+        segments[segment + 7] = x0; segments[segment + 8] = y0;
         for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
           const key = (cx + 32768) * 65536 + (cy + 32768);
           let l = grid.get(key); if (!l) { l = []; grid.set(key, l); }
-          l.push(c, i);
+          l.push(segment);
         }
       }
     });
     const res = [];
     for (const [key, l] of grid) {
       const cx = Math.floor(key / 65536) - 32768, cy = (key % 65536) - 32768;
-      for (let A = 0; A < l.length; A += 2) {
-        const c1 = l[A], i = l[A + 1], P = comps[c1].pts, n1 = P.length;
-        const a1 = P[i], a2 = P[(i + 1) % n1];
-        for (let B = A + 2; B < l.length; B += 2) {
-          const c2 = l[B], j = l[B + 1];
+      for (let A = 0; A < l.length; A++) {
+        const sa = l[A], c1 = segments[sa], i = segments[sa + 1], n1 = segments[sa + 2];
+        const ax = segments[sa + 3], ay = segments[sa + 4], rx = segments[sa + 5], ry = segments[sa + 6];
+        const x0 = segments[sa + 7], y0 = segments[sa + 8];
+        for (let B = A + 1; B < l.length; B++) {
+          const sb = l[B], c2 = segments[sb], j = segments[sb + 1];
           if (c1 === c2) { if (j === i || (j + 1) % n1 === i || (i + 1) % n1 === j) continue; }
-          const Q = comps[c2].pts, n2 = Q.length, b1 = Q[j], b2 = Q[(j + 1) % n2];
           // Test the pair in the first cell shared by its bounding boxes.
           // Ownership must use the same bounds as insertion, not a rounded
           // intersection coordinate that can drift across a cell boundary.
-          if (cx !== Math.max(Math.floor(Math.min(a1.x, a2.x) / CELL), Math.floor(Math.min(b1.x, b2.x) / CELL)) ||
-              cy !== Math.max(Math.floor(Math.min(a1.y, a2.y) / CELL), Math.floor(Math.min(b1.y, b2.y) / CELL))) continue;
-          const rx = a2.x - a1.x, ry = a2.y - a1.y, sx = b2.x - b1.x, sy = b2.y - b1.y;
+          if (cx !== Math.max(x0, segments[sb + 7]) || cy !== Math.max(y0, segments[sb + 8])) continue;
+          const sx = segments[sb + 5], sy = segments[sb + 6];
           const den = rx * sy - ry * sx;
           if (Math.abs(den) < 1e-12) continue;
-          const qx = b1.x - a1.x, qy = b1.y - a1.y;
+          const qx = segments[sb + 3] - ax, qy = segments[sb + 4] - ay;
           const t = (qx * sy - qy * sx) / den, w = (qx * ry - qy * rx) / den;
           if (t < 0 || t >= 1 || w < 0 || w >= 1) continue;
-          const x = a1.x + t * rx, y = a1.y + t * ry;
+          const x = ax + t * rx, y = ay + t * ry;
           res.push({ x, y, id: 0, over: 0, occ: [mkOcc(comps, c1, i, t), mkOcc(comps, c2, j, w)] });
         }
       }
@@ -352,12 +364,17 @@ const KC = (function () {
     // Keep its pre-resample projection if shortening a run touches a crossing.
     // This lets smooth strands shed crowded samples without erasing a tiny
     // bigon, inventing crossings, or changing an unrelated component.
-    const moved = cloneComps(S.comps), projected = computeRaw(S.comps);
+    // resampleComp replaces arrays and inserts points; it never edits an
+    // existing point. Retain the pre-sampling arrays without a second deep
+    // copy/updateGeom of the entire diagram. The mutator's rollback above
+    // must still be a deep copy because it can edit points in place.
+    const moved = S.comps.map(cm => ({ ...cm })), projected = computeRaw(S.comps);
+    let resampled = false;
     S.comps.forEach((cm, c) => {
       const old = backup[c].pts;
-      if (cm.pts.length !== old.length || cm.pts.some((p, i) => p.x !== old[i].x || p.y !== old[i].y || p.u !== old[i].u)) resampleComp(cm, true);
+      if (cm.pts.length !== old.length || cm.pts.some((p, i) => p.x !== old[i].x || p.y !== old[i].y || p.u !== old[i].u)) resampled = resampleComp(cm, true) || resampled;
     });
-    let raw = computeRaw(S.comps);
+    let raw = resampled ? computeRaw(S.comps) : projected;
     const sameProjection = sampled => {
       const remaining = new Set(sampled);
       const same = (a, b) => a.c === b.c && a.dx * b.dx + a.dy * b.dy > 1 - 1e-8;
@@ -370,8 +387,8 @@ const KC = (function () {
         return false;
       });
     };
-    if (!sameProjection(raw)) {
-      S.comps = cloneComps(moved);
+    if (resampled && !sameProjection(raw)) {
+      S.comps = moved.map(cm => ({ ...cm }));
       S.comps.forEach((cm, c) => {
         if (cm.pts.length !== backup[c].pts.length || cm.pts.some((p, i) => p.x !== backup[c].pts[i].x || p.y !== backup[c].pts[i].y)) resampleComp(cm);
       });

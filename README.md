@@ -152,6 +152,8 @@ Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-poin
 
 Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
 
+Drag responsiveness benchmarks and the optimization review are documented in [docs/drag-performance.md](docs/drag-performance.md). `node tests/drag-performance.browser.cjs` measures complete gestures and release gaps; `tests/drag-core.bench.cjs` compares identical substeps against a saved baseline core. Timing numbers are diagnostic, not CI thresholds.
+
 An optional editor browser regression is available as `node tests/editor.browser.cjs` with Playwright and Google Chrome installed (or set `PLAYWRIGHT_MODULE`). It checks click-to-open selection menus, unfinished crossing copy/paste, preferences after reload, autosave independence and a phone-sized touch menu.
 
 An optional real-browser research smoke test is available as `node tests/research.browser.cjs` with Playwright and Google Chrome installed. Set `PLAYWRIGHT_MODULE` to use an existing Playwright installation, and `RESEARCH_SCREENSHOTS` to choose where screenshots are saved. It tests actual worker calculations, downloads, SVG selection, synthetic mouse/pen/touch gestures, undo and responsive layout; it does not replace physical device testing.

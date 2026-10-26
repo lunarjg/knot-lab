@@ -2,8 +2,15 @@
 
 Entries `v1`–`v17` (tagged releases), and the codebase state this repository
 started from, were built by an earlier Codex-based development process.
-The subsequent entries document the continued development work. They have
-not been assigned new version tags.
+The subsequent entries document the continued development work. Entries without
+version tags remain development notes.
+
+## v18 — Responsive strand dragging (2026-10-26)
+
+- Yield long drags between short validated geometry tasks, continue pending work without waiting a full display interval, and stop retrying settled or blocked grips.
+- Coalesce continuation paints, defer decomposition until editing ends, and refresh deferred results when Auto-relax is interrupted. Keep analysis and invariant invalidation current between paints.
+- Reuse unchanged crossing projections and pre-resampling arrays, and precompute segment data while preserving crossing order, persistent IDs, topology checks and exact rollback.
+- Add deterministic scheduler/crossing regressions and reproducible browser/core benchmarks. Record measurements and Claude review in `docs/drag-performance.md`; refresh the offline cache.
 
 ## Selection menu and device preferences (unreleased)
 

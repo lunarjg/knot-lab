@@ -334,3 +334,31 @@ assert(KC.relaxStep(altTrefoil()).ok,'Auto-relax is unrestricted by anything but
 console.log('Auto-relax is unrestricted by anything but topology: PASS');
 
 
+
+// The spatial index must enumerate exactly the brute-force segment pairs,
+// including dense cells, negative grid coordinates, endpoints and wrap edges.
+{
+ let seed=0x13579bdf;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/2**32;};
+ const ordered=[];
+ const key=x=>x.occ.map(o=>`${o.c}:${o.seg}`).join('/');
+ for(let run=0;run<80;run++){
+  const comps=Array.from({length:1+run%4},()=>poly(Array.from({length:5+run%9},()=>[Math.floor(rand()*160)-80,Math.floor(rand()*160)-80])));
+  const edges=comps.flatMap((cm,c)=>cm.pts.map((a,i)=>({c,i,n:cm.pts.length,a,b:cm.pts[(i+1)%cm.pts.length]}))),expected=[];
+  for(let i=0;i<edges.length;i++)for(let j=i+1;j<edges.length;j++){
+   const a=edges[i],b=edges[j];
+   if(a.c===b.c&&((a.i+1)%a.n===b.i||(b.i+1)%a.n===a.i))continue;
+   const rx=a.b.x-a.a.x,ry=a.b.y-a.a.y,sx=b.b.x-b.a.x,sy=b.b.y-b.a.y,den=rx*sy-ry*sx;
+   if(Math.abs(den)<1e-12)continue;
+   const qx=b.a.x-a.a.x,qy=b.a.y-a.a.y,t=(qx*sy-qy*sx)/den,u=(qx*ry-qy*rx)/den;
+   if(t>=0&&t<1&&u>=0&&u<1)expected.push(`${a.c}:${a.i}/${b.c}:${b.i}`);
+  }
+  const raw=KC.computeRaw(comps),actual=raw.map(key);ordered.push(actual);
+  assert.equal(new Set(actual).size,actual.length,'A segment pair must occur only once across shared cells');
+  assert.deepEqual([...actual].sort(),expected.sort(),'Indexed crossings agree with independent all-pairs enumeration');
+ }
+ // Crossing enumeration order feeds greedy matching and persistent IDs. Keep
+ // the established order as well as the set of intersections.
+ const digest=require('node:crypto').createHash('sha256').update(JSON.stringify(ordered)).digest('hex');
+ assert.equal(digest,'c794cf8880f2be5dc169c89ff159104bc14a6d548dc74a818425787cb5936bd4');
+}
+console.log('Crossing spatial index agrees with brute-force pairs and preserves persistent-label enumeration order: PASS');
