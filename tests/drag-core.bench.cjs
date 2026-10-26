@@ -23,7 +23,7 @@ function run(file){
   const result=K.attemptStep(S,comps=>{
    const cm=comps[0],i=K.indexOfU(cm,u);K.moveWeighted(cm,i,step<180?.35:-.35,.1,60);
    const s=cm.cum[i];K.smoothCorners(cm.pts,true,{angle:.5,iters:1,strength:.5,mask:j=>K.sDist(cm,cm.cum[j],s)<180?1:0});
-  },{under:false,weight:o=>{if(o.c!==0)return 0;const cm=S.comps[0],d=K.sDist(cm,o.s,K.arcPosOfU(cm,u));return Math.exp(-d*d/(2*60*60));}});
+  },{geometryCurrent:true,under:false,weight:o=>{if(o.c!==0)return 0;const cm=S.comps[0],d=K.sDist(cm,o.s,K.arcPosOfU(cm,u));return Math.exp(-d*d/(2*60*60));}});
   times.push(performance.now()-t);events.push(result);u=S.comps[0].pts[K.indexOfU(S.comps[0],u)].u;
  }
  times.sort((a,b)=>a-b);

@@ -152,7 +152,7 @@ Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-poin
 
 Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
 
-Dragging uses the original small-step deformation and smoothing, with optimized crossing calculations and deferred painting. Display frames process the latest input before painting; final release coordinates stay within the same undo action. Details are in [docs/drag-feel.md](docs/drag-feel.md).
+Dragging uses the original small-step deformation and smoothing, with optimized crossing calculations and deferred painting. Matching skips candidates that cannot qualify, and validated drag steps reuse current arc lengths to reduce pointer lag. Display frames process the latest input before painting; release performs one final paint after cleanup within the same undo action. Details and hold/release measurements are in [docs/drag-feel.md](docs/drag-feel.md).
 
 Drag responsiveness benchmarks and the optimization review are documented in [docs/drag-performance.md](docs/drag-performance.md). `node tests/drag-performance.browser.cjs` measures complete gestures and release gaps; `tests/drag-core.bench.cjs` compares identical substeps against a saved baseline core. Timing numbers are diagnostic, not CI thresholds.
 
