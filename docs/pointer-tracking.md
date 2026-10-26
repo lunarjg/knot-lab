@@ -1,4 +1,7 @@
-# Pointer-speed strand dragging
+# v19 pointer-speed strand dragging
+
+This records the v19 experiment. Its large drag steps were replaced by the
+original deformation in v20; see [drag-feel.md](drag-feel.md).
 
 The v18 scheduler kept the UI responsive but still advanced a strand by at most
 2.5 world units per expensive geometry check. A fast pointer could outpace that

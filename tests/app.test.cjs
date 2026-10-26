@@ -1395,8 +1395,8 @@ console.log('Device preferences restore controls and values, survive disabled au
 }
 console.log('Click-to-open lasso menu leaves undo and redo history intact: PASS');
 
-// When a sweep cannot be certified, a slow machine still yields between the
-// original legal substeps. Use a fake clock rather than timing CI CPUs.
+// Foreground frames restore the original small-step deformation and catch up
+// before painting; background tasks still yield quickly to input.
 for(const useTasks of [false,true]){
  const pending=[];
  class Channel { constructor(){this.port1={onmessage:null};this.port2={postMessage:data=>pending.push(()=>this.port1.onmessage({data}))};} }
@@ -1410,7 +1410,7 @@ for(const useTasks of [false,true]){
  let clock=1000,attempts=0,decompositions=0,styles=0;
  p.ctx.performance={now:()=>clock};
  const attempt=K.attemptStep,decompose=K.decompose,style=p.ctx.getComputedStyle;
- K.attemptStep=(...args)=>{if(args[2]?.continuous)return {ok:false,reason:'subdivide'};attempts++;const r=attempt(...args);clock+=4;return r;};
+ K.attemptStep=(...args)=>{assert(!args[2]?.continuous);attempts++;const r=attempt(...args);clock+=4;return r;};
  K.decompose=(...args)=>{decompositions++;return decompose(...args);};
  p.ctx.getComputedStyle=(...args)=>{styles++;return style(...args);};
  const ev=(x,y,type='pointermove')=>({pointerType:'mouse',pointerId:101,clientX:x,clientY:y,button:0,type,preventDefault(){}});
@@ -1418,22 +1418,27 @@ for(const useTasks of [false,true]){
  p.fire(cv,'pointerdown',ev(400,250,'pointerdown'));p.flush();
  assert.equal(attempts,0,'A settled grip must stop without testing no-op moves');
  p.fire(cv,'pointermove',ev(600,250));p.step();
- assert.equal(attempts,2,'Two 4ms substeps exhaust the 6ms budget');
+ assert.equal(attempts,10,'A foreground frame catches up within the 40ms guard');
  if(useTasks)assert.equal(pending.length,1,'Unfinished work continues in one queued task');
  const cm=api.state.comps[0],grip=cm.pts[K.indexOfU(cm,u)];
- assert(Math.abs(grip.x-405)<1e-7,'Budgeting retains 2.5-unit validated increments');
+ assert(Math.abs(grip.x-425)<1e-7,'Foreground movement retains 2.5-unit validated increments');
  assert.equal(decompositions,0,'Neither the panel nor AD paint computes decomposition during dragging');
  assert.equal(styles,1,'A drag paint shares a single computed-style lookup');
  if(useTasks){
-  next();assert.equal(attempts,4,'A continuation advances the same validated steps');
+  next();assert.equal(attempts,12,'A background continuation uses the short 6ms budget');
   assert.equal(styles,1,'Continuation tasks defer painting to a display frame');
   assert.equal(p.ctx.knotLab.analysis.c,K.analyze(api.state.comps,api.state.crossings).c,'Analysis stays current before the deferred paint');
+  p.fire(cv,'pointermove',ev(440,250));
   p.step();assert.equal(styles,2,'The deferred paint actually runs on the next display frame');
+  assert.equal(attempts,16,'A display frame integrates fresh input before painting instead of waiting behind a message');
   const held=api.state.comps[0].pts[K.indexOfU(api.state.comps[0],u)];
+  assert(Math.abs(held.x-440)<1e-7,'New input reaches the grip even when paint runs before a pending message');
   assert.deepEqual(p.arcs.at(-1).slice(0,2),[held.x,held.y],'Deferred paint shows the current grip');
+  next();assert.equal(attempts,16,'The preempted message cannot duplicate the frame work');
  }
  assert.equal(api.analysis.c,K.analyze(api.state.comps,api.state.crossings).c,'Analysis remains current on every painted frame');
  // Stop at a topology barrier, then prove that a stationary pointer is idle.
+ p.fire(cv,'pointermove',ev(650,250));
  const under=[];K.attemptStep=(s,mutator,opt)=>{attempts++;under.push(opt.under);clock+=4;return {ok:false,reason:'R3'};};
  next();const stopped=attempts;p.flush();assert.equal(attempts,stopped,'A blocked target is not retried every animation frame');
  p.key('keydown',{key:'Shift'});p.step();assert.equal(attempts,stopped+1);assert.equal(under.at(-1),true,'Shift wakes a blocked drag with the new height');p.flush();
@@ -1451,8 +1456,8 @@ for(const useTasks of [false,true]){
 }
 console.log('Drag budget, small validated steps, live analysis, deferred decomposition, frame styles, idle/blocked sleep, Shift/radius wakeup and undo: PASS');
 
-// A fast pointer can cover hundreds of units in one frame. Large certified
-// movement and the final release sample must not acquire a fixed speed cap.
+// A fast pointer can cover hundreds of units in one frame. Do not impose a
+// distance-per-frame cap when the original validated steps fit the work guard.
 for(const pointerType of ['mouse','pen','touch']){
  const pending=[];
  class Channel {constructor(){this.port1={};this.port2={postMessage:data=>pending.push(()=>this.port1.onmessage({data}))};}}
@@ -1464,7 +1469,7 @@ for(const pointerType of ['mouse','pen','touch']){
  const ev=(x,type)=>({pointerType,pointerId:81,clientX:x,clientY:250,button:0,type,preventDefault(){}}),grip=()=>api.state.comps[0].pts[K.indexOfU(api.state.comps[0],0)].x;
  const start=JSON.stringify(api.serialize().comps);
  let clock=1000;const attempt=K.attemptStep;p.ctx.performance={now:()=>clock};
- K.attemptStep=(...args)=>{const r=attempt(...args);clock+=4;return r;};
+ K.attemptStep=(...args)=>{assert(!args[2]?.continuous);const r=attempt(...args);clock+=0.05;return r;};
  p.fire(cv,'pointerdown',ev(400,'pointerdown'));
  // Slow input must not install a cap that throttles a later fast sweep.
  for(let x=401;x<=404;x++){
@@ -1484,6 +1489,41 @@ for(const pointerType of ['mouse','pen','touch']){
  p.ids.get('undo').click();assert(Math.abs(grip()-730)<1e-7);p.ids.get('undo').click();assert.equal(JSON.stringify(api.serialize().comps),start);
 }
 console.log('Fast mouse/pen/touch drags track the target, use release coordinates and isolate queued work between gestures: PASS');
+
+// Replay the pre-optimization drag recipe, including default smoothing. The
+// scheduler may divide the work differently, but must not change deformation.
+for(const dense of [false,true]){
+ const pending=[];
+ class Channel {constructor(){this.port1={};this.port2={postMessage:data=>pending.push(()=>this.port1.onmessage({data}))};}}
+ const p=boot(undefined,true,undefined,undefined,undefined,Channel),api=p.ctx.knotLab,K=vm.runInContext('KC',p.ctx),cv=p.ids.get('cv');
+ const circle=Array.from({length:96},(_,i)=>[250+150*Math.cos(i*2*Math.PI/96),250+150*Math.sin(i*2*Math.PI/96)]);
+ api.openTab(dense?K.fromCurves3D([K.torusCurve(9,11,2,1.15)],1100):api.deserialize({format:'knot-lab',version:1,comps:[circle],crossings:[],open:[]}));
+ api.opts.separate=false;api.view.s=1;api.view.ox=api.view.oy=0;assert.equal(api.opts.cornerFix,true);
+ p.doc.querySelectorAll('[data-tool]').find(b=>b.dataset.tool==='move').click();p.flush();
+ const origin={...api.state.comps[0].pts[dense?100:0]},reference={comps:K.cloneComps(api.state.comps),crossings:K.cloneCrossings(api.state.crossings),nextId:api.state.nextId};let u=origin.u;
+ const packed=s=>JSON.stringify({comps:s.comps,crossings:K.cloneCrossings(s.crossings),nextId:s.nextId}),initial=packed(api.state);
+ const ev=(type,x,y)=>({pointerType:'mouse',pointerId:91,clientX:x,clientY:y,button:0,type,preventDefault(){}});
+ const drain=()=>{let n=0;for(;n<1000;n++){p.flush();if(!pending.length)break;pending.shift()();}assert(n<1000,'The grip must settle or stop at a legal barrier');};
+ let clock=1000;const attempt=K.attemptStep;p.ctx.performance={now:()=>clock};
+ K.attemptStep=(...args)=>{const r=attempt(...args);clock+=4;return r;};
+ p.fire(cv,'pointerdown',ev('pointerdown',origin.x,origin.y));drain();
+ for(const [ox,oy]of [[1,0],[2,0],[4,0],[300,0],[300,300],[0,300],[-200,-150],[300,0]]){
+  const x=origin.x+ox,y=origin.y+oy;let count=0;
+  for(;count<2000;count++){
+   const cm=reference.comps[0],g=cm.pts[K.indexOfU(cm,u)],dx=x-g.x,dy=y-g.y,d=Math.hypot(dx,dy);if(d<.8)break;
+   const st=Math.min(2.5,d),r=attempt(reference,comps=>{
+    const cm=comps[0],gi=K.indexOfU(cm,u);K.moveWeighted(cm,gi,dx/d*st,dy/d*st,60);
+    const gs=cm.cum[gi];K.smoothCorners(cm.pts,true,{angle:.5,iters:1,strength:.5,mask:i=>K.sDist(cm,cm.cum[i],gs)<180?1:0});
+   },{under:false,weight:o=>{if(o.c!==0)return 0;const cm=reference.comps[0],dd=K.sDist(cm,o.s,K.arcPosOfU(cm,u));return Math.exp(-dd*dd/(2*60*60));}});
+   if(!r.ok)break;u=reference.comps[0].pts[K.indexOfU(reference.comps[0],u)].u;
+  }
+  assert(count<2000,'Original deformation converges');
+  p.fire(cv,'pointermove',ev('pointermove',x,y));drain();
+  assert.equal(packed(api.state),packed(reference),'Default smoothing, crossings and IDs match the old trajectory: '+dense+' '+ox+','+oy);
+ }
+ p.fire(cv,'pointerup',ev('pointerup',origin.x+300,origin.y));drain();p.ids.get('undo').click();assert.equal(packed(api.state),initial);
+}
+console.log('Default-smoothed circle and 88-crossing direction/reversal traces exactly match original drag geometry, crossings and IDs: PASS');
 
 // Deferred decomposition must refresh even when relaxing stops without a
 // geometry edit: the stop button and an empty-canvas pan both take this path.

@@ -729,6 +729,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       dragPaintQueued = true;
       requestAnimationFrame(() => {
         dragPaintQueued = false;
+        // Input may arrive while a continuation is queued. Integrate the
+        // latest target before painting, as the original drag frame did.
+        if (dragPaintDirty && drag && looping) tick(false, drag.generation);
         if (dragPaintDirty) paintChanged();
       });
     }
@@ -1669,19 +1672,22 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   function scheduleDrag(continuing = false) {
     if (drag && !looping) {
       looping = true;
-      const generation = drag.generation;
-      if (continuing) queueDragContinuation(generation); else requestAnimationFrame(() => tick(false, generation));
+      const generation = drag.generation, ticket = drag.ticket = (drag.ticket || 0) + 1;
+      if (continuing) queueDragContinuation(generation, ticket); else requestAnimationFrame(() => tick(false, generation, false, ticket));
     }
   }
-  function tick(continuing = false, generation = drag?.generation, finishing = false) {
-    if (!drag || drag.generation !== generation) return;
+  function tick(continuing = false, generation = drag?.generation, finishing = false, ticket) {
+    if (!drag || drag.generation !== generation || (ticket !== undefined && ticket !== drag.ticket)) return;
+    // A display frame or release can preempt queued background work.
+    drag.ticket = (drag.ticket || 0) + 1;
     looping = false;
-    let steps = 0, attempts = 0, retry = false, blocked = null;
-    // Follow the current target in one move when its entire path is regular.
-    // Subdivide uncertain neighborhoods down to the original 2.5-unit R-move
-    // checks. The time budget limits a task's duration, not the drag's speed.
-    const sig = opts.sigma, deadline = now() + 6;
-    while (attempts < 18 && (attempts === 0 || now() < deadline)) {
+    let steps = 0, blocked = null;
+    // Restore the original deformation: small weighted moves, smoothing and
+    // resampling in the same order. Foreground frames catch up before paint;
+    // background work still yields quickly to new input. The generous guard
+    // prevents a slow device or a nonconverging grip from monopolizing input.
+    const sig = opts.sigma, deadline = now() + (continuing ? 6 : 40);
+    while (steps < 256 && (steps === 0 || now() < deadline)) {
       // Measure the distance left to travel on the very vertex the mutator is
       // about to move. Measuring the interpolated position at drag.u instead
       // left the two up to half a segment apart, so the strand was pulled from
@@ -1690,8 +1696,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       const cm = S.comps[drag.c], g = cm.pts[KC.indexOfU(cm, drag.u)];
       const dx = drag.mx - g.x, dy = drag.my - g.y, d = Math.hypot(dx, dy);
       if (d < 0.8) break;
-      const st = Math.min(d, drag.stepSize || Infinity), c = drag.c, u = drag.u;
-      attempts++;
+      const st = Math.min(2.5, d), c = drag.c, u = drag.u;
       const r = KC.attemptStep(S, comps => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
         KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
@@ -1704,20 +1709,10 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           KC.smoothCorners(cm.pts, true, { angle: 0.5, iters: 1, strength: 0.5, mask: i => KC.sDist(cm, cm.cum[i], gs) < lim ? 1 : 0 });
         }
       }, {
-        continuous: st > 2.5,
         under: drag.under,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
-      if (!r.ok) {
-        if (r.reason === 'subdivide') {
-          drag.stepSize = Math.max(2.5, st / 2); drag.grow = 0; retry = true; continue;
-        }
-        blocked = r.reason; break;
-      }
-      retry = false;
-      // Grow only a cap installed by subdivision. Slow pointer samples must
-      // not create a new cap on an otherwise unrestricted gesture.
-      if (Number.isFinite(drag.stepSize) && (drag.grow = (drag.grow || 0) + 1) >= 4) { drag.stepSize *= 2; drag.grow = 0; }
+      if (!r.ok) { blocked = r.reason; break; }
       // Re-anchor onto the vertex that just moved: resampling inserts points
       // whose material coordinate can land nearer to drag.u than the grabbed
       // one, which otherwise walks the grab backwards along a stretched strand.
@@ -1730,16 +1725,16 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     drag.lastBlocked = blocked;
     // A settled/blocked grip needs no more work until the pointer or a drag
     // option changes. In particular, don't re-test a forbidden R move at 60Hz.
-    if (!finishing && (steps || retry) && !blocked) scheduleDrag(true);
+    if (!finishing && steps && !blocked) scheduleDrag(true);
   }
   // Yield to input and paint between short tasks without losing an entire
   // refresh interval of useful work. Waiting for rAF after every small slice
   // makes the grip lag behind quick gestures, especially on 30Hz displays.
   const queueDragContinuation = (() => {
-    if (typeof MessageChannel !== 'function') return generation => requestAnimationFrame(() => tick(false, generation));
+    if (typeof MessageChannel !== 'function') return (generation, ticket) => requestAnimationFrame(() => tick(false, generation, false, ticket));
     const channel = new MessageChannel();
-    channel.port1.onmessage = e => tick(true, e.data);
-    return generation => channel.port2.postMessage(generation);
+    channel.port1.onmessage = e => tick(true, e.data.generation, false, e.data.ticket);
+    return (generation, ticket) => channel.port2.postMessage({ generation, ticket });
   })();
 
   // ---------- drawing: open strands, joining, closing ----------
