@@ -152,6 +152,8 @@ Coverage includes R1/R2 births and deaths, forward/reverse R3 moves, triple-poin
 
 Application-state and service-worker tests use Node mock environments. They do not validate Safari rendering or physical Apple Pencil input.
 
+Fast drags use a continuous-motion check to follow the pointer across regular parts of the diagram; uncertain neighborhoods retain small Reidemeister-checked steps. Final release coordinates are applied within the same undo action. Details are in [docs/pointer-tracking.md](docs/pointer-tracking.md).
+
 Drag responsiveness benchmarks and the optimization review are documented in [docs/drag-performance.md](docs/drag-performance.md). `node tests/drag-performance.browser.cjs` measures complete gestures and release gaps; `tests/drag-core.bench.cjs` compares identical substeps against a saved baseline core. Timing numbers are diagnostic, not CI thresholds.
 
 An optional editor browser regression is available as `node tests/editor.browser.cjs` with Playwright and Google Chrome installed (or set `PLAYWRIGHT_MODULE`). It checks click-to-open selection menus, unfinished crossing copy/paste, preferences after reload, autosave independence and a phone-sized touch menu.

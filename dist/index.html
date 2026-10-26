@@ -606,7 +606,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   let tool = 'draw', viewMode = 'diagram', analysis = null;
   let decompCache = null, decompRuns = 0, decompSoon = false;
   const opts = { sigma: 60, sepGap: 30, under: false, arrows: false, signs: false, adSigns: true, adFill: true, adSolid: 1, grid: true, autoClose: false, eraseMode: 'strand', eraseSize: 24, lassoMode: 'curve', lassoShape: 'free', cornerFix: true, separate: true };
-  let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false;
+  let undoStack = [], drag = null, pan = null, stroke = null, hoverX = null, hoverPt = null, shiftDown = false, looping = false, dragSerial = 0;
   let erasing = null, cursor = null, hoverErase = null, hoverSnap = null;
   const input = { penOnly: false, palm: true, autoPen: true, penSeen: false, penDown: null, lastPenUp: 0, fingerDrag: true };
   let redoStack = [], sel = null, lasso = null, clip = null, pasteAt = null;
@@ -1454,7 +1454,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       // Snap the grab onto the vertex the drag will actually move, so the
       // strand starts moving from exactly where the pointer is holding it.
       const grabbed = S.comps[hit.c];
-      drag = { c: hit.c, u: grabbed.pts[KC.indexOfU(grabbed, hit.u)].u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under,
+      drag = { generation: ++dragSerial, c: hit.c, u: grabbed.pts[KC.indexOfU(grabbed, hit.u)].u, mx: w.x, my: w.y, changed: false, under: e.shiftKey ? !opts.under : opts.under,
         before: KC.crossingDistances(S.crossings), beforeAngles: KC.crossingAngles(S.crossings) };
       active = { ...base, kind: 'drag' };
       cv.style.cursor = 'grabbing';
@@ -1525,9 +1525,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       // so one undo takes back all of it: first ease apart any crossings the
       // drag pushed into each other, then smooth the kinks -- including any
       // the separation itself introduced.
-      if (drag.changed) { separateCrowdedCrossings(drag.before); smoothSharpCorners(drag.c); openFlattenedCrossings(drag.beforeAngles); }
+      if (drag.changed) { separateCrowdedCrossings(drag.before); if (opts.cornerFix) smoothSharpCorners(drag.c); openFlattenedCrossings(drag.beforeAngles); }
       else undoStack.pop();
-      drag = null; cv.style.cursor = 'grab'; changed();
+      drag = null; looping = false; cv.style.cursor = 'grab'; changed();
     }
     else if (a.kind === 'pan') pan = null;
     else if (a.kind === 'draw') { const st = stroke; stroke = null; hoverSnap = null; finishStroke(st); }
@@ -1543,7 +1543,7 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   function cancelAction() {
     const a = active; active = null;
     if (!a) return;
-    if (a.kind === 'drag') { drag = null; const s = undoStack.pop(); if (s) restore(s); changed(); }
+    if (a.kind === 'drag') { drag = null; looping = false; const s = undoStack.pop(); if (s) restore(s); changed(); }
     else if (a.kind === 'pan') { view.ox = pan.ox; view.oy = pan.oy; pan = null; render(); }
     else if (a.kind === 'draw') { stroke = null; hoverSnap = null; updatePanel(); render(); }
     else if (a.kind === 'erase') { erasing = null; const s = undoStack.pop(); if (s) restore(s); changed(); }
@@ -1645,6 +1645,9 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     }
     if (active && active.id === (e.pointerType === 'mouse' ? 'mouse' : e.pointerId)) {
       if (active.kind === 'erase' && e.type !== 'pointercancel') moveAction(e);
+      if (active.kind === 'drag' && e.type !== 'pointercancel') {
+        moveAction(e); tick(false, drag.generation, true);
+      }
       if (active.kind === 'ignore') active = null;
       else if (e.type === 'pointercancel' && active.type === 'touch' && active.kind !== 'pan') cancelAction(); else endAction();
     }
@@ -1666,18 +1669,19 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   function scheduleDrag(continuing = false) {
     if (drag && !looping) {
       looping = true;
-      if (continuing) queueDragContinuation(); else requestAnimationFrame(() => tick(false));
+      const generation = drag.generation;
+      if (continuing) queueDragContinuation(generation); else requestAnimationFrame(() => tick(false, generation));
     }
   }
-  function tick(continuing = false) {
+  function tick(continuing = false, generation = drag?.generation, finishing = false) {
+    if (!drag || drag.generation !== generation) return;
     looping = false;
-    if (!drag) return;
-    let steps = 0, blocked = null;
-    // Keep every 2.5-unit step and its topology checks. On complex diagrams,
-    // yield between steps so queued pointer events can update the target.
-    // A single step is indivisible; reserve the rest of a frame for painting.
+    let steps = 0, attempts = 0, retry = false, blocked = null;
+    // Follow the current target in one move when its entire path is regular.
+    // Subdivide uncertain neighborhoods down to the original 2.5-unit R-move
+    // checks. The time budget limits a task's duration, not the drag's speed.
     const sig = opts.sigma, deadline = now() + 6;
-    while (steps < 18 && (steps === 0 || now() < deadline)) {
+    while (attempts < 18 && (attempts === 0 || now() < deadline)) {
       // Measure the distance left to travel on the very vertex the mutator is
       // about to move. Measuring the interpolated position at drag.u instead
       // left the two up to half a segment apart, so the strand was pulled from
@@ -1686,7 +1690,8 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       const cm = S.comps[drag.c], g = cm.pts[KC.indexOfU(cm, drag.u)];
       const dx = drag.mx - g.x, dy = drag.my - g.y, d = Math.hypot(dx, dy);
       if (d < 0.8) break;
-      const st = Math.min(2.5, d), c = drag.c, u = drag.u;
+      const st = Math.min(d, drag.stepSize || Infinity), c = drag.c, u = drag.u;
+      attempts++;
       const r = KC.attemptStep(S, comps => {
         const cm = comps[c], gi = KC.indexOfU(cm, u);
         KC.moveWeighted(cm, gi, dx / d * st, dy / d * st, sig);
@@ -1699,10 +1704,20 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
           KC.smoothCorners(cm.pts, true, { angle: 0.5, iters: 1, strength: 0.5, mask: i => KC.sDist(cm, cm.cum[i], gs) < lim ? 1 : 0 });
         }
       }, {
+        continuous: st > 2.5,
         under: drag.under,
         weight: o => { if (o.c !== c) return 0; const m = S.comps[c], dd = KC.sDist(m, o.s, KC.arcPosOfU(m, u)); return Math.exp(-dd * dd / (2 * sig * sig)); }
       });
-      if (!r.ok) { blocked = r.reason; break; }
+      if (!r.ok) {
+        if (r.reason === 'subdivide') {
+          drag.stepSize = Math.max(2.5, st / 2); drag.grow = 0; retry = true; continue;
+        }
+        blocked = r.reason; break;
+      }
+      retry = false;
+      // Grow only a cap installed by subdivision. Slow pointer samples must
+      // not create a new cap on an otherwise unrestricted gesture.
+      if (Number.isFinite(drag.stepSize) && (drag.grow = (drag.grow || 0) + 1) >= 4) { drag.stepSize *= 2; drag.grow = 0; }
       // Re-anchor onto the vertex that just moved: resampling inserts points
       // whose material coordinate can land nearer to drag.u than the grabbed
       // one, which otherwise walks the grab backwards along a stretched strand.
@@ -1715,16 +1730,16 @@ summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     drag.lastBlocked = blocked;
     // A settled/blocked grip needs no more work until the pointer or a drag
     // option changes. In particular, don't re-test a forbidden R move at 60Hz.
-    if (steps && !blocked) scheduleDrag(true);
+    if (!finishing && (steps || retry) && !blocked) scheduleDrag(true);
   }
   // Yield to input and paint between short tasks without losing an entire
   // refresh interval of useful work. Waiting for rAF after every small slice
   // makes the grip lag behind quick gestures, especially on 30Hz displays.
   const queueDragContinuation = (() => {
-    if (typeof MessageChannel !== 'function') return () => requestAnimationFrame(() => tick(false));
+    if (typeof MessageChannel !== 'function') return generation => requestAnimationFrame(() => tick(false, generation));
     const channel = new MessageChannel();
-    channel.port1.onmessage = () => tick(true);
-    return () => channel.port2.postMessage(0);
+    channel.port1.onmessage = e => tick(true, e.data);
+    return generation => channel.port2.postMessage(generation);
   })();
 
   // ---------- drawing: open strands, joining, closing ----------

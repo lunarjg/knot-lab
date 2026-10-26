@@ -356,9 +356,173 @@ const KC = (function () {
     return { ok: true, crossings: raw, ev };
   }
 
+  // Certify an event-free linear motion, not just its endpoint diagram. The
+  // orientation of three moving vertices is quadratic in time; checking its
+  // extrema proves separation/transversality throughout the whole interval.
+  // If a triple point is possible, leave that neighborhood to the small-step
+  // Reidemeister checker. This intentionally rejects uncertain safe motions.
+  function regularMotion(before, after, crossings) {
+    if (before.length !== after.length) return false;
+    const segments = [], offsets = [], grid = new Map(), CELL = 32;
+    let cells = 0;
+    for (let c = 0; c < before.length; c++) {
+      const p = before[c].pts, q = after[c].pts, n = p.length; offsets[c] = segments.length;
+      if (q.length !== n || p.some((v, i) => v.u !== q[i].u)) return false;
+      for (let i = 0; i < n; i++) {
+        const j = (i + 1) % n, a = p[i], b = p[j], A = q[i], B = q[j];
+        const s = { c, i, n, a, b, ax: A.x - a.x, ay: A.y - a.y, bx: B.x - b.x, by: B.y - b.y };
+        s.moving = s.ax !== 0 || s.ay !== 0 || s.bx !== 0 || s.by !== 0;
+        // A collapsing segment is another singularity; do not accelerate it.
+        const x = b.x - a.x, y = b.y - a.y, vx = s.bx - s.ax, vy = s.by - s.ay;
+        const t = Math.max(0, Math.min(1, -(x * vx + y * vy) / (vx * vx + vy * vy || 1)));
+        if (s.moving && Math.hypot(x + t * vx, y + t * vy) < 1e-7) return false;
+        s.x0 = Math.floor(Math.min(a.x, b.x, A.x, B.x) / CELL);
+        s.y0 = Math.floor(Math.min(a.y, b.y, A.y, B.y) / CELL);
+        const x1 = Math.floor(Math.max(a.x, b.x, A.x, B.x) / CELL), y1 = Math.floor(Math.max(a.y, b.y, A.y, B.y) / CELL);
+        cells += (x1 - s.x0 + 1) * (y1 - s.y0 + 1);
+        if (!Number.isFinite(cells) || cells > 50000) return false;
+        const id = segments.length; segments.push(s);
+        for (let x = s.x0; x <= x1; x++) for (let y = s.y0; y <= y1; y++) {
+          const key = x + ',' + y; let list = grid.get(key);
+          if (!list) { list = []; grid.set(key, list); }
+          list.push(id);
+        }
+      }
+    }
+    const graph = segments.map(() => new Set()), tracked = new Map(), events = new Map();
+    const pair = (a, b) => a < b ? a + ':' + b : b + ':' + a;
+    for (const X of crossings) {
+      const [a, b] = X.occ.map(o => offsets[o.c] + o.seg);
+      if (!graph[a] || !graph[b]) return false;
+      graph[a].add(b); graph[b].add(a);
+      tracked.set(pair(a, b), { id: X.id, over: X.over === 0 ? a : b });
+    }
+    const orientation = (s, p, px, py) => {
+      const ux = s.b.x - s.a.x, uy = s.b.y - s.a.y, vx = p.x - s.a.x, vy = p.y - s.a.y;
+      const dux = s.bx - s.ax, duy = s.by - s.ay, dvx = px - s.ax, dvy = py - s.ay;
+      const a = ux * vy - uy * vx, b = dux * vy - duy * vx + ux * dvy - uy * dvx, c = dux * dvy - duy * dvx;
+      const eps = 1e-10 * Math.max(1, (Math.abs(ux) + Math.abs(uy) + Math.abs(dux) + Math.abs(duy)) *
+        (Math.abs(vx) + Math.abs(vy) + Math.abs(dvx) + Math.abs(dvy)));
+      return [a, b, c, eps];
+    };
+    const side = ([a, b, c, eps]) => {
+      const end = a + b + c; let lo = Math.min(a, end), hi = Math.max(a, end);
+      if (c !== 0) { const t = -b / (2 * c); if (t > 0 && t < 1) { const v = a + t * (b + t * c); lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+      return lo > eps ? 1 : hi < -eps ? -1 : 0;
+    };
+    const at = (id, t) => { const s = segments[id]; return { x: s.a.x + t * s.ax, y: s.a.y + t * s.ay }; };
+    const rootsOf = ([a, b, c, eps]) => {
+      if (c === 0) return b === 0 ? (Math.abs(a) > eps ? [] : null) : [-a / b];
+      const disc = b * b - 4 * a * c, tol = 1e-12 * Math.max(1, b * b, Math.abs(4 * a * c));
+      if (disc < -tol) return [];
+      if (disc <= tol) return null;
+      const q = -.5 * (b + (b >= 0 ? 1 : -1) * Math.sqrt(disc));
+      return [q / c, a / q];
+    };
+    for (let vertex = 0; vertex < segments.length; vertex++) {
+      const v = segments[vertex], prev = offsets[v.c] + (v.i + v.n - 1) % v.n, next = offsets[v.c] + (v.i + 1) % v.n;
+      if (!v.moving && !segments[prev].moving) continue;
+      const p = segments[next], poly = orientation(segments[prev], p.a, p.ax, p.ay);
+      if (side(poly)) continue;
+      const roots = rootsOf(poly);
+      // A straight run can remain straight; nonzero segment lengths prevent
+      // its rays reversing without a zero-length edge. Other uncertain roots
+      // are left to subdivision, including an adjacent-edge fold/cusp.
+      const times = roots || (poly[0] === 0 && poly[1] === 0 && poly[2] === 0 ? [0, 1] : null);
+      if (!times) return false;
+      for (const t of times) if (t >= 0 && t <= 1) {
+        const P = at(vertex, t), L = at(prev, t), R = at(next, t);
+        if ((L.x - P.x) * (R.x - P.x) + (L.y - P.y) * (R.y - P.y) >= -1e-10) return false;
+      }
+    }
+    // A crossing passing a sampling vertex is regular when the two incident
+    // edges remain on opposite sides of the other strand. Track its identity
+    // across that event, so sampling density does not impose a speed limit.
+    const contacts = (edge, vertex, poly) => {
+      const [a, b, c, eps] = poly;
+      if (side(poly)) return true;
+      const roots = rootsOf(poly);
+      if (!roots?.length) return false;
+      const e = segments[edge], v = segments[vertex];
+      let inInterval = false;
+      for (const t of roots) {
+        if (t < -1e-9 || t > 1 + 1e-9) continue;
+        inInterval = true;
+        const P = at(vertex, t), A = at(edge, t), dx = e.b.x + t * e.bx - A.x, dy = e.b.y + t * e.by - A.y;
+        const f = ((P.x - A.x) * dx + (P.y - A.y) * dy) / (dx * dx + dy * dy);
+        if (f < -1e-9 || f > 1 + 1e-9) continue;
+        if (f < 1e-9 || f > 1 - 1e-9 || t < 1e-9 || t > 1 - 1e-9 || Math.abs(b + 2 * c * t) <= eps) return false;
+        const prev = offsets[v.c] + (v.i + v.n - 1) % v.n, next = offsets[v.c] + (v.i + 1) % v.n;
+        const L = at(prev, t), R = at(next, t);
+        const left = dx * (L.y - P.y) - dy * (L.x - P.x), right = dx * (R.y - P.y) - dy * (R.x - P.x);
+        const tol = 1e-10 * Math.max(1, Math.hypot(dx, dy) * Math.max(Math.hypot(L.x - P.x, L.y - P.y), Math.hypot(R.x - P.x, R.y - P.y)));
+        if (Math.abs(left) <= tol || Math.abs(right) <= tol || Math.sign(left) === Math.sign(right)) return false;
+        const from = Math.sign(left) === Math.sign(b + 2 * c * t) ? prev : vertex, to = from === prev ? vertex : prev;
+        const key = edge + '/' + vertex + '/' + t;
+        events.set(key, { t, edge, from, to });
+        graph[edge].add(prev); graph[prev].add(edge); graph[edge].add(vertex); graph[vertex].add(edge);
+      }
+      return inInterval;
+    };
+    // Parallel runs can stay disjoint while their supporting lines coincide.
+    // A fixed separating axis valid at both ends stays valid at every time:
+    // all four endpoint differences are linear, even if both segments move.
+    const separated = (a, b, x, y) => {
+      if (!x && !y) return false;
+      const aa = a.a.x * x + a.a.y * y, ab = a.b.x * x + a.b.y * y;
+      const ba = b.a.x * x + b.a.y * y, bb = b.b.x * x + b.b.y * y;
+      const AA = aa + a.ax * x + a.ay * y, AB = ab + a.bx * x + a.by * y;
+      const BA = ba + b.ax * x + b.ay * y, BB = bb + b.bx * x + b.by * y;
+      const eps = 1e-10 * Math.max(1, Math.abs(aa), Math.abs(ab), Math.abs(ba), Math.abs(bb), Math.abs(AA), Math.abs(AB), Math.abs(BA), Math.abs(BB));
+      return (Math.max(aa, ab) < Math.min(ba, bb) - eps && Math.max(AA, AB) < Math.min(BA, BB) - eps) ||
+        (Math.max(ba, bb) < Math.min(aa, ab) - eps && Math.max(BA, BB) < Math.min(AA, AB) - eps);
+    };
+    let pairs = 0;
+    for (const [key, list] of grid) {
+      const [x, y] = key.split(',').map(Number);
+      for (let A = 0; A < list.length; A++) for (let B = A + 1; B < list.length; B++) {
+        if (++pairs > 100000) return false;
+        const a = segments[list[A]], b = segments[list[B]];
+        if (!a.moving && !b.moving) continue;
+        if (a.c === b.c && ((a.i + 1) % a.n === b.i || (b.i + 1) % a.n === a.i)) continue;
+        if (x !== Math.max(a.x0, b.x0) || y !== Math.max(a.y0, b.y0)) continue;
+        if (separated(a, b, 1, 0) || separated(a, b, 0, 1) ||
+            separated(a, b, a.b.x - a.a.x, a.b.y - a.a.y) || separated(a, b, b.b.x - b.a.x, b.b.y - b.a.y)) continue;
+        const ab0 = orientation(a, b.a, b.ax, b.ay), ab1 = orientation(a, b.b, b.bx, b.by);
+        const p = side(ab0), q = side(ab1);
+        if (p && p === q) continue;
+        const ba0 = orientation(b, a.a, a.ax, a.ay), ba1 = orientation(b, a.b, a.bx, a.by);
+        const r = side(ba0), s = side(ba1);
+        if (r && r === s) continue;
+        if (p * q === -1 && r * s === -1 && graph[list[A]].has(list[B])) continue;
+        if (!contacts(list[A], list[B], ab0) || !contacts(list[A], offsets[b.c] + (b.i + 1) % b.n, ab1) ||
+            !contacts(list[B], list[A], ba0) || !contacts(list[B], offsets[a.c] + (a.i + 1) % a.n, ba1)) return false;
+      }
+    }
+    // Include every segment pair visited during the sweep, not only those
+    // intersecting at the endpoints. A possible triple goes to subdivision.
+    for (let a = 0; a < segments.length; a++) if (segments[a].moving) {
+      const neighbors = [...graph[a]];
+      for (let i = 0; i < neighbors.length; i++) for (let j = i + 1; j < neighbors.length; j++)
+        if (graph[neighbors[i]].has(neighbors[j])) return false;
+    }
+    for (const e of [...events.values()].sort((a, b) => a.t - b.t)) {
+      const from = pair(e.edge, e.from), to = pair(e.edge, e.to), X = tracked.get(from);
+      if (!X || tracked.has(to)) return false;
+      tracked.delete(from); tracked.set(to, { id: X.id, over: X.over === e.from ? e.to : X.over });
+    }
+    const result = new Map(), name = id => segments[id].c + ':' + segments[id].i;
+    for (const [key, X] of tracked) result.set(key.split(':').map(Number).map(name).sort().join('/'), { id: X.id, over: name(X.over) });
+    return result;
+  }
+
   function attemptStep(S, mutator, opt) {
     const backup = cloneComps(S.comps);
     mutator(S.comps);
+    const continuous = opt?.continuous ? regularMotion(backup, S.comps, S.crossings) : null;
+    if (opt?.continuous && !continuous) {
+      S.comps = backup; return { ok: false, reason: 'subdivide' };
+    }
     S.comps.forEach(updateGeom);
     // Decimation is a numerical maintenance step, not a Reidemeister move.
     // Keep its pre-resample projection if shortening a run touches a crossing.
@@ -396,6 +560,33 @@ const KC = (function () {
       // Even subdivision can expose floating-point endpoint degeneracies.
       // Prefer the actual requested geometry if that happens.
       if (!sameProjection(raw)) { S.comps = moved; raw = projected; }
+    }
+    if (opt?.continuous) {
+      // The certificate tracks every crossing through sampling vertices.
+      // Carry those exact identities through numerical resampling, rather than
+      // matching a large displacement to whichever crossing is now nearest.
+      const key = (a, b) => [a.c + ':' + a.seg, b.c + ':' + b.seg].sort().join('/');
+      const remaining = new Set(raw);
+      const assignments = [];
+      for (const X of projected) {
+        const O = continuous.get(key(...X.occ));
+        if (!O) { S.comps = backup; return { ok: false, reason: 'subdivide' }; }
+        const over = X.occ.findIndex(o => o.c + ':' + o.seg === O.over);
+        if (over < 0) { S.comps = backup; return { ok: false, reason: 'subdivide' }; }
+        let found = false;
+        for (const Y of remaining) {
+          if (Math.hypot(X.x - Y.x, X.y - Y.y) > 1e-7) continue;
+          const same = (a, b) => a.c === b.c && a.dx * b.dx + a.dy * b.dy > 1 - 1e-8;
+          const perm = same(X.occ[0], Y.occ[0]) && same(X.occ[1], Y.occ[1]) ? 0 :
+            same(X.occ[0], Y.occ[1]) && same(X.occ[1], Y.occ[0]) ? 1 : -1;
+          if (perm < 0) continue;
+          assignments.push([Y, O.id, perm ? 1 - over : over]); remaining.delete(Y); found = true; break;
+        }
+        if (!found) { S.comps = backup; return { ok: false, reason: 'subdivide' }; }
+      }
+      if (remaining.size || assignments.length !== S.crossings.length) { S.comps = backup; return { ok: false, reason: 'subdivide' }; }
+      for (const [X, id, over] of assignments) { X.id = id; X.over = over; }
+      S.crossings = raw; return { ok: true, crossings: raw, ev: { r1: 0, r2: 0, r3: 0 } };
     }
     const r = reconcile(S.crossings, backup, S.comps, raw, { ...opt, nextId: () => S.nextId++ });
     if (!r.ok) { S.comps = backup; return r; }
@@ -2103,7 +2294,7 @@ const KC = (function () {
 
   return {
     SEG, updateGeom, arcPosOfU, sDist, pointAtS, cloneComps, cloneCrossings, resampleComp, computeRaw, reconcile,
-    attemptStep, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
+    attemptStep, regularMotion, relaxStep, moveWeighted, relaxMutator, smoothCorners, indexOfU, crossingDistances, crossingAngle, crossingAngles, separateCrossings, openCrossings, resampleClosed, fromCurves3D, torusCurve, figureEightCurve, circleCurve,
     braidCurves, analyze, alternatingAssignment, circD, mod,
     decompose, decompositionGenus, decompositionGenusRecursive, decompositionPaths, decompositionSteps, repairDecompositionDents
   };

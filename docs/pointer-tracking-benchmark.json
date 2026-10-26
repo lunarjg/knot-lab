@@ -1,0 +1,475 @@
+{
+  "date": "2026-10-27",
+  "baselineCommit": "2838be81fa2d2debecff717d125db60b634e3275",
+  "environment": "macOS, local headless Google Chrome",
+  "fixtures": {
+    "private": {
+      "baseline": {
+        "metadata": {
+          "crossings": 32,
+          "points": 4742,
+          "components": 1
+        },
+        "fixed": {
+          "elapsed": 138.80000007152557,
+          "stats": {
+            "tasks": {
+              "n": 17,
+              "median": 7.100000023841858,
+              "p95": 8.800000071525574,
+              "max": 8.800000071525574
+            },
+            "rafIntervals": {
+              "n": 8,
+              "median": 16.69999999999999,
+              "p95": 16.700000000000045,
+              "max": 16.700000000000045
+            },
+            "steps": {
+              "n": 72,
+              "median": 1.3000000715255737,
+              "p95": 2.299999952316284,
+              "max": 7.600000023841858
+            },
+            "accepted": 72,
+            "rejected": 0,
+            "certified": 0,
+            "subdivisions": 0
+          },
+          "geometrySHA256": "95741bbf02d14aec23eded95023bf4782f2ab32ca9a0d3ad17e8315327eceb15",
+          "remainingDistance": 3.802513859341161e-14
+        },
+        "paths": [
+          {
+            "distance": 180,
+            "duration": 600,
+            "elapsed": 612.4000000953674,
+            "releaseGap": 0.08999998569505757,
+            "releaseInputGap": 0.08999998569505757,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 36,
+                "median": 4.600000023841858,
+                "p95": 5.699999928474426,
+                "max": 5.700000047683716
+              },
+              "rafIntervals": {
+                "n": 37,
+                "median": 16.699999999999932,
+                "p95": 16.700000000000045,
+                "max": 16.701999999999998
+              },
+              "steps": {
+                "n": 90,
+                "median": 1.600000023841858,
+                "p95": 1.899999976158142,
+                "max": 2.5
+              },
+              "accepted": 90,
+              "rejected": 0,
+              "certified": 0,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 32,
+              "sA": 21,
+              "sB": 1,
+              "gT": 6
+            },
+            "geometrySHA256": "234bc77f857a0673d0bf89b413f45bd62184515ed1784df573ed22a3aaa019a3"
+          },
+          {
+            "distance": 360,
+            "duration": 240,
+            "elapsed": 243.10000002384186,
+            "releaseGap": 32.500000000000114,
+            "releaseInputGap": 32.500000000000114,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 28,
+                "median": 6.600000023841858,
+                "p95": 7.899999976158142,
+                "max": 8.100000023841858
+              },
+              "rafIntervals": {
+                "n": 15,
+                "median": 16.700000000000045,
+                "p95": 16.700000000000045,
+                "max": 16.700000000000045
+              },
+              "steps": {
+                "n": 131,
+                "median": 1.2999999523162842,
+                "p95": 1.7999999523162842,
+                "max": 2
+              },
+              "accepted": 131,
+              "rejected": 0,
+              "certified": 0,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 32,
+              "sA": 21,
+              "sB": 1,
+              "gT": 6
+            },
+            "geometrySHA256": "92422147b15b03611c326fdabc8d39a5cbc19026daa7303f3feaef834f940452"
+          }
+        ]
+      },
+      "adaptive": {
+        "metadata": {
+          "crossings": 32,
+          "points": 4742,
+          "components": 1
+        },
+        "fixed": {
+          "elapsed": 22.59999990463257,
+          "stats": {
+            "tasks": {
+              "n": 1,
+              "median": 14.799999952316284,
+              "p95": 14.799999952316284,
+              "max": 14.799999952316284
+            },
+            "rafIntervals": {
+              "n": 0,
+              "median": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "steps": {
+              "n": 1,
+              "median": 13.699999928474426,
+              "p95": 13.699999928474426,
+              "max": 13.699999928474426
+            },
+            "accepted": 1,
+            "rejected": 0,
+            "certified": 1,
+            "subdivisions": 0
+          },
+          "geometrySHA256": "d56d4a4233741302cf08e16b391285d7a57a8ce384ff0d6e43cf71e3a2fbf446",
+          "remainingDistance": 9.603429163007604e-15
+        },
+        "paths": [
+          {
+            "distance": 180,
+            "duration": 600,
+            "elapsed": 600.8999999761581,
+            "releaseGap": 5.999999999999994,
+            "releaseInputGap": 1.6653345369377348e-16,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 35,
+                "median": 3.700000047683716,
+                "p95": 6,
+                "max": 7.899999976158142
+              },
+              "rafIntervals": {
+                "n": 36,
+                "median": 16.699999999999932,
+                "p95": 16.800000000000068,
+                "max": 16.800000000000068
+              },
+              "steps": {
+                "n": 35,
+                "median": 3.100000023841858,
+                "p95": 5.899999976158142,
+                "max": 7
+              },
+              "accepted": 35,
+              "rejected": 0,
+              "certified": 35,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 32,
+              "sA": 21,
+              "sB": 1,
+              "gT": 6
+            },
+            "geometrySHA256": "7200500582310e19da3ef33359157296ff752ea9af211d6808417ace3a2e542b"
+          },
+          {
+            "distance": 360,
+            "duration": 240,
+            "elapsed": 260.5,
+            "releaseGap": 2.4000000357629006,
+            "releaseInputGap": 0,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 15,
+                "median": 3.600000023841858,
+                "p95": 4.899999976158142,
+                "max": 4.899999976158142
+              },
+              "rafIntervals": {
+                "n": 16,
+                "median": 16.700000000000045,
+                "p95": 16.800000000000182,
+                "max": 16.800000000000182
+              },
+              "steps": {
+                "n": 15,
+                "median": 3.200000047683716,
+                "p95": 4,
+                "max": 4
+              },
+              "accepted": 15,
+              "rejected": 0,
+              "certified": 15,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 32,
+              "sA": 21,
+              "sB": 1,
+              "gT": 6
+            },
+            "geometrySHA256": "5517a5a9adbe5866535940a4381671181a4349ba5ae50eb17bd1d5c94af04b71"
+          }
+        ]
+      }
+    },
+    "dense": {
+      "baseline": {
+        "metadata": {
+          "crossings": 88,
+          "points": 3178,
+          "components": 1
+        },
+        "fixed": {
+          "elapsed": 184.5,
+          "stats": {
+            "tasks": {
+              "n": 25,
+              "median": 6.600000023841858,
+              "p95": 8.099999904632568,
+              "max": 8.400000095367432
+            },
+            "rafIntervals": {
+              "n": 11,
+              "median": 16.69999999999999,
+              "p95": 16.700000000000017,
+              "max": 16.700000000000017
+            },
+            "steps": {
+              "n": 72,
+              "median": 2,
+              "p95": 4.100000023841858,
+              "max": 6.400000095367432
+            },
+            "accepted": 72,
+            "rejected": 0,
+            "certified": 0,
+            "subdivisions": 0
+          },
+          "geometrySHA256": "5c61d7e49758b9d5fd9a192f02e6eddf1f9220f9270be5e50bfffdbd08fd5358",
+          "remainingDistance": 0
+        },
+        "paths": [
+          {
+            "distance": 180,
+            "duration": 600,
+            "elapsed": 603.5,
+            "releaseGap": 2.6999999999998465,
+            "releaseInputGap": 2.6999999999998465,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 37,
+                "median": 6.299999952316284,
+                "p95": 9.399999976158142,
+                "max": 9.900000095367432
+              },
+              "rafIntervals": {
+                "n": 37,
+                "median": 16.699999999999932,
+                "p95": 16.700000000000045,
+                "max": 16.800000000000068
+              },
+              "steps": {
+                "n": 81,
+                "median": 2.3000000715255737,
+                "p95": 3.399999976158142,
+                "max": 5.399999976158142
+              },
+              "accepted": 81,
+              "rejected": 0,
+              "certified": 0,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 88,
+              "sA": 9,
+              "sB": 1,
+              "gT": 40
+            },
+            "geometrySHA256": "81e7152255c085dfd7d567a9e88d5ee072aa2f3f7455964a5c00b806d95706d8"
+          },
+          {
+            "distance": 360,
+            "duration": 240,
+            "elapsed": 252.29999995231628,
+            "releaseGap": 115,
+            "releaseInputGap": 115,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 30,
+                "median": 6.600000023841858,
+                "p95": 8.199999928474426,
+                "max": 9.899999976158142
+              },
+              "rafIntervals": {
+                "n": 14,
+                "median": 16.700000000000045,
+                "p95": 16.700000000000045,
+                "max": 16.700000000000045
+              },
+              "steps": {
+                "n": 98,
+                "median": 2,
+                "p95": 2.5,
+                "max": 5.599999904632568
+              },
+              "accepted": 98,
+              "rejected": 0,
+              "certified": 0,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 88,
+              "sA": 9,
+              "sB": 1,
+              "gT": 40
+            },
+            "geometrySHA256": "93929c692f607244f2aed413e3959a092794bb2106a46892fac60210ad8a9f0f"
+          }
+        ]
+      },
+      "adaptive": {
+        "metadata": {
+          "crossings": 88,
+          "points": 3178,
+          "components": 1
+        },
+        "fixed": {
+          "elapsed": 17.799999952316284,
+          "stats": {
+            "tasks": {
+              "n": 1,
+              "median": 13.799999952316284,
+              "p95": 13.799999952316284,
+              "max": 13.799999952316284
+            },
+            "rafIntervals": {
+              "n": 0,
+              "median": 0,
+              "p95": 0,
+              "max": 0
+            },
+            "steps": {
+              "n": 1,
+              "median": 11.899999976158142,
+              "p95": 11.899999976158142,
+              "max": 11.899999976158142
+            },
+            "accepted": 1,
+            "rejected": 0,
+            "certified": 1,
+            "subdivisions": 0
+          },
+          "geometrySHA256": "13e78ecd7d82a5db5e6c8c009bf3356660bcdc4ac96377ac3f1829953ad1edf3",
+          "remainingDistance": 0.5923161303807772
+        },
+        "paths": [
+          {
+            "distance": 180,
+            "duration": 600,
+            "elapsed": 606.1000000238419,
+            "releaseGap": 2.189999985694783,
+            "releaseInputGap": 0,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 36,
+                "median": 3.6999999284744263,
+                "p95": 5.300000071525574,
+                "max": 5.699999928474426
+              },
+              "rafIntervals": {
+                "n": 37,
+                "median": 16.699999999999932,
+                "p95": 16.80000000000001,
+                "max": 16.800000000000068
+              },
+              "steps": {
+                "n": 36,
+                "median": 3.299999952316284,
+                "p95": 5,
+                "max": 5.5
+              },
+              "accepted": 36,
+              "rejected": 0,
+              "certified": 35,
+              "subdivisions": 0
+            },
+            "analysis": {
+              "c": 88,
+              "sA": 9,
+              "sB": 1,
+              "gT": 40
+            },
+            "geometrySHA256": "3f6e0b11eae471fda18eadfa098fd4e9dd0dca307b2e49eea2e30f541e45e805"
+          },
+          {
+            "distance": 360,
+            "duration": 240,
+            "elapsed": 253.70000004768372,
+            "releaseGap": 38.88749997317797,
+            "releaseInputGap": 31.387499973177967,
+            "blocked": null,
+            "stats": {
+              "tasks": {
+                "n": 16,
+                "median": 3.299999952316284,
+                "p95": 9.600000023841858,
+                "max": 9.600000023841858
+              },
+              "rafIntervals": {
+                "n": 15,
+                "median": 16.699999999999818,
+                "p95": 16.799999999999955,
+                "max": 16.799999999999955
+              },
+              "steps": {
+                "n": 22,
+                "median": 2.799999952316284,
+                "p95": 3.799999952316284,
+                "max": 4.900000095367432
+              },
+              "accepted": 18,
+              "rejected": 4,
+              "certified": 14,
+              "subdivisions": 4
+            },
+            "analysis": {
+              "c": 90,
+              "sA": 10,
+              "sB": 2,
+              "gT": 40
+            },
+            "geometrySHA256": "76435601b371d69c0b214423bd3177215db5fdd1254817e27cff1833674ddf7b"
+          }
+        ]
+      }
+    }
+  }
+}

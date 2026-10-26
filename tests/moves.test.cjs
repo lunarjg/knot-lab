@@ -9,6 +9,54 @@ const totals={r1:0,r2:0,r3:0};const S=state(fixture(-1));
 // projection (including disconnected pieces and the wrap around each component).
 require('../dist/pd-import.js');
 const INV=require('../dist/invariants.js');
+
+// Large motions are allowed only when the whole sweep is a regular diagram
+// isotopy. Endpoint-only tests would miss the transient RII pair below.
+{
+ const dense=(a,spacing=7)=>{const out=[];for(let i=0;i<a.length;i++){const p=a[i],q=a[(i+1)%a.length],n=Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])/spacing);for(let k=0;k<n;k++)out.push([p[0]+(q[0]-p[0])*k/n,p[1]+(q[1]-p[1])*k/n]);}return poly(out);};
+ const bar=dense([[-180,-20],[180,-20],[180,20],[-180,20]],11);
+ const post=dense([[-63,-140],[-39,-140],[-39,140],[-63,140]],13);
+ const s=state([bar,post]);assert.equal(s.crossings.length,4);
+ const before=JSON.stringify(s),ids=s.crossings.map(X=>X.id).sort(),heights=new Map(s.crossings.map(X=>[X.id,X.occ[X.over].c]));
+ const r=KC.attemptStep(s,cm=>cm[1].pts.forEach(p=>p.x+=97.3),{continuous:true});
+ assert(r.ok,'A transverse crossing may travel over many sampling vertices in one certified move');
+ assert.deepEqual(r.ev,{r1:0,r2:0,r3:0});assert.deepEqual(s.crossings.map(X=>X.id).sort(),ids);
+ for(const X of s.crossings)assert.equal(X.occ[X.over].c,heights.get(X.id),'Crossing heights follow their original branches');
+ assert.notEqual(JSON.stringify(s),before);
+ const sweep=state([dense([[-100,-2],[-90,-2],[-90,2],[-100,2]]),dense([[-10,-40],[10,-40],[10,40],[-10,40]])]);
+ const saved=JSON.stringify(sweep),after=KC.cloneComps(sweep.comps);after[0].pts.forEach(p=>p.x+=200);
+ assert.equal(KC.computeRaw(after).length,0,'The sweep has identical crossing-free endpoints');
+ assert.equal(KC.regularMotion(sweep.comps,after,sweep.crossings),false,'A transient pair must force subdivision');
+ assert.equal(KC.attemptStep(sweep,cm=>cm[0].pts.forEach(p=>p.x+=200),{continuous:true}).reason,'subdivide');
+ assert.equal(JSON.stringify(sweep),saved,'A failed certificate rolls back geometry, crossings and nextId');
+ const fold=state([poly([[0,0],[10,1],[20,0]])]),folded=KC.cloneComps(fold.comps);folded[0].pts[1].y=-1;
+ assert.equal(KC.regularMotion(fold.comps,folded,fold.crossings),false,'Adjacent-edge folds are singular even with no nonadjacent pairs');
+ for(const cyclic of [false,true]){
+  const s=state(fixture(-1),cyclic),saved=JSON.stringify(s);
+  assert.equal(KC.attemptStep(s,cm=>cm[2].pts.forEach(p=>p.y+=2),{continuous:true}).reason,'subdivide','Both legal and cyclic triple moves require local RIII checks');
+  assert.equal(JSON.stringify(s),saved);
+ }
+ const jones=s=>INV.calculate(KC.analyze(s.comps,s.crossings)).jones.terms;
+ let accepted=0;
+ for(const make of [()=>KC.fromCurves3D([KC.torusCurve(2,3,2,1)],420),()=>KC.fromCurves3D([KC.figureEightCurve()],440),()=>KC.fromCurves3D(KC.braidCurves([1,1]),360)]){
+  for(let i=0;i<24;i++){
+   const s=make(),before=jones(s),original=JSON.stringify(s),start=KC.cloneComps(s.comps),cm=s.comps[0],gi=Math.floor(cm.pts.length*i/24);
+   const mutate=c=>KC.moveWeighted(c[0],gi,Math.cos(i*2.4)*90,Math.sin(i*2.4)*90,30+i%4*15);
+   const endpoint=KC.cloneComps(start);mutate(endpoint);const count=s.crossings.length;
+   const r=KC.attemptStep(s,mutate,{continuous:true});
+   if(r.ok){
+    accepted++;assert.deepEqual(jones(s),before,'A certified fast drag preserves the exact Jones polynomial');
+    for(let k=1;k<17;k++){
+     const sample=KC.cloneComps(start);sample.forEach((c,ci)=>{c.pts.forEach((p,j)=>{p.x+=(endpoint[ci].pts[j].x-p.x)*k/17;p.y+=(endpoint[ci].pts[j].y-p.y)*k/17;});KC.updateGeom(c);});
+     assert.equal(KC.computeRaw(sample).length,count,'An accepted sweep stays crossing-equivalent between its endpoints');
+    }
+   }
+   else assert.equal(JSON.stringify(s),original,'An uncertain fast drag leaves no state behind');
+  }
+ }
+ assert(accepted>=12,'The certificate must accept ordinary fast movements, not just reject everything');
+}
+console.log('Continuous drag certificates: transverse sampling transfers, persistent heights/IDs, transient bigons, RIII, rollback and exact Jones invariants: PASS');
 const altTrefoil=()=>PDImport.fromPD('[[1,4,2,5],[3,6,4,1],[5,2,6,3]]',KC);
 const splitA=altTrefoil(),splitB=altTrefoil();splitB.comps.forEach(c=>c.pts.forEach(p=>p.x+=3000));
 const split=state(splitA.comps.concat(splitB.comps));

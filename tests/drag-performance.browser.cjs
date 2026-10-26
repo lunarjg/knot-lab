@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
    if (!drag) return null;
    const cm = S.comps[drag.c], p = cm.pts[KC.indexOfU(cm, drag.u)];
    return {x:p.x,y:p.y,mx:drag.mx,my:drag.my,blocked:drag.lastBlocked,distance:Math.hypot(p.x-drag.mx,p.y-drag.my)};
- }; window.knotLab = {`);
+ }; window.knotLab = {`).replace('if (drag.changed) { separateCrowdedCrossings', 'window.__releaseGrip = window.__readDrag(); if (drag.changed) { separateCrowdedCrossings');
  res.end(body);
 });
 const digest=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
@@ -32,17 +32,17 @@ const digest=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('he
   const metadata=await page.evaluate(fixture=>{
    const state=fixture?knotLab.deserialize(fixture):KC.fromCurves3D([KC.torusCurve(9,11,2,1.15)],1100);
    knotLab.openTab(state,'Drag performance');window.__fixture=knotLab.serialize();
-   const original=KC.attemptStep;KC.attemptStep=(...args)=>{const start=performance.now(),r=original(...args);window.__steps.push({ms:performance.now()-start,ok:r.ok});return r;};
+   const original=KC.attemptStep;KC.attemptStep=(...args)=>{const start=performance.now(),r=original(...args);window.__steps.push({ms:performance.now()-start,ok:r.ok,continuous:!!args[2]?.continuous,reason:r.reason});return r;};
    window.__reset=()=>{
     knotLab.openTab(knotLab.deserialize(window.__fixture),'Drag sample');
     document.querySelector('[data-tool="move"]').click();knotLab.opts.separate=false;
     const p=knotLab.state.comps[0].pts[Math.min(100,knotLab.state.comps[0].pts.length-1)],cv=document.getElementById('cv'),r=cv.getBoundingClientRect();
     // Capture scalar coordinates: point objects move in place during the drag.
     const ox=p.x,oy=p.y;window.__event=(type,dx=0,dy=0)=>cv.dispatchEvent(new PointerEvent(type,{bubbles:true,pointerType:'mouse',pointerId:1,button:0,buttons:type==='pointerup'?0:1,clientX:r.left+(ox+dx)*knotLab.view.s+knotLab.view.ox,clientY:r.top+(oy+dy)*knotLab.view.s+knotLab.view.oy}));
-    window.__frames=[];window.__steps=[];window.__rafIntervals=[];window.__event('pointerdown');
+    window.__frames=[];window.__steps=[];window.__rafIntervals=[];window.__releaseGrip=null;window.__event('pointerdown');
     const run=++window.__run;let last;const watch=t=>{if(run!==window.__run||!window.__readDrag())return;if(last!==undefined)window.__rafIntervals.push(t-last);last=t;requestAnimationFrame(watch);};requestAnimationFrame(watch);
    };
-   window.__stats=()=>{const stats=a=>{a.sort((a,b)=>a-b);return {n:a.length,median:a[Math.floor(a.length*.5)]??0,p95:a[Math.floor(a.length*.95)]??0,max:a.at(-1)??0};};return {tasks:stats([...window.__frames]),rafIntervals:stats([...window.__rafIntervals]),steps:stats(window.__steps.map(x=>x.ms)),accepted:window.__steps.filter(x=>x.ok).length,rejected:window.__steps.filter(x=>!x.ok).length};};
+   window.__stats=()=>{const stats=a=>{a.sort((a,b)=>a-b);return {n:a.length,median:a[Math.floor(a.length*.5)]??0,p95:a[Math.floor(a.length*.95)]??0,max:a.at(-1)??0};};return {tasks:stats([...window.__frames]),rafIntervals:stats([...window.__rafIntervals]),steps:stats(window.__steps.map(x=>x.ms)),accepted:window.__steps.filter(x=>x.ok).length,rejected:window.__steps.filter(x=>!x.ok).length,certified:window.__steps.filter(x=>x.ok&&x.continuous).length,subdivisions:window.__steps.filter(x=>x.reason==='subdivide').length};};
    return {crossings:knotLab.analysis.c,points:knotLab.state.comps.reduce((n,c)=>n+c.pts.length,0),components:knotLab.state.comps.length};
   },fixture);
   // Let layout and initialization settle before timing input.
@@ -60,7 +60,7 @@ const digest=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('he
    await new Promise(resolve=>{const frame=()=>{const t=Math.min(1,(performance.now()-start)/duration);window.__event('pointermove',distance*t,0);if(t===1)resolve();else requestAnimationFrame(frame);};requestAnimationFrame(frame);});
    const elapsed=performance.now()-start,grip=window.__readDrag(),stats=window.__stats();
    window.__event('pointerup',distance,0);
-   return {distance,duration,elapsed,releaseGap:grip.distance,blocked:grip.blocked,stats,analysis:{c:knotLab.analysis.c,sA:knotLab.analysis.sA.count,sB:knotLab.analysis.sB.count,gT:knotLab.analysis.gT},geometry:knotLab.serialize().comps};
+   return {distance,duration,elapsed,releaseGap:grip.distance,releaseInputGap:window.__releaseGrip?.distance,blocked:grip.blocked,stats,analysis:{c:knotLab.analysis.c,sA:knotLab.analysis.sA.count,sB:knotLab.analysis.sB.count,gT:knotLab.analysis.gT},geometry:knotLab.serialize().comps};
   },{distance,duration}));
   for(const p of paths){p.geometrySHA256=digest(p.geometry);delete p.geometry;}
   assert.deepEqual(errors,[]);const result={metadata,fixed,paths};

@@ -5,6 +5,12 @@ started from, were built by an earlier Codex-based development process.
 The subsequent entries document the continued development work. Entries without
 version tags remain development notes.
 
+## v19 — Pointer-speed strand dragging (2026-10-27)
+
+- Follow fast input with adaptive drag distances. Certify the entire swept path, track crossings through sampling vertices, and subdivide near tangencies or possible triple points before using the existing Reidemeister checks.
+- Preserve crossing IDs and heights through certified moves and resampling. Keep the short work budget and coalesced paints.
+- Apply final pointer-up coordinates, isolate queued work between gestures, and honor Smooth corners on release. Add geometric and mouse/pen/touch regressions; refresh the offline cache.
+
 ## v18 — Responsive strand dragging (2026-10-26)
 
 - Yield long drags between short validated geometry tasks, continue pending work without waiting a full display interval, and stop retrying settled or blocked grips.
